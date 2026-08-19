@@ -1,0 +1,22 @@
+{
+  "name": "careerpilot-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered career intelligence platform for job matching, resume optimization, application tracking, and interview preparation.",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "dev:server": "pnpm --dir server dev",
+    "dev:client": "pnpm --dir client dev",
+    "start": "pnpm --dir server start",
+    "lint": "pnpm --dir server lint && pnpm --dir client lint"
+  },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

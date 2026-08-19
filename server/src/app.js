@@ -1,0 +1,62 @@
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import express from "express";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import morgan from "morgan";
+import { env } from "./config/env.js";
+import { errorHandler, notFound } from "./middleware/errorHandler.js";
+
+// Routers
+import { router as analyticsRouter } from "./routes/analyticsRoutes.js";
+import { router as applicationRouter } from "./routes/applicationRoutes.js";
+import { authRouter } from "./routes/authRoutes.js";
+import { router as interviewRouter } from "./routes/interviewRoutes.js";
+import { router as matchRouter } from "./routes/matchRoutes.js";
+import { router as profileRouter } from "./routes/profileRoutes.js";
+import { router as resumeRouter } from "./routes/resumeRoutes.js";
+import { router as tailoringRouter } from "./routes/tailoringRoutes.js";
+
+export function createApp() {
+  const app = express();
+
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: env.clientOrigin,
+      credentials: true
+    })
+  );
+  app.use(express.json({ limit: "5mb" })); // Increased for large resume texts
+  app.use(cookieParser());
+  app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
+
+  app.use(
+    "/api",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 200,
+      standardHeaders: "draft-7",
+      legacyHeaders: false
+    })
+  );
+
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", service: "careerpilot-api" });
+  });
+
+  // Register routes
+  app.use("/api/auth", authRouter);
+  app.use("/api/profile", profileRouter);
+  app.use("/api/resume", resumeRouter);
+  app.use("/api/applications", applicationRouter);
+  app.use("/api/match", matchRouter);
+  app.use("/api/tailor", tailoringRouter);
+  app.use("/api/analytics", analyticsRouter);
+  app.use("/api/interview", interviewRouter);
+
+  app.use(notFound);
+  app.use(errorHandler);
+
+  return app;
+}
