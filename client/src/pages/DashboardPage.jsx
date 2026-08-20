@@ -1,3 +1,4 @@
+import React from "react";
 import { BarChart3, BriefcaseBusiness, FileText, Mic, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { analyticsApi } from "../api/features";
@@ -41,7 +42,7 @@ export function DashboardPage() {
           <span className="eyebrow">Phases 2-8 Deployed</span>
           <h2>System Operational</h2>
           <p>
-            The Semantic Match Engine, Resume Intelligence, and Application Tracker are online. 
+            The Semantic Match Engine, Resume Intelligence, and Application Tracker are online.
             Upload a resume and paste a JD to see the deterministic matching pipeline in action.
           </p>
         </div>

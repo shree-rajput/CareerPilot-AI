@@ -24,8 +24,12 @@ export const env = {
   groqModel: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
 
   // File uploads
-  uploadDir: process.env.UPLOAD_DIR || "uploads",
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 5),
+
+  // Cloudinary
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
+  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
+  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
 
   // Per-user daily AI limits
   aiLimitResumeAnalysis: parseInt(process.env.AI_LIMIT_RESUME_ANALYSIS || "5", 10),

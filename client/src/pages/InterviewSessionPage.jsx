@@ -1,3 +1,4 @@
+import React from "react";
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Mic, StopCircle, SkipForward, CheckCircle, Brain, AlertTriangle } from "lucide-react";
@@ -21,7 +22,7 @@ export function InterviewSessionPage() {
   useEffect(() => {
     fetchNextQuestion();
     initSpeechRecognition();
-    
+
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
@@ -100,12 +101,12 @@ export function InterviewSessionPage() {
 
     try {
       setIsEvaluating(true);
-      
+
       // Calculate simple metrics locally
       const words = transcript.trim().split(/\s+/).length;
       const minutes = recordTime / 60 || 1;
       const wpm = Math.round(words / minutes);
-      
+
       // Basic filler word detection
       const lowerT = transcript.toLowerCase();
       const fillers = (lowerT.match(/\b(um|uh|like|you know|basically)\b/g) || []).length;
@@ -192,14 +193,14 @@ export function InterviewSessionPage() {
                 </div>
               )}
             </div>
-            
+
             {isRecording ? (
               <p style={{ minHeight: "100px", color: transcript ? "inherit" : "var(--text-secondary)", fontStyle: transcript ? "normal" : "italic" }}>
                 {transcript || "Listening..."}
               </p>
             ) : (
-              <textarea 
-                className="input-field" 
+              <textarea
+                className="input-field"
                 style={{ minHeight: "150px", resize: "vertical" }}
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
@@ -216,8 +217,8 @@ export function InterviewSessionPage() {
                 Analyzing Answer...
               </button>
             ) : (
-              <button 
-                className={`btn ${isRecording ? 'btn-danger' : 'btn-primary'}`} 
+              <button
+                className={`btn ${isRecording ? 'btn-danger' : 'btn-primary'}`}
                 onClick={toggleRecording}
                 style={{ padding: "0.75rem 2rem", borderRadius: "30px", fontSize: "1.1rem" }}
               >
@@ -253,7 +254,7 @@ export function InterviewSessionPage() {
                   {evaluation.feedback.strengths.map((s, i) => <li key={i} style={{ marginBottom: "0.25rem" }}>{s}</li>)}
                 </ul>
               </div>
-              
+
               <div style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", padding: "1rem", borderRadius: "8px" }}>
                 <h4 style={{ color: "var(--danger-color)", marginBottom: "0.75rem" }}>Areas to improve</h4>
                 <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "var(--text-color)" }}>

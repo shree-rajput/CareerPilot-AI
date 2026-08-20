@@ -29,6 +29,14 @@ const resumeSchema = new mongoose.Schema(
       enum: ["pdf", "txt"],
       required: true
     },
+    cloudinaryUrl: {
+      type: String,
+      default: ""
+    },
+    cloudinaryPublicId: {
+      type: String,
+      default: ""
+    },
     rawText: {
       type: String,
       required: true

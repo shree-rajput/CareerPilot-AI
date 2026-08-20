@@ -1,3 +1,4 @@
+import React from "react";
 import { ArrowLeft, CheckCircle, Target, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -38,7 +39,7 @@ export function MatchResultPage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
-        
+
         {/* LEFT: EVIDENCE */}
         <div style={{ display: "grid", gap: "24px" }}>
           <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>

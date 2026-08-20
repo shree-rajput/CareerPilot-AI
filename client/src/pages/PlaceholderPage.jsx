@@ -1,3 +1,4 @@
+import React from "react";
 export function PlaceholderPage({ title, description }) {
   return (
     <section className="content-band placeholder-band">

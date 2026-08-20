@@ -6,6 +6,7 @@ import { extractPdfText, extractTxtText } from "../services/resume/pdfParser.js"
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
+import { uploadBufferToCloudinary, deleteFromCloudinary } from "../config/cloudinary.js";
 
 /**
  * POST /api/resume/upload
@@ -14,6 +15,10 @@ import { AppError } from "../utils/errors.js";
 export const uploadResume = asyncHandler(async (req, res) => {
   if (!req.file) {
     throw new AppError("No file uploaded. Please attach a PDF or TXT file.", 400, "NO_FILE");
+  }
+
+  if (!env.cloudinaryCloudName) {
+    throw new AppError("Cloudinary configuration is missing on the server.", 500, "MISSING_CLOUDINARY_CONFIG");
   }
 
   const { mimetype, originalname, buffer, size } = req.file;
@@ -59,6 +64,15 @@ export const uploadResume = asyncHandler(async (req, res) => {
     throw err; // Already an AppError from pdfParser
   }
 
+  // Upload to Cloudinary
+  let cloudinaryResult;
+  try {
+    // We upload as 'raw' resource type for PDFs and text files so it's a direct file download
+    cloudinaryResult = await uploadBufferToCloudinary(buffer, "resumes", "raw");
+  } catch (err) {
+    throw new AppError("Failed to upload file to Cloudinary.", 500, "CLOUDINARY_UPLOAD_ERROR");
+  }
+
   // Structure with AI
   let structuredData = null;
   try {
@@ -87,11 +101,23 @@ export const uploadResume = asyncHandler(async (req, res) => {
     label,
     originalFilename: originalname,
     fileType: isPdf ? "pdf" : "txt",
+    cloudinaryUrl: cloudinaryResult.secure_url,
+    cloudinaryPublicId: cloudinaryResult.public_id,
     rawText,
     structuredData,
     version,
     parentVersionId: parentVersionId || null
   });
+
+  // Check if we need to replace an old Cloudinary file if parentVersionId was provided 
+  // and we want to overwrite it. But versioning implies keeping old ones. 
+  // The user requirement says: "If a user uploads a new resume and an old Cloudinary resume already exists: Delete the old Cloudinary file if appropriate."
+  // Wait, if it's a version history, maybe they shouldn't be deleted?
+  // Let's check deleteResume function. We can delete it there.
+  // The prompt says: "If a user uploads a new resume and an old Cloudinary resume already exists: Upload the new resume to Cloudinary. Update the database with the new URL/public ID. Delete the old Cloudinary file if appropriate. Do not leave unnecessary duplicate files on Cloudinary."
+  // Wait! A completely new upload creates a new Resume document (v1, or v+1). The frontend doesn't seem to pass parentVersionId except maybe for explicit versioning.
+  // Actually, if it's the exact same resume or replacing it, maybe we delete it if it's replaced. The current system creates a new version: `const resume = await Resume.create(...)`. So it's keeping the old document in the DB.
+  // I will just leave the old files if they are creating a new version, unless they delete the resume via the delete endpoint.
 
   return res.status(201).json({
     message: structuredData
@@ -103,6 +129,7 @@ export const uploadResume = asyncHandler(async (req, res) => {
       label: resume.label,
       fileType: resume.fileType,
       version: resume.version,
+      cloudinaryUrl: resume.cloudinaryUrl,
       hasStructuredData: Boolean(structuredData),
       createdAt: resume.createdAt
     }
@@ -145,6 +172,14 @@ export const deleteResume = asyncHandler(async (req, res) => {
 
   if (!resume) {
     throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  if (resume.cloudinaryPublicId) {
+    try {
+      await deleteFromCloudinary(resume.cloudinaryPublicId, "raw");
+    } catch (err) {
+      console.error("Failed to delete from Cloudinary:", err);
+    }
   }
 
   resume.isActive = false;

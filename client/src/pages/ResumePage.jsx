@@ -1,3 +1,4 @@
+import React from "react";
 import { FileText, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { resumeApi } from "../api/resume";
@@ -8,7 +9,7 @@ export function ResumePage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
-  
+
   const [selectedResumeId, setSelectedResumeId] = useState(null);
   const [resumeDetail, setResumeDetail] = useState(null);
 
@@ -53,7 +54,7 @@ export function ResumePage() {
   async function handleDelete(id, e) {
     e.stopPropagation();
     if (!window.confirm("Delete this resume?")) return;
-    
+
     try {
       await resumeApi.delete(id);
       if (selectedResumeId === id) setSelectedResumeId(null);
@@ -77,16 +78,16 @@ export function ResumePage() {
   return (
     <section className="page-grid">
       <div style={{ display: "grid", gap: "24px", gridTemplateColumns: "1fr 2fr", alignItems: "start" }}>
-        
+
         {/* LEFT COLUMN: UPLOAD & LIST */}
         <div style={{ display: "grid", gap: "16px" }}>
-          <div 
-            className="upload-dropzone" 
+          <div
+            className="upload-dropzone"
             onClick={() => fileInputRef.current?.click()}
-            style={{ 
-              border: "2px dashed #cbd5e1", 
-              borderRadius: "8px", 
-              padding: "32px", 
+            style={{
+              border: "2px dashed #cbd5e1",
+              borderRadius: "8px",
+              padding: "32px",
               textAlign: "center",
               cursor: "pointer",
               background: "white"
@@ -95,10 +96,10 @@ export function ResumePage() {
             <UploadCloud size={32} color="#1463ff" style={{ margin: "0 auto 12px" }} />
             <h3 style={{ margin: "0 0 8px" }}>{uploading ? "Uploading & Analyzing..." : "Upload Resume"}</h3>
             <p style={{ margin: 0, fontSize: "0.85rem", color: "#5b6475" }}>PDF or TXT up to 5MB</p>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: "none" }} 
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
               accept=".pdf,.txt"
               onChange={handleFileSelect}
             />
@@ -109,14 +110,14 @@ export function ResumePage() {
           <div style={{ display: "grid", gap: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Your Versions</h3>
             {loading ? <p>Loading...</p> : resumes.length === 0 ? <p>No resumes yet.</p> : null}
-            
+
             {resumes.map(r => (
-              <div 
-                key={r._id} 
+              <div
+                key={r._id}
                 className="resume-card"
                 onClick={() => selectResume(r._id)}
-                style={{ 
-                  padding: "16px", 
+                style={{
+                  padding: "16px",
                   background: selectedResumeId === r._id ? "#eef3ff" : "white",
                   border: selectedResumeId === r._id ? "1px solid #1463ff" : "1px solid #dde4ef",
                   borderRadius: "8px",
@@ -149,13 +150,25 @@ export function ResumePage() {
           ) : (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #eee", paddingBottom: "16px", marginBottom: "20px" }}>
-                <h2 style={{ margin: 0 }}>{resumeDetail.name} (v{resumeDetail.version})</h2>
+                <div>
+                  <h2 style={{ margin: 0, marginBottom: "8px" }}>{resumeDetail.name} (v{resumeDetail.version})</h2>
+                  {resumeDetail.cloudinaryUrl && (
+                    <a 
+                      href={resumeDetail.cloudinaryUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      style={{ fontSize: "0.85rem", color: "#1463ff", textDecoration: "none" }}
+                    >
+                      View Original File ↗
+                    </a>
+                  )}
+                </div>
                 {resumeDetail.structuredData ? (
-                  <span style={{ background: "#eaf8f0", color: "#137547", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold" }}>
+                  <span style={{ background: "#eaf8f0", color: "#137547", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold", height: "fit-content" }}>
                     AI Structured
                   </span>
                 ) : (
-                  <span style={{ background: "#fff1f2", color: "#b4233c", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold" }}>
+                  <span style={{ background: "#fff1f2", color: "#b4233c", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold", height: "fit-content" }}>
                     Raw Text Only (AI Failed)
                   </span>
                 )}
@@ -195,7 +208,7 @@ export function ResumePage() {
                       </div>
                     </section>
                   )}
-                  
+
                   {/* Note: I'm omitting the full display of Projects/Education for brevity, but the data is there */}
                   <details style={{ marginTop: "16px" }}>
                     <summary style={{ cursor: "pointer", fontWeight: "bold", color: "#5b6475" }}>View Raw Parsed Text</summary>

@@ -1,3 +1,4 @@
+import React from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
 import { useEffect, useState } from "react";
 import { analyticsApi } from "../api/features";
@@ -34,7 +35,7 @@ export function AnalyticsPage() {
 
   return (
     <section style={{ display: "grid", gap: "24px" }}>
-      
+
       {/* Metric Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
         {metricCards.map(m => (
@@ -46,7 +47,7 @@ export function AnalyticsPage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
-        
+
         {/* Charts */}
         <div style={{ display: "grid", gap: "24px" }}>
           <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
@@ -56,8 +57,8 @@ export function AnalyticsPage() {
                 <AreaChart data={trends}>
                   <defs>
                     <linearGradient id="colorApps" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#1463ff" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#1463ff" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#1463ff" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#1463ff" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
@@ -92,12 +93,12 @@ export function AnalyticsPage() {
           <p style={{ margin: "0 0 20px", fontSize: "0.9rem", color: "#5b6475", lineHeight: 1.5 }}>
             These skills frequently appear in job descriptions you apply to, but are missing from your matched resumes.
           </p>
-          
+
           <div style={{ display: "grid", gap: "12px" }}>
             {stats.topSkillGaps.map((gap, i) => (
               <div key={gap.skill} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", background: "#f5f7fb", borderRadius: "6px" }}>
                 <div>
-                  <span style={{ fontWeight: "bold", marginRight: "8px", color: "#5b6475" }}>#{i+1}</span>
+                  <span style={{ fontWeight: "bold", marginRight: "8px", color: "#5b6475" }}>#{i + 1}</span>
                   <strong>{gap.skill}</strong>
                 </div>
                 <span style={{ fontSize: "0.85rem", color: "#b4233c", background: "#fff1f2", padding: "2px 8px", borderRadius: "99px" }}>

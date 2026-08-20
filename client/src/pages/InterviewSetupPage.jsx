@@ -1,3 +1,4 @@
+import React from "react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mic, Target, Plus, X, BrainCircuit } from "lucide-react";
@@ -7,14 +8,14 @@ export function InterviewSetupPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
-  
+
   const [form, setForm] = useState({
     targetRole: "",
     technologyStack: [],
     interviewType: "technical",
     difficulty: "medium"
   });
-  
+
   const [techInput, setTechInput] = useState("");
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export function InterviewSetupPage() {
   const handleStart = async (e) => {
     e.preventDefault();
     if (!form.targetRole.trim()) return alert("Target role is required");
-    
+
     try {
       setLoading(true);
       const session = await interviewApi.createSession(form);
@@ -79,12 +80,12 @@ export function InterviewSetupPage() {
           <form onSubmit={handleStart} style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
             <div className="form-group">
               <label>Target Role</label>
-              <input 
-                type="text" 
-                className="input-field" 
+              <input
+                type="text"
+                className="input-field"
                 placeholder="e.g. Frontend Developer, Data Scientist..."
                 value={form.targetRole}
-                onChange={e => setForm({...form, targetRole: e.target.value})}
+                onChange={e => setForm({ ...form, targetRole: e.target.value })}
                 required
               />
             </div>
@@ -92,9 +93,9 @@ export function InterviewSetupPage() {
             <div className="form-group">
               <label>Technology Stack</label>
               <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                <input 
-                  type="text" 
-                  className="input-field" 
+                <input
+                  type="text"
+                  className="input-field"
                   placeholder="e.g. React, Node.js"
                   value={techInput}
                   onChange={e => setTechInput(e.target.value)}
@@ -117,10 +118,10 @@ export function InterviewSetupPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div className="form-group">
                 <label>Interview Type</label>
-                <select 
+                <select
                   className="input-field"
                   value={form.interviewType}
-                  onChange={e => setForm({...form, interviewType: e.target.value})}
+                  onChange={e => setForm({ ...form, interviewType: e.target.value })}
                 >
                   <option value="mixed">Mixed</option>
                   <option value="technical">Technical Focus</option>
@@ -130,10 +131,10 @@ export function InterviewSetupPage() {
               </div>
               <div className="form-group">
                 <label>Difficulty</label>
-                <select 
+                <select
                   className="input-field"
                   value={form.difficulty}
-                  onChange={e => setForm({...form, difficulty: e.target.value})}
+                  onChange={e => setForm({ ...form, difficulty: e.target.value })}
                 >
                   <option value="easy">Easy (Intern/Junior)</option>
                   <option value="medium">Medium (Mid-level)</option>
@@ -158,7 +159,7 @@ export function InterviewSetupPage() {
             <BrainCircuit size={20} />
             Previous Sessions
           </h3>
-          
+
           <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
             {sessions.length === 0 ? (
               <p className="text-secondary text-center" style={{ padding: "2rem 0" }}>No past sessions found.</p>

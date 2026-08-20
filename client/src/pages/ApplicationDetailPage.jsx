@@ -1,3 +1,4 @@
+import React from "react";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -10,7 +11,7 @@ export function ApplicationDetailPage() {
   const [app, setApp] = useState(null);
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [runningMatch, setRunningMatch] = useState(false);
   const [matchResult, setMatchResult] = useState(null);
@@ -95,7 +96,7 @@ export function ApplicationDetailPage() {
           <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}>
             <Sparkles size={20} color="#1463ff" /> Semantic Match Engine
           </h3>
-          
+
           {matchResult ? (
             <div>
               <div style={{ textAlign: "center", marginBottom: "24px" }}>
@@ -104,7 +105,7 @@ export function ApplicationDetailPage() {
                 </div>
                 <span style={{ color: "#5b6475", fontSize: "0.9rem" }}>Overall Match Score</span>
               </div>
-              
+
               <Link to={`/match/${matchResult._id}`} className="primary-button" style={{ width: "100%", textDecoration: "none" }}>
                 View Full Evidence & Explanation
               </Link>
@@ -115,7 +116,7 @@ export function ApplicationDetailPage() {
                 Run the match engine to compare your resume against the JD requirements using local semantic embeddings.
               </p>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <select 
+                <select
                   style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
                   value={selectedResumeId}
                   onChange={e => setSelectedResumeId(e.target.value)}
@@ -123,8 +124,8 @@ export function ApplicationDetailPage() {
                   <option value="">Select a resume to match...</option>
                   {resumes.map(r => <option key={r._id} value={r._id}>{r.name} (v{r.version})</option>)}
                 </select>
-                <button 
-                  className="primary-button" 
+                <button
+                  className="primary-button"
                   onClick={handleRunMatch}
                   disabled={runningMatch || !selectedResumeId}
                 >

@@ -8,14 +8,14 @@ import { env } from "./config/env.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 // Routers
-import { router as analyticsRouter } from "./routes/analyticsRoutes.js";
-import { router as applicationRouter } from "./routes/applicationRoutes.js";
+import { analyticsRouter } from "./routes/analyticsRoutes.js";
+import { applicationRouter } from "./routes/applicationRoutes.js";
 import { authRouter } from "./routes/authRoutes.js";
 import { router as interviewRouter } from "./routes/interviewRoutes.js";
-import { router as matchRouter } from "./routes/matchRoutes.js";
-import { router as profileRouter } from "./routes/profileRoutes.js";
-import { router as resumeRouter } from "./routes/resumeRoutes.js";
-import { router as tailoringRouter } from "./routes/tailoringRoutes.js";
+import { matchRouter } from "./routes/matchRoutes.js";
+import { profileRouter } from "./routes/profileRoutes.js";
+import { resumeRouter } from "./routes/resumeRoutes.js";
+import { tailoringRouter } from "./routes/tailoringRoutes.js";
 
 export function createApp() {
   const app = express();

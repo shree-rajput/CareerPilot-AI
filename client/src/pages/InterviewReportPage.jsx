@@ -1,3 +1,4 @@
+import React from "react";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, BarChart3, Clock, Target, BrainCircuit } from "lucide-react";
@@ -6,7 +7,7 @@ import { interviewApi } from "../api/interview.js";
 export function InterviewReportPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  
+
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState(null);
 

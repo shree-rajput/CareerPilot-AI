@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticate } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import {
   createSession,
   getNextQuestion,
@@ -11,7 +11,7 @@ import {
 
 export const router = express.Router();
 
-router.use(authenticate);
+router.use(requireAuth);
 
 router.post("/", createSession);
 router.get("/", listSessions);

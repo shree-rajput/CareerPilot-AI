@@ -1,3 +1,4 @@
+import React from "react";
 import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -90,7 +91,7 @@ export function ApplicationsPage() {
     }
 
     // Optimistic UI update
-    setApps(current => current.map(a => 
+    setApps(current => current.map(a =>
       a._id === activeId ? { ...a, status: targetStatus } : a
     ));
 
@@ -136,16 +137,16 @@ export function ApplicationsPage() {
           <form onSubmit={submitApp} style={{ display: "grid", gap: "16px", maxWidth: "600px" }}>
             <h3 style={{ margin: 0 }}>New Application</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-              <label>Company <input required value={form.company} onChange={e => setForm({...form, company: e.target.value})} /></label>
-              <label>Role <input required value={form.role} onChange={e => setForm({...form, role: e.target.value})} /></label>
+              <label>Company <input required value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} /></label>
+              <label>Role <input required value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} /></label>
             </div>
             <label>Job Description
-              <textarea 
-                required 
-                rows={6} 
+              <textarea
+                required
+                rows={6}
                 style={{ width: "100%", padding: "12px", border: "1px solid #cbd5e1", borderRadius: "8px" }}
                 value={form.jd}
-                onChange={e => setForm({...form, jd: e.target.value})}
+                onChange={e => setForm({ ...form, jd: e.target.value })}
               />
             </label>
             <div style={{ display: "flex", gap: "12px" }}>
@@ -161,21 +162,21 @@ export function ApplicationsPage() {
         <div style={{ display: "flex", gap: "16px", overflowX: "auto", paddingBottom: "16px" }}>
           {COLUMNS.map(col => {
             const colApps = apps.filter(a => a.status === col.id);
-            
+
             return (
               <div key={col.id} style={{ flex: "0 0 280px", background: "#eef2f6", borderRadius: "8px", padding: "12px", minHeight: "60vh" }}>
                 <h3 style={{ margin: "0 0 16px", fontSize: "0.95rem", color: "#5b6475", display: "flex", justifyContent: "space-between" }}>
                   {col.title}
                   <span style={{ background: "#dde4ef", padding: "2px 8px", borderRadius: "99px", fontSize: "0.8rem" }}>{colApps.length}</span>
                 </h3>
-                
+
                 <SortableContext id={col.id} items={colApps.map(a => a._id)} strategy={verticalListSortingStrategy}>
                   <div style={{ minHeight: "100px" }}>
                     {colApps.map(app => (
-                      <SortableAppCard 
-                        key={app._id} 
-                        app={app} 
-                        onClick={() => navigate(`/applications/${app._id}`)} 
+                      <SortableAppCard
+                        key={app._id}
+                        app={app}
+                        onClick={() => navigate(`/applications/${app._id}`)}
                       />
                     ))}
                   </div>

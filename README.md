@@ -89,3 +89,4 @@ If you're reading this code to understand how it's built, here are key systems t
 - Endpoint rate-limiting via `express-rate-limit`.
 - Payload sizes capped to prevent DoS via massive text dumps.
 - All AI responses validated dynamically to prevent NoSQL injection via LLM hallucinations.
+# CareerPilot-AI

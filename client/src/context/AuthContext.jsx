@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { http } from "../api/http";
 import { AuthContext } from "./authContextValue";
-
+import React from "react";
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem("careerpilot_token"));
