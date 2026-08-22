@@ -24,6 +24,11 @@ export const analyticsApi = {
     const { data } = await http.get("/analytics/dashboard");
     return data;
   },
+
+  getCareerIntelligence: async () => {
+    const { data } = await http.get("/analytics/career-intelligence");
+    return data;
+  },
   
   getTrends: async () => {
     const { data } = await http.get("/analytics/trends");

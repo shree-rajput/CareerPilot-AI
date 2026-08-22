@@ -6,63 +6,63 @@ const resumeSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true
+      index: true,
     },
     name: {
       type: String,
       trim: true,
-      default: "My Resume"
+      default: "My Resume",
     },
     label: {
       // e.g. "Google Resume", "Startup Resume"
       type: String,
       trim: true,
-      default: ""
+      default: "",
     },
     originalFilename: {
       type: String,
       trim: true,
-      default: ""
+      default: "",
     },
     fileType: {
       type: String,
-      enum: ["pdf", "txt"],
-      required: true
+      enum: ["pdf", "docx", "txt"],
+      required: true,
     },
     cloudinaryUrl: {
       type: String,
-      default: ""
+      default: "",
     },
     cloudinaryPublicId: {
       type: String,
-      default: ""
+      default: "",
     },
     rawText: {
       type: String,
-      required: true
+      required: true,
     },
     structuredData: {
       // Validated JSON from AI — stored as Mixed to allow flexible schema
       type: mongoose.Schema.Types.Mixed,
-      default: null
+      default: null,
     },
     version: {
       type: Number,
       default: 1,
-      min: 1
+      min: 1,
     },
     parentVersionId: {
       // For version history chain
       type: mongoose.Schema.Types.ObjectId,
       ref: "Resume",
-      default: null
+      default: null,
     },
     isActive: {
       type: Boolean,
-      default: true
-    }
+      default: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Compound index for version queries per user

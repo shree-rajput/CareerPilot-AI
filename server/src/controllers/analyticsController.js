@@ -1,4 +1,5 @@
 import { getDashboardStats, getApplicationTrends, getStatusDistribution } from "../services/analytics/analyticsService.js";
+import { getCareerIntelligence } from "../services/career/careerIntelligenceService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 /**
@@ -23,4 +24,12 @@ export const getTrends = asyncHandler(async (req, res) => {
 export const getDistribution = asyncHandler(async (req, res) => {
   const distribution = await getStatusDistribution(req.user._id);
   return res.json({ distribution });
+});
+
+/**
+ * GET /api/analytics/career-intelligence
+ */
+export const getCareerIntelligenceSummary = asyncHandler(async (req, res) => {
+  const intelligence = await getCareerIntelligence(req.user._id);
+  return res.json({ intelligence });
 });

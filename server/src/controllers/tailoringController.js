@@ -1,12 +1,77 @@
+// import { env } from "../config/env.js";
+// import { Application } from "../models/Application.js";
+// import { MatchResult } from "../models/MatchResult.js";
+// import { Resume } from "../models/Resume.js";
+// import { generateTailoringRecommendations } from "../services/ai/aiService.js";
+// import { asyncHandler } from "../utils/asyncHandler.js";
+// import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
+// import { AppError } from "../utils/errors.js";
+
+// /**
+//  * POST /api/tailor
+//  * Body: { applicationId, resumeId }
+//  */
+// export const tailorResume = asyncHandler(async (req, res) => {
+//   const { applicationId, resumeId } = req.body;
+
+//   if (!applicationId || !resumeId) {
+//     throw new AppError("applicationId and resumeId are required.", 400, "VALIDATION_ERROR");
+//   }
+
+//   // Fetch data
+//   const [application, resume, matchResult] = await Promise.all([
+//     Application.findOne({ _id: applicationId, userId: req.user._id }).lean(),
+//     Resume.findOne({ _id: resumeId, userId: req.user._id }).lean(),
+//     MatchResult.findOne({ applicationId, resumeId, userId: req.user._id }).lean()
+//   ]);
+
+//   if (!application) throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+//   if (!resume) throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+
+//   // We don't strictly require a match result, but it helps the AI target gaps
+//   const missingSkills = matchResult?.missingSkills || [];
+//   const matchedSkills = matchResult?.matchedSkills || [];
+
+//   // Check AI usage limit
+//   const { allowed, used, limit } = await checkAiLimit(
+//     req.user._id,
+//     "tailoring",
+//     env.aiLimitTailoring
+//   );
+
+//   if (!allowed) {
+//     throw new AppError(
+//       `Daily tailoring limit reached (${used}/${limit}). Try again tomorrow.`,
+//       429,
+//       "AI_DAILY_LIMIT"
+//     );
+//   }
+
+//   // Call AI
+//   const recommendations = await generateTailoringRecommendations({
+//     resumeText: resume.rawText,
+//     jdText: application.jobDescription,
+//     missingSkills,
+//     matchedSkills,
+//     role: application.role,
+//     company: application.company
+//   });
+
+//   await incrementAiUsage(req.user._id, "tailoring");
+
+//   return res.json({ recommendations });
+// });
+
 import { env } from "../config/env.js";
 import { Application } from "../models/Application.js";
 import { MatchResult } from "../models/MatchResult.js";
 import { Resume } from "../models/Resume.js";
 import { generateTailoringRecommendations } from "../services/ai/aiService.js";
+import { resumeTailoringService } from "../services/resume/resumeTailoringService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
-
+import { atsOptimizationService } from "../services/resume/atsOptimizationService.js";
 /**
  * POST /api/tailor
  * Body: { applicationId, resumeId }
@@ -15,49 +80,126 @@ export const tailorResume = asyncHandler(async (req, res) => {
   const { applicationId, resumeId } = req.body;
 
   if (!applicationId || !resumeId) {
-    throw new AppError("applicationId and resumeId are required.", 400, "VALIDATION_ERROR");
+    throw new AppError(
+      "applicationId and resumeId are required.",
+      400,
+      "VALIDATION_ERROR",
+    );
   }
 
-  // Fetch data
   const [application, resume, matchResult] = await Promise.all([
-    Application.findOne({ _id: applicationId, userId: req.user._id }).lean(),
-    Resume.findOne({ _id: resumeId, userId: req.user._id }).lean(),
-    MatchResult.findOne({ applicationId, resumeId, userId: req.user._id }).lean()
+    Application.findOne({
+      _id: applicationId,
+      userId: req.user._id,
+    }).lean(),
+
+    Resume.findOne({
+      _id: resumeId,
+      userId: req.user._id,
+    }).lean(),
+
+    MatchResult.findOne({
+      applicationId,
+      resumeId,
+      userId: req.user._id,
+    }).lean(),
   ]);
 
-  if (!application) throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
-  if (!resume) throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
-  
-  // We don't strictly require a match result, but it helps the AI target gaps
-  const missingSkills = matchResult?.missingSkills || [];
-  const matchedSkills = matchResult?.matchedSkills || [];
+  if (!application) {
+    throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+  }
 
-  // Check AI usage limit
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  if (!matchResult) {
+    throw new AppError(
+      "Match result not found. Run resume matching first.",
+      404,
+      "MATCH_RESULT_NOT_FOUND",
+    );
+  }
+
+  /***
+   * Buld and check the resume ats score
+   */
+  const atsAnalysis = atsOptimizationService.calculateScore({
+    resume,
+    application,
+    matchResult,
+  });
+  /**
+   * Build deterministic tailoring analysis.
+   */
+  const tailoringAnalysis = resumeTailoringService.tailorResume({
+    resume,
+    application,
+    matchResult,
+  });
+
+  /**
+   * Check AI usage limit.
+   */
   const { allowed, used, limit } = await checkAiLimit(
     req.user._id,
     "tailoring",
-    env.aiLimitTailoring
+    env.aiLimitTailoring,
   );
 
   if (!allowed) {
     throw new AppError(
       `Daily tailoring limit reached (${used}/${limit}). Try again tomorrow.`,
       429,
-      "AI_DAILY_LIMIT"
+      "AI_DAILY_LIMIT",
     );
   }
 
-  // Call AI
+  /**
+   * AI is used only for wording/explanation.
+   * It does NOT calculate matching scores.
+   */
   const recommendations = await generateTailoringRecommendations({
     resumeText: resume.rawText,
     jdText: application.jobDescription,
-    missingSkills,
-    matchedSkills,
+
+    missingSkills: matchResult.missingSkills || [],
+
+    matchedSkills: matchResult.matchedSkills || [],
+
+    partialSkills: matchResult.partialSkills || [],
+
+    evidence: matchResult.evidence || [],
+
     role: application.role,
-    company: application.company
+    company: application.company,
+
+    tailoringAnalysis,
   });
 
   await incrementAiUsage(req.user._id, "tailoring");
 
-  return res.json({ recommendations });
+  return res.json({
+    success: true,
+
+    data: {
+      ats: atsAnalysis,
+
+      match: {
+        overallScore: matchResult.overallScore,
+        categoryScores: matchResult.categoryScores,
+
+        matchedSkills: matchResult.matchedSkills,
+
+        partialSkills: matchResult.partialSkills,
+
+        missingSkills: matchResult.missingSkills,
+      },
+
+      tailoring: {
+        analysis: tailoringAnalysis,
+        recommendations,
+      },
+    },
+  });
 });

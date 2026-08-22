@@ -15,9 +15,11 @@ export function ApplicationDetailPage() {
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [runningMatch, setRunningMatch] = useState(false);
   const [matchResult, setMatchResult] = useState(null);
+  const [intelligence, setIntelligence] = useState(null);
+  const [intelligenceError, setIntelligenceError] = useState("");
 
   useEffect(() => {
-    loadData(); // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadData();
   }, [id]);
 
   async function loadData() {
@@ -30,6 +32,14 @@ export function ApplicationDetailPage() {
       setResumes(resumeData.resumes);
       if (appData.application.matchResultId) {
         setMatchResult(appData.application.matchResultId); // populated object
+      }
+      try {
+        const intelligenceData = await applicationsApi.getIntelligence(id);
+        setIntelligence(intelligenceData.intelligence);
+        setIntelligenceError("");
+      } catch {
+        setIntelligence(null);
+        setIntelligenceError("Application intelligence is unavailable for this record.");
       }
     } finally {
       setLoading(false);
@@ -135,6 +145,73 @@ export function ApplicationDetailPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef", marginTop: "24px" }}>
+        <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <Sparkles size={20} color="#1463ff" /> Intelligent Application Assistant
+        </h3>
+
+        {intelligenceError && <div className="error-banner">{intelligenceError}</div>}
+
+        {intelligence ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "20px" }}>
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px", marginBottom: "18px" }}>
+                <div style={{ background: "#f5f7fb", borderRadius: "8px", padding: "14px" }}>
+                  <span style={{ color: "#5b6475", fontSize: "0.85rem", fontWeight: 700 }}>Suitability</span>
+                  <strong style={{ display: "block", marginTop: "6px", textTransform: "capitalize" }}>{intelligence.suitability}</strong>
+                </div>
+                <div style={{ background: "#f5f7fb", borderRadius: "8px", padding: "14px" }}>
+                  <span style={{ color: "#5b6475", fontSize: "0.85rem", fontWeight: 700 }}>Match</span>
+                  <strong style={{ display: "block", marginTop: "6px" }}>
+                    {intelligence.matchPercentage === null ? "Run match" : `${intelligence.matchPercentage}%`}
+                  </strong>
+                </div>
+              </div>
+
+              <strong>Personalized advice</strong>
+              <p style={{ color: "#5b6475", lineHeight: 1.6 }}>{intelligence.personalizedAdvice}</p>
+
+              <strong>Missing keywords</strong>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+                {intelligence.missingKeywords.slice(0, 8).map((keyword) => (
+                  <span key={keyword} style={{ background: "#fff1f2", color: "#b4233c", padding: "5px 9px", borderRadius: "999px", fontSize: "0.85rem", fontWeight: 700 }}>
+                    {keyword}
+                  </span>
+                ))}
+                {intelligence.missingKeywords.length === 0 && <span style={{ color: "#5b6475" }}>No missing keywords detected from current match evidence.</span>}
+              </div>
+            </div>
+
+            <div>
+              <strong>Relevant projects from your resume</strong>
+              <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
+                {intelligence.relevantProjects.map((project) => (
+                  <div key={`${project.name}-${project.description}`} style={{ background: "#f5f7fb", borderRadius: "8px", padding: "12px" }}>
+                    <strong>{project.name}</strong>
+                    <p style={{ margin: "6px 0", color: "#5b6475" }}>{project.description || "No description available."}</p>
+                    <small>{(project.technologies || []).join(", ")}</small>
+                  </div>
+                ))}
+                {intelligence.relevantProjects.length === 0 && (
+                  <p style={{ color: "#5b6475" }}>No resume project clearly matches this JD yet. Do not fabricate one; improve your resume only with real evidence.</p>
+                )}
+              </div>
+
+              <strong style={{ display: "block", marginTop: "16px" }}>Resume suggestions</strong>
+              <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+                {intelligence.resumeImprovementSuggestions.slice(0, 4).map((item) => (
+                  <p key={item.skill} style={{ margin: 0, color: "#5b6475" }}>
+                    <strong style={{ color: "#172033" }}>{item.skill}:</strong> {item.suggestion}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          !intelligenceError && <p style={{ color: "#5b6475" }}>Loading application intelligence...</p>
+        )}
       </div>
     </section>
   );

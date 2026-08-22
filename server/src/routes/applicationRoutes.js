@@ -3,6 +3,7 @@ import {
   createApplication,
   deleteApplication,
   getApplication,
+  getApplicationIntelligenceSummary,
   getApplications,
   updateApplication
 } from "../controllers/applicationController.js";
@@ -14,6 +15,7 @@ applicationRouter.use(requireAuth);
 
 applicationRouter.post("/", createApplication);
 applicationRouter.get("/", getApplications);
+applicationRouter.get("/:id/intelligence", getApplicationIntelligenceSummary);
 applicationRouter.get("/:id", getApplication);
 applicationRouter.patch("/:id", updateApplication);
 applicationRouter.delete("/:id", deleteApplication);

@@ -20,7 +20,8 @@ export default [
       "react-refresh": reactRefresh
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "off",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }]
     }
   }

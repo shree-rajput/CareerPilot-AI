@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { Application } from "../models/Application.js";
 import { extractJobDescription } from "../services/ai/aiService.js";
+import { getApplicationIntelligence } from "../services/career/careerIntelligenceService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
@@ -104,6 +105,19 @@ export const getApplication = asyncHandler(async (req, res) => {
   }
 
   return res.json({ application: app });
+});
+
+/**
+ * GET /api/applications/:id/intelligence
+ */
+export const getApplicationIntelligenceSummary = asyncHandler(async (req, res) => {
+  const intelligence = await getApplicationIntelligence(req.user._id, req.params.id);
+
+  if (!intelligence) {
+    throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+  }
+
+  return res.json({ intelligence });
 });
 
 /**

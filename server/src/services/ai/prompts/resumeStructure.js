@@ -12,6 +12,11 @@ export function buildResumeStructurePrompt(rawText) {
 
 REQUIRED JSON SCHEMA:
 {
+  "name": "string — candidate name only if explicitly present, empty string if absent",
+  "email": "string — email only if explicitly present, empty string if absent",
+  "phone": "string — phone only if explicitly present, empty string if absent",
+  "location": "string — location only if explicitly present, empty string if absent",
+  "links": ["array of explicit links from the resume"],
   "summary": "string — professional summary or objective, empty string if absent",
   "skills": ["array of individual skill strings"],
   "education": [
@@ -48,7 +53,8 @@ REQUIRED JSON SCHEMA:
       "date": "string"
     }
   ],
-  "achievements": ["array of achievement strings"]
+  "achievements": ["array of achievement strings"],
+  "parserSource": "ai"
 }
 
 RESUME TEXT:

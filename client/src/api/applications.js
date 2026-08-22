@@ -17,6 +17,11 @@ export const applicationsApi = {
     return data;
   },
 
+  getIntelligence: async (id) => {
+    const { data } = await http.get(`/applications/${id}/intelligence`);
+    return data;
+  },
+
   update: async (id, payload) => {
     const { data } = await http.patch(`/applications/${id}`, payload);
     return data;

@@ -31,11 +31,17 @@ const certificationItemSchema = z.object({
 });
 
 export const resumeStructureSchema = z.object({
+  name: z.string().default(""),
+  email: z.string().default(""),
+  phone: z.string().default(""),
+  location: z.string().default(""),
+  links: z.array(z.string()).default([]),
   summary: z.string().default(""),
   skills: z.array(z.string()).default([]),
   education: z.array(educationItemSchema).default([]),
   experience: z.array(experienceItemSchema).default([]),
   projects: z.array(projectItemSchema).default([]),
   certifications: z.array(certificationItemSchema).default([]),
-  achievements: z.array(z.string()).default([])
+  achievements: z.array(z.string()).default([]),
+  parserSource: z.string().default("ai")
 });

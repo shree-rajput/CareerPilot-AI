@@ -8,6 +8,7 @@ export function ResumePage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const fileInputRef = useRef(null);
 
   const [selectedResumeId, setSelectedResumeId] = useState(null);
@@ -23,7 +24,7 @@ export function ResumePage() {
       const data = await resumeApi.getAll();
       setResumes(data.resumes);
     } catch (err) {
-      setError("Failed to load resumes.");
+      setError(err.response?.data?.message || "Failed to load resumes from the server.");
     } finally {
       setLoading(false);
     }
@@ -35,13 +36,16 @@ export function ResumePage() {
 
     setUploading(true);
     setError("");
+    setNotice("");
 
     const formData = new FormData();
     formData.append("resume", file);
     formData.append("label", file.name.split(".")[0]);
 
     try {
-      await resumeApi.upload(formData);
+      const result = await resumeApi.upload(formData);
+      const warnings = result.status?.warnings || [];
+      setNotice([result.message, ...warnings].filter(Boolean).join(" "));
       await loadResumes();
     } catch (err) {
       setError(err.response?.data?.message || "Upload failed.");
@@ -60,7 +64,7 @@ export function ResumePage() {
       if (selectedResumeId === id) setSelectedResumeId(null);
       await loadResumes();
     } catch (err) {
-      setError("Failed to delete.");
+      setError(err.response?.data?.message || "Failed to delete resume.");
     }
   }
 
@@ -71,7 +75,7 @@ export function ResumePage() {
       const data = await resumeApi.getOne(id);
       setResumeDetail(data.resume);
     } catch (err) {
-      setError("Failed to load detail.");
+      setError(err.response?.data?.message || "Failed to load resume detail.");
     }
   }
 
@@ -106,6 +110,7 @@ export function ResumePage() {
           </div>
 
           {error && <div className="error-banner">{error}</div>}
+          {notice && <div className="success-banner">{notice}</div>}
 
           <div style={{ display: "grid", gap: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Your Versions</h3>
@@ -128,7 +133,9 @@ export function ResumePage() {
               >
                 <div>
                   <h4 style={{ margin: "0 0 4px" }}>{r.name}</h4>
-                  <span style={{ fontSize: "0.8rem", color: "#5b6475" }}>v{r.version} • {r.fileType.toUpperCase()}</span>
+                  <span style={{ fontSize: "0.8rem", color: "#5b6475" }}>
+                    v{r.version} • {r.fileType.toUpperCase()} • {r.hasStructuredData ? `${r.parserSource || "structured"} parsed` : "raw only"}
+                  </span>
                 </div>
                 <button onClick={(e) => handleDelete(r._id, e)} style={{ background: "none", border: 0, cursor: "pointer", color: "#b4233c" }}>
                   <Trash2 size={16} />
@@ -152,7 +159,7 @@ export function ResumePage() {
               <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #eee", paddingBottom: "16px", marginBottom: "20px" }}>
                 <div>
                   <h2 style={{ margin: 0, marginBottom: "8px" }}>{resumeDetail.name} (v{resumeDetail.version})</h2>
-                  {resumeDetail.cloudinaryUrl && (
+                  {resumeDetail.cloudinaryUrl ? (
                     <a 
                       href={resumeDetail.cloudinaryUrl} 
                       target="_blank" 
@@ -161,11 +168,15 @@ export function ResumePage() {
                     >
                       View Original File ↗
                     </a>
+                  ) : (
+                    <span style={{ fontSize: "0.85rem", color: "#5b6475" }}>
+                      Original file storage unavailable; parsed text is saved.
+                    </span>
                   )}
                 </div>
                 {resumeDetail.structuredData ? (
                   <span style={{ background: "#eaf8f0", color: "#137547", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold", height: "fit-content" }}>
-                    AI Structured
+                    {resumeDetail.structuredData.parserSource === "ai" ? "AI Structured" : "Locally Structured"}
                   </span>
                 ) : (
                   <span style={{ background: "#fff1f2", color: "#b4233c", padding: "4px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold", height: "fit-content" }}>
@@ -180,6 +191,18 @@ export function ResumePage() {
                     <section>
                       <h3 style={{ margin: "0 0 8px", color: "#1463ff" }}>Summary</h3>
                       <p style={{ margin: 0, lineHeight: 1.6 }}>{resumeDetail.structuredData.summary}</p>
+                    </section>
+                  )}
+
+                  {(resumeDetail.structuredData.name || resumeDetail.structuredData.email || resumeDetail.structuredData.phone || resumeDetail.structuredData.location) && (
+                    <section>
+                      <h3 style={{ margin: "0 0 8px", color: "#1463ff" }}>Contact</h3>
+                      <div style={{ display: "grid", gap: "6px", color: "#5b6475" }}>
+                        {resumeDetail.structuredData.name && <span><strong>Name:</strong> {resumeDetail.structuredData.name}</span>}
+                        {resumeDetail.structuredData.email && <span><strong>Email:</strong> {resumeDetail.structuredData.email}</span>}
+                        {resumeDetail.structuredData.phone && <span><strong>Phone:</strong> {resumeDetail.structuredData.phone}</span>}
+                        {resumeDetail.structuredData.location && <span><strong>Location:</strong> {resumeDetail.structuredData.location}</span>}
+                      </div>
                     </section>
                   )}
 
@@ -209,7 +232,37 @@ export function ResumePage() {
                     </section>
                   )}
 
-                  {/* Note: I'm omitting the full display of Projects/Education for brevity, but the data is there */}
+                  {resumeDetail.structuredData.projects?.length > 0 && (
+                    <section>
+                      <h3 style={{ margin: "0 0 12px", color: "#1463ff" }}>Projects</h3>
+                      <div style={{ display: "grid", gap: "16px" }}>
+                        {resumeDetail.structuredData.projects.map((p, i) => (
+                          <div key={i} style={{ borderLeft: "2px solid #dde4ef", paddingLeft: "16px" }}>
+                            <h4 style={{ margin: "0 0 4px" }}>{p.name || "Project"}</h4>
+                            <p style={{ margin: "0 0 8px", fontSize: "0.95rem", lineHeight: 1.5 }}>{p.description}</p>
+                            {p.technologies?.length > 0 && <small style={{ color: "#5b6475" }}>{p.technologies.join(", ")}</small>}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {resumeDetail.structuredData.education?.length > 0 && (
+                    <section>
+                      <h3 style={{ margin: "0 0 12px", color: "#1463ff" }}>Education</h3>
+                      <div style={{ display: "grid", gap: "12px" }}>
+                        {resumeDetail.structuredData.education.map((edu, i) => (
+                          <div key={i}>
+                            <strong>{edu.degree || edu.institution}</strong>
+                            <p style={{ margin: "4px 0", color: "#5b6475" }}>
+                              {[edu.institution, edu.branch, edu.startYear || edu.endYear ? `${edu.startYear} - ${edu.endYear}` : "", edu.gpa ? `GPA: ${edu.gpa}` : ""].filter(Boolean).join(" • ")}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
                   <details style={{ marginTop: "16px" }}>
                     <summary style={{ cursor: "pointer", fontWeight: "bold", color: "#5b6475" }}>View Raw Parsed Text</summary>
                     <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", background: "#f5f7fb", padding: "16px", borderRadius: "4px", marginTop: "12px" }}>

@@ -10,7 +10,11 @@ import { AppError } from "../utils/errors.js";
 import { env } from "../config/env.js";
 
 function hashText(text) {
-  return crypto.createHash("sha256").update(text || "").digest("hex").slice(0, 16);
+  return crypto
+    .createHash("sha256")
+    .update(text || "")
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**
@@ -21,23 +25,28 @@ export const runMatch = asyncHandler(async (req, res) => {
   const { applicationId, resumeId } = req.body;
 
   if (!applicationId || !resumeId) {
-    throw new AppError("applicationId and resumeId are required.", 400, "VALIDATION_ERROR");
+    throw new AppError(
+      "applicationId and resumeId are required.",
+      400,
+      "VALIDATION_ERROR",
+    );
   }
 
   // Fetch application and resume, verify ownership
   const [application, resume] = await Promise.all([
     Application.findOne({ _id: applicationId, userId: req.user._id }).lean(),
-    Resume.findOne({ _id: resumeId, userId: req.user._id }).lean()
+    Resume.findOne({ _id: resumeId, userId: req.user._id }).lean(),
   ]);
 
-  if (!application) throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+  if (!application)
+    throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
   if (!resume) throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
 
   if (!resume.structuredData) {
     throw new AppError(
       "This resume has no structured data. Please re-upload the resume so it can be processed by the AI.",
       422,
-      "RESUME_NOT_STRUCTURED"
+      "RESUME_NOT_STRUCTURED",
     );
   }
 
@@ -45,28 +54,42 @@ export const runMatch = asyncHandler(async (req, res) => {
     throw new AppError(
       "This job description has not been extracted yet. Please wait for extraction or re-save the application.",
       422,
-      "JD_NOT_EXTRACTED"
+      "JD_NOT_EXTRACTED",
     );
   }
 
   // Cache check — if same resume + JD already matched, return cached result
-  const resumeHash = hashText(resume.rawText);
-  const jdHash = hashText(application.jobDescription);
+  const resumeHash = hashText(JSON.stringify(resume.structuredData));
 
-  const cached = await MatchResult.findOne({ resumeHash, jdHash, userId: req.user._id }).lean();
+  const jdHash = hashText(JSON.stringify(application.extractedJd));
+
+  const cached = await MatchResult.findOne({
+    resumeHash,
+    jdHash,
+    userId: req.user._id,
+  }).lean();
 
   if (cached) {
     // Update application to link this match result
-    await Application.findByIdAndUpdate(applicationId, { matchResultId: cached._id });
+    await Application.findByIdAndUpdate(applicationId, {
+      matchResultId: cached._id,
+    });
     return res.json({ matchResult: cached, cached: true });
   }
 
   // Run the semantic match pipeline (embedding + cosine similarity + scoring)
-  const pipelineResult = await runMatchPipeline(resume.structuredData, application.extractedJd);
+  const pipelineResult = await runMatchPipeline(
+    resume.structuredData,
+    application.extractedJd,
+  );
 
   // Get AI explanation (non-fatal — score already calculated)
   let explanation = "";
-  const { allowed } = await checkAiLimit(req.user._id, "match_explanation", env.aiLimitMatchExplanation);
+  const { allowed } = await checkAiLimit(
+    req.user._id,
+    "match_explanation",
+    env.aiLimitMatchExplanation,
+  );
 
   if (allowed) {
     try {
@@ -76,12 +99,13 @@ export const runMatch = asyncHandler(async (req, res) => {
         partialSkills: pipelineResult.partialSkills,
         missingSkills: pipelineResult.missingSkills,
         role: application.role,
-        company: application.company
+        company: application.company,
       });
       await incrementAiUsage(req.user._id, "match_explanation");
     } catch (err) {
       console.error("Match explanation AI error:", err.message);
-      explanation = "AI explanation unavailable. Your match score is based on semantic similarity analysis.";
+      explanation =
+        "AI explanation unavailable. Your match score is based on semantic similarity analysis.";
     }
   }
 
@@ -97,13 +121,13 @@ export const runMatch = asyncHandler(async (req, res) => {
     partialSkills: pipelineResult.partialSkills,
     missingSkills: pipelineResult.missingSkills,
     evidence: pipelineResult.evidence,
-    explanation
+    explanation,
   });
 
   // Link to application
   await Application.findByIdAndUpdate(applicationId, {
     matchResultId: matchResult._id,
-    resumeVersionId: resumeId
+    resumeVersionId: resumeId,
   });
 
   return res.status(201).json({ matchResult, cached: false });
@@ -115,7 +139,7 @@ export const runMatch = asyncHandler(async (req, res) => {
 export const getMatchResult = asyncHandler(async (req, res) => {
   const matchResult = await MatchResult.findOne({
     _id: req.params.id,
-    userId: req.user._id
+    userId: req.user._id,
   }).lean();
 
   if (!matchResult) {
