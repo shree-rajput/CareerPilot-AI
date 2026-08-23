@@ -43,16 +43,26 @@ export const createApplication = asyncHandler(async (req, res) => {
     env.aiLimitJdAnalysis
   );
 
-  // Extract JD with AI (non-fatal if limit reached or AI fails)
-  let extractedJd = null;
+  if (!allowed) {
+    throw new AppError(
+      `Daily job description analysis limit reached (${used}/${limit}). Try again tomorrow.`,
+      429,
+      "AI_DAILY_LIMIT"
+    );
+  }
 
-  if (allowed) {
-    try {
-      extractedJd = await extractJobDescription(jobDescription);
-      await incrementAiUsage(req.user._id, "jd_analysis");
-    } catch (err) {
-      console.error("JD extraction AI error:", err.message);
-    }
+  // Extract JD with AI (must succeed)
+  let extractedJd = null;
+  try {
+    extractedJd = await extractJobDescription(jobDescription);
+    await incrementAiUsage(req.user._id, "jd_analysis");
+  } catch (err) {
+    console.error("JD extraction AI error:", err.message);
+    throw new AppError(
+      `Job description extraction failed: ${err.message || "Unknown AI error"}. Please try again.`,
+      502,
+      "JD_EXTRACTION_FAILED"
+    );
   }
 
   const app = await Application.create({

@@ -489,6 +489,170 @@ export const getResumes = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/resume/:id/versions
+ *
+ * Get all versions belonging to the same resume chain.
+ */
+export const getResumeVersions = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  })
+    .select("_id version parentVersionId")
+    .lean();
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  /*
+   * Walk backwards through the parentVersionId chain.
+   */
+  const versions = [];
+
+  let currentId = resume._id;
+
+  while (currentId) {
+    const current = await Resume.findOne({
+      _id: currentId,
+      userId: req.user._id,
+    })
+      .select(
+        "_id name label originalFilename fileType version parentVersionId createdAt updatedAt",
+      )
+      .lean();
+
+    if (!current) {
+      break;
+    }
+
+    versions.push(current);
+
+    currentId = current.parentVersionId;
+  }
+
+  return res.json({
+    versions: versions.sort((a, b) => a.version - b.version),
+  });
+});
+
+/**
+ * POST /api/resume/:id/restore
+ *
+ * Restore an old resume version by creating
+ * a new version from it.
+ */
+export const restoreResumeVersion = asyncHandler(async (req, res) => {
+  const sourceResume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  }).lean();
+
+  if (!sourceResume) {
+    throw new AppError("Resume version not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  /*
+   * Find the latest version in this user's
+   * resume chain.
+   */
+  const latestResume = await Resume.findOne({
+    userId: req.user._id,
+    $or: [
+      { _id: sourceResume._id },
+      {
+        parentVersionId: sourceResume._id,
+      },
+    ],
+  })
+    .sort({ version: -1 })
+    .lean();
+
+  /*
+   * Because the chain can be longer than one level,
+   * find the maximum version belonging to this chain.
+   */
+  const allUserVersions = await Resume.find({
+    userId: req.user._id,
+  })
+    .select("_id version parentVersionId")
+    .sort({ version: -1 })
+    .lean();
+
+  const chainIds = new Set([String(sourceResume._id)]);
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const item of allUserVersions) {
+      if (
+        item.parentVersionId &&
+        chainIds.has(String(item.parentVersionId)) &&
+        !chainIds.has(String(item._id))
+      ) {
+        chainIds.add(String(item._id));
+        changed = true;
+      }
+    }
+  }
+
+  const chainVersions = allUserVersions.filter((item) =>
+    chainIds.has(String(item._id)),
+  );
+
+  const maxVersion =
+    chainVersions.length > 0
+      ? Math.max(...chainVersions.map((item) => item.version))
+      : sourceResume.version;
+
+  /*
+   * Create a NEW version.
+   * Never overwrite the old version.
+   */
+  const restoredResume = await Resume.create({
+    userId: req.user._id,
+
+    name: sourceResume.name,
+
+    label: sourceResume.label
+      ? `${sourceResume.label} (Restored)`
+      : "Restored Resume",
+
+    originalFilename: sourceResume.originalFilename,
+
+    fileType: sourceResume.fileType,
+
+    cloudinaryUrl: sourceResume.cloudinaryUrl,
+
+    cloudinaryPublicId: sourceResume.cloudinaryPublicId,
+
+    rawText: sourceResume.rawText,
+
+    structuredData: sourceResume.structuredData,
+
+    version: maxVersion + 1,
+
+    parentVersionId: sourceResume._id,
+
+    isActive: true,
+  });
+
+  return res.status(201).json({
+    message: `Resume version ${sourceResume.version} restored successfully.`,
+
+    resume: {
+      _id: restoredResume._id,
+      name: restoredResume.name,
+      label: restoredResume.label,
+      version: restoredResume.version,
+      parentVersionId: restoredResume.parentVersionId,
+      createdAt: restoredResume.createdAt,
+    },
+  });
+});
+/**
  * GET /api/resume/:id
  * Get full resume detail including structured data.
  */

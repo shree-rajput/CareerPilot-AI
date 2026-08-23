@@ -14,8 +14,29 @@ function getClient() {
   }
   if (!_client) {
     _client = new Groq({ apiKey: env.groqApiKey });
+
+    // Safe startup log — never prints the API key
+    console.log(`[Groq] Configured: true`);
+    console.log(`[Groq] Model: ${env.groqModel}`);
   }
   return _client;
+}
+
+/**
+ * Validate that a model ID is a single clean token.
+ * Throws clearly if it looks like a fallback expression.
+ */
+function assertCleanModel(model) {
+  if (!model || typeof model !== "string") {
+    throw new AppError("GROQ_MODEL is not set.", 503, "AI_NOT_CONFIGURED");
+  }
+  if (/[\s|]/.test(model)) {
+    throw new AppError(
+      `Invalid GROQ_MODEL value "${model}". Must be a single model ID, not a fallback expression.`,
+      503,
+      "AI_INVALID_MODEL"
+    );
+  }
 }
 
 /**
@@ -29,13 +50,16 @@ function getClient() {
  */
 export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048 } = {}) {
   const client = getClient();
+  const model = env.groqModel;
+
+  assertCleanModel(model);
 
   try {
     const completion = await client.chat.completions.create({
-      model: env.groqModel,
+      model,
       messages,
       temperature,
-      max_tokens: maxTokens
+      max_tokens: maxTokens,
     });
 
     const content = completion.choices?.[0]?.message?.content;
@@ -55,6 +79,15 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048 }
         "AI service rate limit reached. Please try again in a few minutes.",
         429,
         "AI_RATE_LIMITED"
+      );
+    }
+
+    // Model not found / access denied
+    if (error.status === 404) {
+      throw new AppError(
+        `Groq model "${model}" is not available on this API key. Update GROQ_MODEL in your .env file.`,
+        503,
+        "AI_MODEL_NOT_FOUND"
       );
     }
 

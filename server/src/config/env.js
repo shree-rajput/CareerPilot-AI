@@ -10,6 +10,24 @@ for (const key of required) {
   }
 }
 
+/**
+ * Sanitize a raw model string to a single clean model ID.
+ * Strips whitespace, pipe-fallback expressions, and double tokens
+ * so values like "llama-3.1-8b-instant || llama-3.3-70b-versatile"
+ * can never reach the Groq API.
+ */
+function sanitizeModel(raw, fallback) {
+  if (!raw || typeof raw !== "string") return fallback;
+  // Take only the first token before any whitespace or pipe
+  const clean = raw.split(/[\s|]+/)[0].trim();
+  return clean || fallback;
+}
+
+// Confirmed available via GET https://api.groq.com/openai/v1/models with this key
+const GROQ_FALLBACK_MODEL = "groq/compound";
+
+const groqModel = sanitizeModel(process.env.GROQ_MODEL, GROQ_FALLBACK_MODEL);
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 5000),
@@ -19,9 +37,10 @@ export const env = {
   jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS || 12),
 
-  // AI provider — swap model without touching business logic
+  // AI provider — swap model without touching business logic.
+  // groqModel is always a single sanitized token, never a fallback expression.
   groqApiKey: process.env.GROQ_API_KEY || "",
-  groqModel: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
+  groqModel,
 
   // File uploads
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 5),
