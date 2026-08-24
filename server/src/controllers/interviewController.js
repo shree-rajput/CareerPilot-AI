@@ -8,7 +8,7 @@ import { env } from "../config/env.js";
 // 1. Initialize a new interview session
 export async function createSession(req, res, next) {
   try {
-    const { targetRole, technologyStack, interviewType, difficulty, applicationId } = req.body;
+    const { targetRole, technologyStack, interviewType, difficulty, applicationId, jobDescription, numberOfQuestions } = req.body;
 
     const session = new InterviewSession({
       userId: req.user._id,
@@ -17,6 +17,8 @@ export async function createSession(req, res, next) {
       technologyStack,
       interviewType,
       difficulty,
+      jobDescription: jobDescription || "",
+      numberOfQuestions: numberOfQuestions || 5,
       status: "in_progress"
     });
 
@@ -32,6 +34,12 @@ export async function createSession(req, res, next) {
 }
 
 // 2. Generate the next question
+// Uses a "pending stub" idempotency pattern:
+//   - If the last question is already "asked" → return it (idempotent for refreshes)
+//   - If a "pending" stub exists → another request is already generating, return 202
+//   - Otherwise: persist a pending stub first, then call AI, then update stub
+//   This guarantees exactly ONE Groq call per question, even under rapid clicks or
+//   React Strict Mode double-invocation.
 export async function getNextQuestion(req, res, next) {
   try {
     const { sessionId } = req.params;
@@ -43,39 +51,123 @@ export async function getNextQuestion(req, res, next) {
       throw new AppError("Session is already completed", 400);
     }
 
-    // Check AI limit
-    const limitCheck = await checkAiLimit(req.user._id, "mock_question", env.aiLimitMockQuestions);
-    if (!limitCheck.allowed) {
-      throw new AppError(`Daily mock question limit reached (${limitCheck.limit}/day). Try again tomorrow.`, 429, "RATE_LIMIT");
-    }
-
-    // Get previous questions
+    // Fetch all questions for this session sorted by creation order
     const previousQuestions = await InterviewQuestion.find({ sessionId }).sort({ createdAt: 1 });
 
-    // Generate new question via AI
-    const aiQuestion = await generateInterviewQuestion({
-      targetRole: session.targetRole,
-      technologyStack: session.technologyStack,
-      interviewType: session.interviewType,
-      difficulty: session.difficulty,
-      previousQuestions
-    });
+    // Filter out any pending stubs from the count — only count real questions
+    const completedQuestions = previousQuestions.filter(q => q.status !== "pending");
 
-    const question = new InterviewQuestion({
+    // ── Idempotency check 1: last real question still "asked" (unanswered) ──
+    // Return it directly — no new AI call needed. Handles page refresh, double-click, etc.
+    const lastRealQuestion = completedQuestions[completedQuestions.length - 1];
+    if (lastRealQuestion && lastRealQuestion.status === "asked") {
+      return res.status(200).json({
+        success: true,
+        data: lastRealQuestion
+      });
+    }
+
+    // ── Idempotency check 2: a "pending" stub already exists ──
+    // Another concurrent request is already generating this question.
+    // Return 202 so the frontend knows to poll or show a "generating" state.
+    const pendingStub = previousQuestions.find(q => q.status === "pending");
+    if (pendingStub) {
+      return res.status(202).json({
+        success: true,
+        data: null,
+        message: "Question is being generated. Please wait a moment and try again."
+      });
+    }
+
+    // ── Session completion check ──
+    if (completedQuestions.length >= session.numberOfQuestions) {
+      session.status = "completed";
+      session.completedAt = new Date();
+      await session.save();
+      return res.status(200).json({
+        success: true,
+        data: null,
+        message: "Interview completed"
+      });
+    }
+
+    // ── AI usage limit check ──
+    // Only check when we actually intend to generate a new question.
+    const limitCheck = await checkAiLimit(req.user._id, "mock_question", env.aiLimitMockQuestions);
+    if (!limitCheck.allowed) {
+      throw new AppError(
+        `Daily mock question limit reached (${limitCheck.limit}/day). Try again tomorrow.`,
+        429,
+        "RATE_LIMIT"
+      );
+    }
+
+    // ── Persist a pending stub BEFORE calling the AI ──
+    // This is the idempotency lock. Any concurrent request arriving now will
+    // see this stub and return 202 immediately without calling Groq again.
+    // NOTE: Mongoose's required:true on String fields rejects empty strings,
+    // so we use a non-empty internal placeholder. It is overwritten with the
+    // real question text (or the stub is deleted) before anything is returned.
+    const stub = await InterviewQuestion.create({
       sessionId,
-      questionText: aiQuestion.questionText,
-      category: aiQuestion.category,
-      difficulty: aiQuestion.difficulty,
-      expectedConcepts: aiQuestion.expectedConcepts,
-      status: "asked"
+      questionText: "__pending__",
+      category: "Generating...",
+      difficulty: session.difficulty,
+      expectedConcepts: [],
+      status: "pending"
     });
 
-    await question.save();
+    let aiQuestion;
+    try {
+      // Pass the answered questions as context (exclude the pending stub)
+      aiQuestion = await generateInterviewQuestion({
+        targetRole: session.targetRole,
+        technologyStack: session.technologyStack,
+        interviewType: session.interviewType,
+        difficulty: session.difficulty,
+        jobDescription: session.jobDescription,
+        previousQuestions: completedQuestions,
+        questionNumber: completedQuestions.length + 1,
+        totalQuestions: session.numberOfQuestions
+      });
+    } catch (aiError) {
+      // AI failed — clean up the pending stub so the user can retry
+      await InterviewQuestion.deleteOne({ _id: stub._id });
+      throw aiError;
+    }
+
+    // ── Runtime guard: verify AI returned a valid questionText ──
+    // The Zod schema already validates this, but we add an explicit check here
+    // as a last-resort safety net before writing to MongoDB.
+    const questionText = typeof aiQuestion.questionText === "string"
+      ? aiQuestion.questionText.trim()
+      : "";
+
+    if (!questionText) {
+      // AI returned something Zod accepted but questionText is empty — should
+      // not happen in practice, but guard against it defensively.
+      await InterviewQuestion.deleteOne({ _id: stub._id });
+      throw new AppError(
+        "AI generated an empty question. Please try again.",
+        502,
+        "AI_INVALID_RESPONSE"
+      );
+    }
+
+    // ── Upgrade the stub to a real "asked" question ──
+    stub.questionText = questionText;
+    stub.category = aiQuestion.category || "General";
+    stub.difficulty = aiQuestion.difficulty || session.difficulty;
+    stub.expectedConcepts = Array.isArray(aiQuestion.expectedConcepts) ? aiQuestion.expectedConcepts : [];
+    stub.status = "asked";
+    await stub.save();
+
+    // Increment usage only after a successful save
     await incrementAiUsage(req.user._id, "mock_question");
 
     res.status(201).json({
       success: true,
-      data: question
+      data: stub
     });
   } catch (error) {
     next(error);
@@ -86,7 +178,7 @@ export async function getNextQuestion(req, res, next) {
 export async function submitAnswer(req, res, next) {
   try {
     const { questionId } = req.params;
-    const { transcript, metrics } = req.body;
+    const { transcript, metrics, videoMetrics } = req.body;
 
     const question = await InterviewQuestion.findById(questionId).populate("sessionId");
     if (!question || question.sessionId.userId.toString() !== req.user._id.toString()) {
@@ -141,13 +233,24 @@ export async function submitAnswer(req, res, next) {
       }, { tech: 0, comm: 0, clarity: 0, struct: 0 });
 
       const count = allAnswered.length;
+      
+      let newVideoPresence = session.scores.videoPresence;
+      if (videoMetrics && typeof videoMetrics.presenceScore === 'number') {
+        newVideoPresence = ((session.scores.videoPresence * (count - 1)) + videoMetrics.presenceScore) / count;
+      }
+
       session.scores = {
         technical: sum.tech / count,
         communication: sum.comm / count,
         clarity: sum.clarity / count,
-        structure: sum.struct / count
+        structure: sum.struct / count,
+        videoPresence: newVideoPresence
       };
-      session.overallScore = (session.scores.technical + session.scores.communication + session.scores.clarity + session.scores.structure) / 4;
+      
+      const scoreWeight = newVideoPresence > 0 ? 5 : 4;
+      const totalScore = session.scores.technical + session.scores.communication + session.scores.clarity + session.scores.structure + (newVideoPresence > 0 ? session.scores.videoPresence : 0);
+      session.overallScore = totalScore / scoreWeight;
+
       await session.save();
     }
 

@@ -12,12 +12,14 @@ const createApplicationSchema = z.object({
   role: z.string().trim().min(1).max(150),
   jobDescription: z.string().trim().min(50, "Please paste the full job description (at least 50 characters)."),
   jobUrl: z.string().trim().url().optional().or(z.literal("")),
+  location: z.string().trim().max(100).optional().or(z.literal("")),
   notes: z.string().trim().max(2000).optional()
 });
 
 const updateApplicationSchema = z.object({
-  status: z.enum(["saved", "applied", "oa", "interview", "offer", "rejected", "withdrawn"]).optional(),
+  status: z.enum(["saved", "applied", "screening", "interview", "offer", "rejected"]).optional(),
   notes: z.string().trim().max(2000).optional(),
+  location: z.string().trim().max(100).optional().or(z.literal("")),
   dateApplied: z.string().datetime({ offset: true }).optional().nullable(),
   interviewDate: z.string().datetime({ offset: true }).optional().nullable(),
   resumeVersionId: z.string().optional().nullable(),
@@ -34,7 +36,7 @@ export const createApplication = asyncHandler(async (req, res) => {
     throw new AppError(parsed.error.errors[0]?.message || "Invalid request.", 400, "VALIDATION_ERROR");
   }
 
-  const { company, role, jobDescription, jobUrl, notes } = parsed.data;
+  const { company, role, jobDescription, jobUrl, location, notes } = parsed.data;
 
   // Check AI limit for JD extraction
   const { allowed, used, limit } = await checkAiLimit(
@@ -72,6 +74,7 @@ export const createApplication = asyncHandler(async (req, res) => {
     jobDescription,
     extractedJd,
     jobUrl: jobUrl || "",
+    location: location || "",
     notes: notes || "",
     statusHistory: [{ status: "saved" }]
   });
@@ -90,13 +93,25 @@ export const createApplication = asyncHandler(async (req, res) => {
  * GET /api/applications
  */
 export const getApplications = asyncHandler(async (req, res) => {
-  const { status } = req.query;
+  const { status, search, sort } = req.query;
   const filter = { userId: req.user._id };
   if (status) filter.status = status;
+  if (search) {
+    filter.$or = [
+      { company: { $regex: search, $options: "i" } },
+      { role: { $regex: search, $options: "i" } }
+    ];
+  }
+
+  let sortObj = { createdAt: -1 };
+  if (sort === "dateApplied") sortObj = { dateApplied: -1 };
+  if (sort === "dateAppliedAsc") sortObj = { dateApplied: 1 };
+  if (sort === "oldest") sortObj = { createdAt: 1 };
 
   const applications = await Application.find(filter)
-    .sort({ createdAt: -1 })
+    .sort(sortObj)
     .select("-jobDescription -extractedJd.responsibilities")
+    .populate("matchResultId", "overallScore")
     .lean();
 
   return res.json({ applications });
@@ -163,6 +178,7 @@ export const updateApplication = asyncHandler(async (req, res) => {
   }
 
   if (updates.notes !== undefined) app.notes = updates.notes;
+  if (updates.location !== undefined) app.location = updates.location;
   if (updates.dateApplied !== undefined) app.dateApplied = updates.dateApplied ? new Date(updates.dateApplied) : null;
   if (updates.interviewDate !== undefined) app.interviewDate = updates.interviewDate ? new Date(updates.interviewDate) : null;
   if (updates.resumeVersionId !== undefined) app.resumeVersionId = updates.resumeVersionId || null;

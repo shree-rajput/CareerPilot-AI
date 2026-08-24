@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const interviewQuestionSchema = z.object({
-  questionText: z.string().describe("The interview question to ask."),
-  category: z.string().describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
+  questionText: z.string().min(1, "questionText must not be empty").describe("The interview question to ask."),
+  category: z.string().min(1, "category must not be empty").describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
   difficulty: z.enum(["easy", "medium", "hard"]).describe("The difficulty level of the question"),
   expectedConcepts: z.array(z.string()).describe("List of key concepts or keywords expected in a good answer")
 });

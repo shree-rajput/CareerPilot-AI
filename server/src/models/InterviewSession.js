@@ -22,6 +22,14 @@ const interviewSessionSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    jobDescription: {
+      type: String,
+      default: ""
+    },
+    numberOfQuestions: {
+      type: Number,
+      default: 5
+    },
     interviewType: {
       type: String,
       enum: ["technical", "hr", "project", "mixed"],
@@ -42,7 +50,8 @@ const interviewSessionSchema = new mongoose.Schema(
       technical: { type: Number, default: 0 },
       communication: { type: Number, default: 0 },
       clarity: { type: Number, default: 0 },
-      structure: { type: Number, default: 0 }
+      structure: { type: Number, default: 0 },
+      videoPresence: { type: Number, default: 0 }
     },
     feedback: {
       strengths: { type: [String], default: [] },

@@ -13,7 +13,9 @@ export function InterviewSetupPage() {
     targetRole: "",
     technologyStack: [],
     interviewType: "technical",
-    difficulty: "medium"
+    difficulty: "medium",
+    jobDescription: "",
+    numberOfQuestions: 5
   });
 
   const [techInput, setTechInput] = useState("");
@@ -141,6 +143,30 @@ export function InterviewSetupPage() {
                   <option value="hard">Hard (Senior)</option>
                 </select>
               </div>
+            </div>
+
+            <div className="form-group">
+              <label>Job Description (Optional)</label>
+              <textarea
+                className="input-field"
+                placeholder="Paste the job description here for highly targeted questions..."
+                value={form.jobDescription}
+                onChange={e => setForm({ ...form, jobDescription: e.target.value })}
+                rows={4}
+                style={{ resize: "vertical" }}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Number of Questions ({form.numberOfQuestions})</label>
+              <input
+                type="range"
+                min="3"
+                max="10"
+                value={form.numberOfQuestions}
+                onChange={e => setForm({ ...form, numberOfQuestions: Number(e.target.value) })}
+                style={{ width: "100%" }}
+              />
             </div>
 
             <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>

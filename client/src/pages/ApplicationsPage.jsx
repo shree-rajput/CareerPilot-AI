@@ -1,47 +1,16 @@
-import React from "react";
-import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Plus, Search, Filter } from "lucide-react";
 import { applicationsApi } from "../api/applications";
 
-const COLUMNS = [
-  { id: "saved", title: "Saved" },
-  { id: "applied", title: "Applied" },
-  { id: "oa", title: "Assessment" },
-  { id: "interview", title: "Interview" },
-  { id: "offer", title: "Offer" },
-  { id: "rejected", title: "Rejected" }
+const STATUSES = [
+  { id: "saved", label: "Saved" },
+  { id: "applied", label: "Applied" },
+  { id: "screening", label: "Screening" },
+  { id: "interview", label: "Interview" },
+  { id: "offer", label: "Offer" },
+  { id: "rejected", label: "Rejected" }
 ];
-
-function SortableAppCard({ app, onClick }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: app._id,
-    data: { status: app.status }
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    background: "white",
-    padding: "12px",
-    borderRadius: "6px",
-    border: "1px solid #dde4ef",
-    cursor: "grab",
-    marginBottom: "10px",
-    boxShadow: isDragging ? "0 4px 12px rgba(0,0,0,0.1)" : "none"
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} onClick={onClick}>
-      <h4 style={{ margin: "0 0 4px", fontSize: "0.95rem" }}>{app.role}</h4>
-      <span style={{ fontSize: "0.85rem", color: "#5b6475" }}>{app.company}</span>
-    </div>
-  );
-}
 
 export function ApplicationsPage() {
   const [apps, setApps] = useState([]);
@@ -49,62 +18,28 @@ export function ApplicationsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const navigate = useNavigate();
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sort, setSort] = useState("createdAt");
 
   useEffect(() => {
     loadApps();
-  }, []);
+  }, [search, statusFilter, sort]);
 
   async function loadApps() {
     try {
-      const data = await applicationsApi.getAll();
+      const data = await applicationsApi.getAll({
+        search,
+        status: statusFilter,
+        sort
+      });
       setApps(data.applications);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleDragEnd(event) {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeId = active.id;
-    const overId = over.id; // Could be a column ID or another card ID
-
-    // Find the item being dragged
-    const activeApp = apps.find(a => a._id === activeId);
-    if (!activeApp) return;
-
-    // Determine target status
-    let targetStatus = overId;
-    if (!COLUMNS.find(c => c.id === overId)) {
-      // Dropped on another card
-      const overApp = apps.find(a => a._id === overId);
-      if (overApp) targetStatus = overApp.status;
-    }
-
-    if (activeApp.status === targetStatus) {
-      // Reordering within same column (just UI update if we cared about strict order)
-      return;
-    }
-
-    // Optimistic UI update
-    setApps(current => current.map(a =>
-      a._id === activeId ? { ...a, status: targetStatus } : a
-    ));
-
-    // Persist
-    try {
-      await applicationsApi.update(activeId, { status: targetStatus });
-    } catch {
-      // Revert on failure
-      loadApps();
-    }
-  }
-
-  const [form, setForm] = useState({ company: "", role: "", jd: "" });
+  const [form, setForm] = useState({ company: "", role: "", location: "", jd: "" });
 
   async function submitApp(e) {
     e.preventDefault();
@@ -112,24 +47,57 @@ export function ApplicationsPage() {
       await applicationsApi.create({
         company: form.company,
         role: form.role,
+        location: form.location,
         jobDescription: form.jd
       });
       setShowAdd(false);
-      setForm({ company: "", role: "", jd: "" });
+      setForm({ company: "", role: "", location: "", jd: "" });
       loadApps();
     } catch (err) {
       alert("Failed to save application.");
     }
   }
 
-  if (loading) return <p>Loading board...</p>;
-
   return (
     <section>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+        <h1 style={{ margin: 0, fontSize: "1.8rem" }}>Applications</h1>
         <button className="primary-button" onClick={() => setShowAdd(true)}>
           <Plus size={18} /> Add Application
         </button>
+      </div>
+
+      <div style={{ display: "flex", gap: "16px", marginBottom: "20px", background: "white", padding: "16px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "#f5f7fb", padding: "8px 12px", borderRadius: "6px" }}>
+          <Search size={18} color="#5b6475" />
+          <input
+            type="text"
+            placeholder="Search company or role..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ border: "none", background: "transparent", width: "100%", outline: "none" }}
+          />
+        </div>
+        
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white" }}
+        >
+          <option value="">All Statuses</option>
+          {STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+          style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white" }}
+        >
+          <option value="createdAt">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="dateApplied">Date Applied (Newest)</option>
+          <option value="dateAppliedAsc">Date Applied (Oldest)</option>
+        </select>
       </div>
 
       {showAdd && (
@@ -137,14 +105,17 @@ export function ApplicationsPage() {
           <form onSubmit={submitApp} style={{ display: "grid", gap: "16px", maxWidth: "600px" }}>
             <h3 style={{ margin: 0 }}>New Application</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-              <label>Company <input required value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} /></label>
-              <label>Role <input required value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} /></label>
+              <label>Company <input required value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #cbd5e1", borderRadius: "4px" }} /></label>
+              <label>Role <input required value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #cbd5e1", borderRadius: "4px" }} /></label>
             </div>
+            <label>Location (Optional)
+              <input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} style={{ width: "100%", padding: "8px", marginTop: "4px", border: "1px solid #cbd5e1", borderRadius: "4px" }} />
+            </label>
             <label>Job Description
               <textarea
                 required
                 rows={6}
-                style={{ width: "100%", padding: "12px", border: "1px solid #cbd5e1", borderRadius: "8px" }}
+                style={{ width: "100%", padding: "12px", marginTop: "4px", border: "1px solid #cbd5e1", borderRadius: "8px" }}
                 value={form.jd}
                 onChange={e => setForm({ ...form, jd: e.target.value })}
               />
@@ -157,35 +128,52 @@ export function ApplicationsPage() {
         </div>
       )}
 
-      {/* KANBAN BOARD */}
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div style={{ display: "flex", gap: "16px", overflowX: "auto", paddingBottom: "16px" }}>
-          {COLUMNS.map(col => {
-            const colApps = apps.filter(a => a.status === col.id);
-
-            return (
-              <div key={col.id} style={{ flex: "0 0 280px", background: "#eef2f6", borderRadius: "8px", padding: "12px", minHeight: "60vh" }}>
-                <h3 style={{ margin: "0 0 16px", fontSize: "0.95rem", color: "#5b6475", display: "flex", justifyContent: "space-between" }}>
-                  {col.title}
-                  <span style={{ background: "#dde4ef", padding: "2px 8px", borderRadius: "99px", fontSize: "0.8rem" }}>{colApps.length}</span>
-                </h3>
-
-                <SortableContext id={col.id} items={colApps.map(a => a._id)} strategy={verticalListSortingStrategy}>
-                  <div style={{ minHeight: "100px" }}>
-                    {colApps.map(app => (
-                      <SortableAppCard
-                        key={app._id}
-                        app={app}
-                        onClick={() => navigate(`/applications/${app._id}`)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </div>
-            );
-          })}
+      {loading ? (
+        <p>Loading applications...</p>
+      ) : (
+        <div style={{ background: "white", borderRadius: "8px", border: "1px solid #dde4ef", overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead style={{ background: "#f5f7fb", borderBottom: "1px solid #dde4ef" }}>
+              <tr>
+                <th style={{ padding: "12px 16px", color: "#5b6475", fontWeight: 600 }}>Role</th>
+                <th style={{ padding: "12px 16px", color: "#5b6475", fontWeight: 600 }}>Company</th>
+                <th style={{ padding: "12px 16px", color: "#5b6475", fontWeight: 600 }}>Status</th>
+                <th style={{ padding: "12px 16px", color: "#5b6475", fontWeight: 600 }}>Applied Date</th>
+                <th style={{ padding: "12px 16px", color: "#5b6475", fontWeight: 600 }}>ATS Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {apps.length === 0 ? (
+                <tr><td colSpan="5" style={{ padding: "24px", textAlign: "center", color: "#5b6475" }}>No applications found.</td></tr>
+              ) : (
+                apps.map(app => (
+                  <tr key={app._id} onClick={() => navigate(`/applications/${app._id}`)} style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.background = "#f8fafc"} onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                    <td style={{ padding: "12px 16px", fontWeight: 500, color: "#1e293b" }}>{app.role}</td>
+                    <td style={{ padding: "12px 16px", color: "#475569" }}>{app.company}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ background: "#eef2f6", padding: "4px 8px", borderRadius: "4px", fontSize: "0.85rem", textTransform: "capitalize" }}>
+                        {app.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 16px", color: "#475569" }}>
+                      {app.dateApplied ? new Date(app.dateApplied).toLocaleDateString() : "—"}
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      {app.matchResultId ? (
+                        <span style={{ fontWeight: 600, color: app.matchResultId.overallScore >= 75 ? "#00a884" : app.matchResultId.overallScore >= 50 ? "#f59e0b" : "#b4233c" }}>
+                          {app.matchResultId.overallScore}%
+                        </span>
+                      ) : (
+                        <span style={{ color: "#94a3b8" }}>N/A</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </DndContext>
+      )}
     </section>
   );
 }

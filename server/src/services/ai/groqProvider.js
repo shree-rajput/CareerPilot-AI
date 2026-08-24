@@ -40,7 +40,19 @@ function assertCleanModel(model) {
 }
 
 /**
+ * Wait for a given number of milliseconds (used for backoff).
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Send a chat completion request to Groq.
+ *
+ * Rate-limit handling (Groq provider 429):
+ *   - Retry ONCE after a 2-second delay (exponential backoff, single step).
+ *   - If the retry also returns 429, throw AI_RATE_LIMITED immediately.
+ *   - Never retry more than once — prevents cascading Groq API exhaustion.
  *
  * @param {Array<{ role: string, content: string }>} messages
  * @param {object} options
@@ -54,12 +66,13 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048 }
 
   assertCleanModel(model);
 
-  try {
+  // Inner function: one attempt at the Groq API
+  async function attempt() {
     const completion = await client.chat.completions.create({
       model,
       messages,
       temperature,
-      max_tokens: maxTokens,
+      max_tokens: maxTokens
     });
 
     const content = completion.choices?.[0]?.message?.content;
@@ -69,17 +82,39 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048 }
     }
 
     return content;
-  } catch (error) {
-    // Pass through AppErrors as-is
-    if (error.name === "AppError" || error.statusCode) throw error;
+  }
 
-    // Groq rate limit
+  try {
+    return await attempt();
+  } catch (error) {
+    // Pass through AppErrors as-is (already structured)
+    if (error instanceof AppError) throw error;
+
+    // ── Groq provider rate limit (429) ──────────────────────────────────────
+    // Retry once with a 2-second backoff. If still 429, surface a clear error.
     if (error.status === 429) {
-      throw new AppError(
-        "AI service rate limit reached. Please try again in a few minutes.",
-        429,
-        "AI_RATE_LIMITED"
-      );
+      console.warn("[Groq] Rate limited (429) — retrying once after 2s backoff…");
+      await sleep(2000);
+
+      try {
+        return await attempt();
+      } catch (retryError) {
+        if (retryError instanceof AppError) throw retryError;
+        // Still 429 after backoff — the provider is genuinely rate-limited
+        if (retryError.status === 429) {
+          throw new AppError(
+            "AI service is temporarily rate-limited. Please wait a moment and try again.",
+            429,
+            "AI_RATE_LIMITED"
+          );
+        }
+        // Different error on retry — fall through to generic handler below
+        throw new AppError(
+          `AI request failed on retry: ${retryError.message || "unknown error"}`,
+          502,
+          "AI_REQUEST_FAILED"
+        );
+      }
     }
 
     // Model not found / access denied

@@ -4,7 +4,13 @@
  * All business logic calls go through here — never directly to groqProvider.
  * Every response is: LLM → jsonExtractor → Zod schema → DB
  *
- * Retry strategy: attempt once → if JSON invalid, retry once → graceful error.
+ * Retry strategy:
+ *   Attempt 1: full prompt → extract JSON → Zod validate
+ *   Attempt 2 (only if attempt 1 returns invalid JSON/fails Zod):
+ *     Send a JSON-correction follow-up using the raw output from attempt 1.
+ *     This uses fewer tokens and targets the actual failure, rather than
+ *     blindly repeating the same prompt (which wastes a Groq API call).
+ *   If both fail → throw AI_INVALID_RESPONSE (502).
  */
 
 import { groqChat } from "./groqProvider.js";
@@ -22,36 +28,72 @@ import { AppError } from "../../utils/errors.js";
 
 /**
  * Internal helper: call AI, extract JSON, validate with Zod.
- * Retries once if the first attempt yields invalid JSON.
+ *
+ * On attempt 1 failure (bad JSON or Zod mismatch):
+ *   Send a JSON-correction request using the bad output so the model can fix
+ *   only what is wrong — avoids a full duplicate Groq API call.
+ *
+ * On Groq provider 429:
+ *   groqProvider already retries once with backoff.
+ *   If still 429, re-throw — do NOT silently retry again here.
  */
 async function callWithValidation({ systemPrompt, userPrompt, zodSchema, featureName }) {
-  async function attempt() {
-    const raw = await groqChat([
+  // ── Attempt 1: full prompt ──────────────────────────────────────────────────
+  let rawOutput;
+  try {
+    rawOutput = await groqChat([
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
     ]);
-    const parsed = extractJson(raw);
-    if (!parsed) return null;
-    const result = zodSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+  } catch (err) {
+    // Groq-level error (429, 503, etc.) — propagate immediately, do not retry here
+    // groqProvider already handles its own one-retry for 429.
+    throw err;
   }
 
-  let result = await attempt();
-
-  if (!result) {
-    // One retry
-    result = await attempt();
+  const parsed1 = extractJson(rawOutput);
+  if (parsed1) {
+    const result1 = zodSchema.safeParse(parsed1);
+    if (result1.success) return result1.data;
   }
 
-  if (!result) {
-    throw new AppError(
-      `AI returned an invalid response for ${featureName}. Please try again.`,
-      502,
-      "AI_INVALID_RESPONSE"
-    );
+  // ── Attempt 2: JSON correction (not a blind repeat) ─────────────────────────
+  // We tell the model exactly what came back and ask it to fix just the JSON.
+  // This is cheaper (shorter prompt) and more targeted than repeating the full prompt.
+  console.warn(`[AI] ${featureName}: Attempt 1 returned invalid JSON — sending correction request`);
+
+  let rawOutput2;
+  try {
+    rawOutput2 = await groqChat([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+      { role: "assistant", content: rawOutput },
+      {
+        role: "user",
+        content:
+          "Your previous response could not be parsed as valid JSON. " +
+          "Please respond ONLY with a valid JSON object that matches the required schema. " +
+          "Do not include any markdown fences, explanations, or extra text — " +
+          "only the raw JSON object."
+      }
+    ]);
+  } catch (err) {
+    // If the correction call itself fails (e.g. a new 429), propagate it
+    throw err;
   }
 
-  return result;
+  const parsed2 = extractJson(rawOutput2);
+  if (parsed2) {
+    const result2 = zodSchema.safeParse(parsed2);
+    if (result2.success) return result2.data;
+  }
+
+  // Both attempts failed — surface a clear error
+  throw new AppError(
+    `AI returned an invalid response for ${featureName}. Please try again.`,
+    502,
+    "AI_INVALID_RESPONSE"
+  );
 }
 
 /**
@@ -112,7 +154,8 @@ export async function generateTailoringRecommendations(params) {
 
 /**
  * Generates an adaptive interview question.
- * @param {object} params
+ * @param {object} params - { targetRole, technologyStack, interviewType, difficulty,
+ *                            jobDescription, previousQuestions, questionNumber, totalQuestions }
  */
 export async function generateInterviewQuestion(params) {
   return callWithValidation({

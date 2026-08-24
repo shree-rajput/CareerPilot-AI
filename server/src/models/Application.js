@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const STATUS_VALUES = ["saved", "applied", "oa", "interview", "offer", "rejected", "withdrawn"];
+const STATUS_VALUES = ["saved", "applied", "screening", "interview", "offer", "rejected"];
 
 const statusHistorySchema = new mongoose.Schema(
   {
@@ -73,6 +73,11 @@ const applicationSchema = new mongoose.Schema(
       default: ""
     },
     jobUrl: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    location: {
       type: String,
       trim: true,
       default: ""
