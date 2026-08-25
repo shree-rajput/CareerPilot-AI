@@ -23,8 +23,7 @@ function sanitizeModel(raw, fallback) {
   return clean || fallback;
 }
 
-// Confirmed available via GET https://api.groq.com/openai/v1/models with this key
-const GROQ_FALLBACK_MODEL = "groq/compound";
+const GROQ_FALLBACK_MODEL = "openai/gpt-oss-20b";
 
 const groqModel = sanitizeModel(process.env.GROQ_MODEL, GROQ_FALLBACK_MODEL);
 
@@ -41,6 +40,7 @@ export const env = {
   // groqModel is always a single sanitized token, never a fallback expression.
   groqApiKey: process.env.GROQ_API_KEY || "",
   groqModel,
+  aiRequestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS || 30000),
 
   // File uploads
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 5),

@@ -24,6 +24,19 @@ const interviewQuestionSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    followUpStrategy: {
+      type: String,
+      default: ""
+    },
+    generationSource: {
+      type: String,
+      enum: ["ai", "deterministic_fallback"],
+      default: "ai"
+    },
+    fallbackReason: {
+      type: String,
+      default: ""
+    },
     status: {
       type: String,
       enum: ["pending", "asked", "answered", "skipped"],
@@ -51,6 +64,15 @@ const interviewQuestionSchema = new mongoose.Schema(
     idealAnswer: {
       text: { type: String, default: "" },
       explanation: { type: String, default: "" }
+    },
+    analysisSource: {
+      type: String,
+      enum: ["ai", "deterministic_fallback"],
+      default: "ai"
+    },
+    analysisFallbackReason: {
+      type: String,
+      default: ""
     }
   },
   { timestamps: true }

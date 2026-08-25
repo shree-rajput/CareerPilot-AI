@@ -140,7 +140,7 @@ class ResumeTailoringService {
    * These are suggestions only.
    * We never claim that the candidate has a missing skill.
    */
-  extractKeywords(matchResult, jdText = "") {
+  extractKeywords(matchResult, _jdText = "") {
     const matched = matchResult?.matchedSkills || [];
     const partial = matchResult?.partialSkills || [];
 

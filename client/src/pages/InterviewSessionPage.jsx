@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Mic, StopCircle, SkipForward, CheckCircle, Brain, Video, VideoOff, AlertTriangle, Clock } from "lucide-react";
+import {
+  Mic,
+  StopCircle,
+  SkipForward,
+  CheckCircle,
+  Brain,
+  Video,
+  VideoOff,
+  AlertTriangle,
+  Clock,
+} from "lucide-react";
 import { interviewApi } from "../api/interview.js";
 
 // ─── Error message helpers ────────────────────────────────────────────────────
@@ -34,8 +44,8 @@ export function InterviewSessionPage() {
   const navigate = useNavigate();
 
   // ── Core state ──────────────────────────────────────────────────────────────
-  const [isFetching, setIsFetching] = useState(false);      // drives button disabled + UI
-  const [fetchStatus, setFetchStatus] = useState(null);     // "generating" | "ready" | "error"
+  const [isFetching, setIsFetching] = useState(false); // drives button disabled + UI
+  const [fetchStatus, setFetchStatus] = useState(null); // "generating" | "ready" | "error"
   const [questionError, setQuestionError] = useState(null); // human-readable error string
   const [currentQuestion, setCurrentQuestion] = useState(null);
 
@@ -60,7 +70,7 @@ export function InterviewSessionPage() {
   // Tracks the latest fetch so stale responses from cancelled calls are discarded
   const fetchIdRef = useRef(0);
 
-  const videoMetricsRef = useRef({ presenceScore: 100, checks: 0 });
+  const videoMetricsRef = useRef({ presenceScore: 0, checks: 0 });
 
   // ── Camera init ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -75,7 +85,7 @@ export function InterviewSessionPage() {
       }
       window.speechSynthesis.cancel();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Fetch first question on mount (single call) ─────────────────────────────
   // Using a separate effect with a mounted flag prevents React Strict Mode
@@ -83,17 +93,23 @@ export function InterviewSessionPage() {
   useEffect(() => {
     let mounted = true;
     async function loadFirstQuestion() {
-      await fetchNextQuestion({ forceFetch: true, mountedRef: { current: mounted } });
+      await fetchNextQuestion({
+        forceFetch: true,
+        mountedRef: { current: mounted },
+      });
     }
     loadFirstQuestion();
     return () => {
       mounted = false;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const initCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -104,18 +120,109 @@ export function InterviewSessionPage() {
     }
   };
 
+  // const speakText = (text) => {
+  //   window.speechSynthesis.cancel();
+  //   const utterance = new SpeechSynthesisUtterance(text);
+  //   const voices = window.speechSynthesis.getVoices();
+  //   const preferredVoice = voices.find(
+  //     (v) => v.name.includes("Google") || v.name.includes("Natural"),
+  //   );
+  //   if (preferredVoice) utterance.voice = preferredVoice;
+  //   // utterance.pitch = 0.8;
+  //   utterance.rate = 0.95;
+  //   window.speechSynthesis.speak(utterance);
+  // };
+
+  // ─── High-quality browser Text-to-Speech ─────────────────────────────────────
   const speakText = (text) => {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find((v) => v.name.includes("Google") || v.name.includes("Natural"));
-    if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.rate = 0.95;
-    window.speechSynthesis.speak(utterance);
+    if (!text || !text.trim()) return;
+
+    const synth = window.speechSynthesis;
+
+    // Stop anything currently speaking
+    synth.cancel();
+
+    const speak = () => {
+      const voices = synth.getVoices();
+
+      if (!voices.length) {
+        console.warn("No speech voices available.");
+        return;
+      }
+
+      // Prefer natural-sounding English voices.
+      // Order matters: voices earlier in this list are preferred.
+      const preferredVoiceNames = [
+        "Google UK English Female",
+        "Google US English",
+        "Microsoft Jenny Online",
+        "Microsoft Aria Online",
+        "Microsoft Jenny",
+        "Microsoft Aria",
+        "Microsoft Guy Online",
+        "Microsoft David",
+        "Natural",
+        "Google",
+      ];
+
+      let selectedVoice = null;
+
+      // Try preferred voices first
+      for (const preferred of preferredVoiceNames) {
+        selectedVoice = voices.find((voice) =>
+          voice.name.toLowerCase().includes(preferred.toLowerCase()),
+        );
+
+        if (selectedVoice) break;
+      }
+
+      // Fallback: prefer English voices
+      if (!selectedVoice) {
+        selectedVoice = voices.find(
+          (voice) =>
+            voice.lang === "en-US" ||
+            voice.lang === "en-GB" ||
+            voice.lang.startsWith("en"),
+        );
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang;
+      } else {
+        utterance.lang = "en-US";
+      }
+
+      // Natural interview-style delivery
+      utterance.rate = 0.92;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      // Prevent speech from becoming stuck
+      utterance.onend = () => {
+        synth.cancel();
+      };
+
+      utterance.onerror = (event) => {
+        console.error("Speech synthesis error:", event);
+      };
+
+      synth.speak(utterance);
+    };
+
+    // Chrome sometimes loads voices asynchronously
+    if (synth.getVoices().length === 0) {
+      synth.addEventListener("voiceschanged", speak, { once: true });
+    } else {
+      speak();
+    }
   };
 
   const initSpeechRecognition = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("Speech recognition is not supported in this browser.");
       return;
@@ -171,7 +278,9 @@ export function InterviewSessionPage() {
         } catch (firstErr) {
           // ── Handle 202: another request is already generating ────────────
           if (firstErr?.response?.status === 202) {
-            console.log("[Interview] Question generating on server, polling after 2.5s…");
+            console.log(
+              "[Interview] Question generating on server, polling after 2.5s…",
+            );
             await new Promise((r) => setTimeout(r, 2500));
 
             if (mountedRef && !mountedRef.current) return; // unmounted
@@ -216,7 +325,7 @@ export function InterviewSessionPage() {
         }
       }
     },
-    [sessionId, navigate]
+    [sessionId, navigate],
   );
 
   const toggleRecording = () => {
@@ -247,7 +356,9 @@ export function InterviewSessionPage() {
 
   const submitAnswerAndNext = async () => {
     if (!transcript.trim()) {
-      alert("No audio transcribed. Please try again or type your answer if speech fails.");
+      alert(
+        "No audio transcribed. Please try again or type your answer if speech fails.",
+      );
       return;
     }
 
@@ -265,25 +376,31 @@ export function InterviewSessionPage() {
       const minutes = recordTime / 60 || 1;
       const wpm = Math.round(words / minutes);
       const lowerT = transcript.toLowerCase();
-      const fillers = (lowerT.match(/\b(um|uh|like|you know|basically)\b/g) || []).length;
+      const fillers = (
+        lowerT.match(/\b(um|uh|like|you know|basically)\b/g) || []
+      ).length;
 
       const metrics = {
         speakingPace: wpm,
         fillerWords: fillers,
-        longPauses: 0
+        longPauses: 0,
       };
 
-      const finalPresenceScore = Math.max(0, videoMetricsRef.current.presenceScore);
+      const finalPresenceScore = Math.max(
+        0,
+        videoMetricsRef.current.presenceScore,
+      );
 
       await interviewApi.submitAnswer(currentQuestion._id, {
         transcript,
         metrics,
-        videoMetrics: { presenceScore: isVideoEnabled ? finalPresenceScore : 0 }
+        videoMetrics: {
+          presenceScore: isVideoEnabled ? finalPresenceScore : 0,
+        },
       });
 
       setProcessingStep("Generating next question...");
       await fetchNextQuestion({ forceFetch: true });
-
     } catch (err) {
       console.error(err);
       const status = err?.response?.status;
@@ -311,7 +428,9 @@ export function InterviewSessionPage() {
   };
 
   const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
     const s = (seconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
@@ -319,11 +438,25 @@ export function InterviewSessionPage() {
   // ── Loading state: first fetch in progress, no question yet ─────────────────
   if (isFetching && !currentQuestion) {
     return (
-      <div className="content-layout" style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+      <div
+        className="content-layout"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100%",
+        }}
+      >
         <div style={{ textAlign: "center" }}>
-          <Brain className="spin" size={40} style={{ color: "var(--primary-color)", margin: "0 auto 1rem" }} />
+          <Brain
+            className="spin"
+            size={40}
+            style={{ color: "var(--primary-color)", margin: "0 auto 1rem" }}
+          />
           <h3>Generating your question…</h3>
-          <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem" }}>This usually takes 2–5 seconds.</p>
+          <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem" }}>
+            This usually takes 2–5 seconds.
+          </p>
         </div>
       </div>
     );
@@ -332,18 +465,44 @@ export function InterviewSessionPage() {
   // ── Error state: fetch failed and no question loaded yet ─────────────────────
   if (fetchStatus === "error" && !currentQuestion) {
     return (
-      <div className="content-layout" style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-        <div className="card" style={{ maxWidth: "500px", textAlign: "center", padding: "2.5rem" }}>
-          <AlertTriangle size={40} style={{ color: "var(--danger-color)", margin: "0 auto 1rem" }} />
-          <h3 style={{ marginBottom: "0.75rem" }}>Could not generate question</h3>
-          <p style={{ color: "var(--text-secondary)", marginBottom: "1.5rem", lineHeight: "1.6" }}>{questionError}</p>
+      <div
+        className="content-layout"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100%",
+        }}
+      >
+        <div
+          className="card"
+          style={{ maxWidth: "500px", textAlign: "center", padding: "2.5rem" }}
+        >
+          <AlertTriangle
+            size={40}
+            style={{ color: "var(--danger-color)", margin: "0 auto 1rem" }}
+          />
+          <h3 style={{ marginBottom: "0.75rem" }}>
+            Could not generate question
+          </h3>
+          <p
+            style={{
+              color: "var(--text-secondary)",
+              marginBottom: "1.5rem",
+              lineHeight: "1.6",
+            }}
+          >
+            {questionError}
+          </p>
           <button
             className="btn btn-primary"
             onClick={() => fetchNextQuestion()}
             disabled={isFetching}
           >
             {isFetching ? (
-              <><Brain className="spin" size={16} /> Trying again…</>
+              <>
+                <Brain className="spin" size={16} /> Trying again…
+              </>
             ) : (
               "Try Again"
             )}
@@ -355,68 +514,151 @@ export function InterviewSessionPage() {
 
   return (
     <div className="content-layout" style={{ maxWidth: "1200px" }}>
-      <div className="content-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        className="content-header"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
         <div>
           <h2>AI Interview Session</h2>
-          <p>Answer the question clearly. The AI will evaluate your response.</p>
+          <p>
+            Answer the question clearly. The AI will evaluate your response.
+          </p>
         </div>
         <button className="btn btn-secondary" onClick={handleEndSession}>
           End Interview
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 350px", gap: "2rem" }}>
-
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 350px",
+          gap: "2rem",
+        }}
+      >
         {/* Main Content Area */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
+        >
           {/* Question Display */}
-          <div className="card" style={{ backgroundColor: "#1e293b", color: "white", padding: "2rem", border: "none" }}>
-            <span style={{ display: "inline-block", marginBottom: "1rem", backgroundColor: "rgba(255,255,255,0.1)", padding: "4px 12px", borderRadius: "99px", fontSize: "0.85rem" }}>
+          <div
+            className="card"
+            style={{
+              backgroundColor: "#1e293b",
+              color: "white",
+              padding: "2rem",
+              border: "none",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                marginBottom: "1rem",
+                backgroundColor: "rgba(255,255,255,0.1)",
+                padding: "4px 12px",
+                borderRadius: "99px",
+                fontSize: "0.85rem",
+              }}
+            >
               {currentQuestion?.category} • {currentQuestion?.difficulty}
             </span>
-            <h2 style={{ fontSize: "1.75rem", lineHeight: "1.4", margin: 0, fontWeight: 500 }}>
+            <h2
+              style={{
+                fontSize: "1.75rem",
+                lineHeight: "1.4",
+                margin: 0,
+                fontWeight: 500,
+              }}
+            >
               {currentQuestion?.questionText}
             </h2>
 
             {/* Inline error banner (when there's a question on screen but the next-question fetch failed) */}
             {fetchStatus === "error" && questionError && currentQuestion && (
-              <div style={{
-                marginTop: "1.25rem",
-                backgroundColor: "rgba(239,68,68,0.15)",
-                border: "1px solid rgba(239,68,68,0.4)",
-                borderRadius: "8px",
-                padding: "0.75rem 1rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                fontSize: "0.9rem"
-              }}>
-                <AlertTriangle size={16} style={{ flexShrink: 0, color: "#f87171" }} />
+              <div
+                style={{
+                  marginTop: "1.25rem",
+                  backgroundColor: "rgba(239,68,68,0.15)",
+                  border: "1px solid rgba(239,68,68,0.4)",
+                  borderRadius: "8px",
+                  padding: "0.75rem 1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  fontSize: "0.9rem",
+                }}
+              >
+                <AlertTriangle
+                  size={16}
+                  style={{ flexShrink: 0, color: "#f87171" }}
+                />
                 <span>{questionError}</span>
               </div>
             )}
           </div>
 
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <div
+            className="card"
+            style={{ flex: 1, display: "flex", flexDirection: "column" }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "1rem",
+              }}
+            >
               <strong>Your Answer Transcript</strong>
               {isRecording && (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--danger-color)", fontWeight: "bold" }}>
-                  <div className="pulsing-dot" style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "var(--danger-color)" }}></div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    color: "var(--danger-color)",
+                    fontWeight: "bold",
+                  }}
+                >
+                  <div
+                    className="pulsing-dot"
+                    style={{
+                      width: "10px",
+                      height: "10px",
+                      borderRadius: "50%",
+                      backgroundColor: "var(--danger-color)",
+                    }}
+                  ></div>
                   {formatTime(recordTime)}
                 </div>
               )}
             </div>
 
             {isRecording ? (
-              <p style={{ minHeight: "150px", color: transcript ? "inherit" : "var(--text-secondary)", fontStyle: transcript ? "normal" : "italic", fontSize: "1.1rem", lineHeight: "1.6" }}>
+              <p
+                style={{
+                  minHeight: "150px",
+                  color: transcript ? "inherit" : "var(--text-secondary)",
+                  fontStyle: transcript ? "normal" : "italic",
+                  fontSize: "1.1rem",
+                  lineHeight: "1.6",
+                }}
+              >
                 {transcript || "Listening…"}
               </p>
             ) : (
               <textarea
                 className="input-field"
-                style={{ minHeight: "150px", resize: "vertical", fontSize: "1.1rem", lineHeight: "1.6" }}
+                style={{
+                  minHeight: "150px",
+                  resize: "vertical",
+                  fontSize: "1.1rem",
+                  lineHeight: "1.6",
+                }}
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
                 placeholder="Click the microphone to record, or type your answer here if preferred."
@@ -424,9 +666,22 @@ export function InterviewSessionPage() {
               />
             )}
 
-            <div style={{ display: "flex", justifyContent: "center", gap: "1rem", marginTop: "auto", paddingTop: "2rem", flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: "1rem",
+                marginTop: "auto",
+                paddingTop: "2rem",
+                flexWrap: "wrap",
+              }}
+            >
               {isProcessingSubmission ? (
-                <button className="btn btn-primary" disabled style={{ padding: "0.75rem 2rem", width: "100%" }}>
+                <button
+                  className="btn btn-primary"
+                  disabled
+                  style={{ padding: "0.75rem 2rem", width: "100%" }}
+                >
                   <Brain className="spin" size={20} />
                   {processingStep}
                 </button>
@@ -435,23 +690,37 @@ export function InterviewSessionPage() {
                   <button
                     className={`btn ${isRecording ? "btn-danger" : "btn-secondary"}`}
                     onClick={toggleRecording}
-                    style={{ padding: "0.75rem 2rem", borderRadius: "30px", fontSize: "1.1rem" }}
+                    style={{
+                      padding: "0.75rem 2rem",
+                      borderRadius: "30px",
+                      fontSize: "1.1rem",
+                    }}
                     disabled={isProcessingSubmission}
                   >
                     {isRecording ? (
-                      <><StopCircle size={20} /> Stop Recording</>
+                      <>
+                        <StopCircle size={20} /> Stop Recording
+                      </>
                     ) : (
-                      <><Mic size={20} /> {transcript ? "Resume Recording" : "Record Answer"}</>
+                      <>
+                        <Mic size={20} />{" "}
+                        {transcript ? "Resume Recording" : "Record Answer"}
+                      </>
                     )}
                   </button>
                   {transcript.trim() && (
                     <button
                       className="btn btn-primary"
                       onClick={submitAnswerAndNext}
-                      style={{ padding: "0.75rem 2rem", borderRadius: "30px", fontSize: "1.1rem" }}
+                      style={{
+                        padding: "0.75rem 2rem",
+                        borderRadius: "30px",
+                        fontSize: "1.1rem",
+                      }}
                       disabled={isProcessingSubmission || isRecording}
                     >
-                      <CheckCircle size={20} /> Submit Answer &amp; Next Question
+                      <CheckCircle size={20} /> Submit Answer &amp; Next
+                      Question
                     </button>
                   )}
                 </>
@@ -461,26 +730,64 @@ export function InterviewSessionPage() {
         </div>
 
         {/* Sidebar / Video Feed Area */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
+        >
           <div className="card" style={{ padding: "1rem" }}>
-            <div style={{ position: "relative", width: "100%", aspectRatio: "4/3", backgroundColor: "#0f172a", borderRadius: "8px", overflow: "hidden" }}>
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "4/3",
+                backgroundColor: "#0f172a",
+                borderRadius: "8px",
+                overflow: "hidden",
+              }}
+            >
               {isVideoEnabled ? (
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
-                  style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    transform: "scaleX(-1)",
+                  }}
                 />
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "#64748b" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: "100%",
+                    color: "#64748b",
+                  }}
+                >
                   <VideoOff size={48} style={{ marginBottom: "1rem" }} />
                   <span>Camera Disabled</span>
                 </div>
               )}
               {isRecording && isVideoEnabled && (
-                <div style={{ position: "absolute", top: "10px", right: "10px", backgroundColor: "rgba(0,0,0,0.6)", color: "white", padding: "4px 8px", borderRadius: "4px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "10px",
+                    right: "10px",
+                    backgroundColor: "rgba(0,0,0,0.6)",
+                    color: "white",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.75rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
                   <Video size={14} /> Analyzing Presence
                 </div>
               )}
@@ -488,53 +795,85 @@ export function InterviewSessionPage() {
           </div>
 
           <div className="card">
-            <h3 style={{ margin: "0 0 1rem", fontSize: "1.1rem" }}>Interview Metrics</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ margin: "0 0 1rem", fontSize: "1.1rem" }}>
+              Interview Metrics
+            </h3>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <span className="text-secondary">Pace (WPM)</span>
-                <strong>{evaluation ? evaluation.analysis.communication : "—"}</strong>
+                <strong>
+                  {evaluation ? evaluation.analysis.communication : "—"}
+                </strong>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <span className="text-secondary">Clarity</span>
-                <strong>{evaluation ? evaluation.analysis.clarity : "—"}</strong>
+                <strong>
+                  {evaluation ? evaluation.analysis.clarity : "—"}
+                </strong>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <span className="text-secondary">Structure</span>
-                <strong>{evaluation ? evaluation.analysis.structure : "—"}</strong>
+                <strong>
+                  {evaluation ? evaluation.analysis.structure : "—"}
+                </strong>
               </div>
             </div>
 
             {/* Status indicator */}
             {isFetching && (
-              <div style={{
-                marginTop: "1rem",
-                padding: "0.6rem 0.75rem",
-                borderRadius: "6px",
-                backgroundColor: "rgba(99,102,241,0.1)",
-                border: "1px solid rgba(99,102,241,0.25)",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                fontSize: "0.85rem",
-                color: "var(--primary-color)"
-              }}>
+              <div
+                style={{
+                  marginTop: "1rem",
+                  padding: "0.6rem 0.75rem",
+                  borderRadius: "6px",
+                  backgroundColor: "rgba(99,102,241,0.1)",
+                  border: "1px solid rgba(99,102,241,0.25)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  fontSize: "0.85rem",
+                  color: "var(--primary-color)",
+                }}
+              >
                 <Clock size={14} />
                 Generating next question…
               </div>
             )}
             {fetchStatus === "ready" && !isFetching && (
-              <div style={{
-                marginTop: "1rem",
-                padding: "0.6rem 0.75rem",
-                borderRadius: "6px",
-                backgroundColor: "rgba(34,197,94,0.1)",
-                border: "1px solid rgba(34,197,94,0.25)",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                fontSize: "0.85rem",
-                color: "var(--success-color)"
-              }}>
+              <div
+                style={{
+                  marginTop: "1rem",
+                  padding: "0.6rem 0.75rem",
+                  borderRadius: "6px",
+                  backgroundColor: "rgba(34,197,94,0.1)",
+                  border: "1px solid rgba(34,197,94,0.25)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  fontSize: "0.85rem",
+                  color: "var(--success-color)",
+                }}
+              >
                 <CheckCircle size={14} />
                 Question ready
               </div>

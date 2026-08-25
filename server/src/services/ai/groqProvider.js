@@ -58,9 +58,10 @@ function sleep(ms) {
  * @param {object} options
  * @param {number} [options.temperature=0.3]
  * @param {number} [options.maxTokens=2048]
+ * @param {boolean} [options.jsonMode=false]
  * @returns {Promise<string>} - The assistant message content
  */
-export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048 } = {}) {
+export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, jsonMode = false } = {}) {
   const client = getClient();
   const model = env.groqModel;
 
@@ -68,11 +69,19 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048 }
 
   // Inner function: one attempt at the Groq API
   async function attempt() {
-    const completion = await client.chat.completions.create({
+    const request = {
       model,
       messages,
       temperature,
       max_tokens: maxTokens
+    };
+
+    if (jsonMode) {
+      request.response_format = { type: "json_object" };
+    }
+
+    const completion = await client.chat.completions.create(request, {
+      timeout: env.aiRequestTimeoutMs
     });
 
     const content = completion.choices?.[0]?.message?.content;

@@ -1,6 +1,11 @@
 import { InterviewSession } from "../models/InterviewSession.js";
 import { InterviewQuestion } from "../models/InterviewQuestion.js";
-import { generateInterviewQuestion, evaluateInterviewAnswer } from "../services/ai/aiService.js";
+import {
+  buildFallbackInterviewEvaluation,
+  buildFallbackInterviewQuestion,
+  generateInterviewQuestion,
+  evaluateInterviewAnswer
+} from "../services/ai/aiService.js";
 import { AppError } from "../utils/errors.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { env } from "../config/env.js";
@@ -94,13 +99,6 @@ export async function getNextQuestion(req, res, next) {
     // ── AI usage limit check ──
     // Only check when we actually intend to generate a new question.
     const limitCheck = await checkAiLimit(req.user._id, "mock_question", env.aiLimitMockQuestions);
-    if (!limitCheck.allowed) {
-      throw new AppError(
-        `Daily mock question limit reached (${limitCheck.limit}/day). Try again tomorrow.`,
-        429,
-        "RATE_LIMIT"
-      );
-    }
 
     // ── Persist a pending stub BEFORE calling the AI ──
     // This is the idempotency lock. Any concurrent request arriving now will
@@ -119,8 +117,7 @@ export async function getNextQuestion(req, res, next) {
 
     let aiQuestion;
     try {
-      // Pass the answered questions as context (exclude the pending stub)
-      aiQuestion = await generateInterviewQuestion({
+      const questionContext = {
         targetRole: session.targetRole,
         technologyStack: session.technologyStack,
         interviewType: session.interviewType,
@@ -129,7 +126,14 @@ export async function getNextQuestion(req, res, next) {
         previousQuestions: completedQuestions,
         questionNumber: completedQuestions.length + 1,
         totalQuestions: session.numberOfQuestions
-      });
+      };
+
+      aiQuestion = limitCheck.allowed
+        ? await generateInterviewQuestion(questionContext)
+        : buildFallbackInterviewQuestion(
+          questionContext,
+          `Daily mock question AI limit reached (${limitCheck.limit}/day).`
+        );
     } catch (aiError) {
       // AI failed — clean up the pending stub so the user can retry
       await InterviewQuestion.deleteOne({ _id: stub._id });
@@ -159,11 +163,16 @@ export async function getNextQuestion(req, res, next) {
     stub.category = aiQuestion.category || "General";
     stub.difficulty = aiQuestion.difficulty || session.difficulty;
     stub.expectedConcepts = Array.isArray(aiQuestion.expectedConcepts) ? aiQuestion.expectedConcepts : [];
+    stub.followUpStrategy = aiQuestion.followUpStrategy || "";
+    stub.generationSource = aiQuestion.generationSource || "ai";
+    stub.fallbackReason = aiQuestion.fallbackReason || "";
     stub.status = "asked";
     await stub.save();
 
-    // Increment usage only after a successful save
-    await incrementAiUsage(req.user._id, "mock_question");
+    // Increment AI usage only after a real AI-generated question is saved.
+    if (stub.generationSource === "ai") {
+      await incrementAiUsage(req.user._id, "mock_question");
+    }
 
     res.status(201).json({
       success: true,
@@ -187,19 +196,23 @@ export async function submitAnswer(req, res, next) {
 
     // Check AI limit
     const limitCheck = await checkAiLimit(req.user._id, "mock_evaluation", env.aiLimitMockEvaluations);
-    if (!limitCheck.allowed) {
-      throw new AppError(`Daily mock evaluation limit reached (${limitCheck.limit}/day). Try again tomorrow.`, 429, "RATE_LIMIT");
-    }
 
     // Evaluate via AI
-    const evaluation = await evaluateInterviewAnswer({
+    const evaluationContext = {
       questionText: question.questionText,
       category: question.category,
       difficulty: question.difficulty,
       expectedConcepts: question.expectedConcepts,
       transcript,
       metrics
-    });
+    };
+
+    const evaluation = limitCheck.allowed
+      ? await evaluateInterviewAnswer(evaluationContext)
+      : buildFallbackInterviewEvaluation(
+        evaluationContext,
+        `Daily mock evaluation AI limit reached (${limitCheck.limit}/day).`
+      );
 
     // Update question
     question.transcript = transcript;
@@ -214,10 +227,15 @@ export async function submitAnswer(req, res, next) {
     };
     question.feedback = evaluation.feedback;
     question.idealAnswer = evaluation.idealAnswer;
+    question.analysisSource = evaluation.analysisSource || "ai";
+    question.analysisFallbackReason = evaluation.fallbackReason || "";
     question.status = "answered";
 
     await question.save();
-    await incrementAiUsage(req.user._id, "mock_evaluation");
+
+    if (question.analysisSource === "ai") {
+      await incrementAiUsage(req.user._id, "mock_evaluation");
+    }
 
     // Update session rolling scores (simple average for now)
     const session = question.sessionId;

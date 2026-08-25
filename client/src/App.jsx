@@ -14,8 +14,8 @@ import { MatchResultPage } from "./pages/MatchResultPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ResumePage } from "./pages/ResumePage";
 import { SettingsPage } from "./pages/SettingsPage";
-
-
+import PeerInterviewRoomPage from "./pages/PeerInterviewRoomPage";
+import PeerInterviewSetupPage from "./pages/PeerInterviewSetup";
 export function App() {
   return (
     <div>
@@ -31,14 +31,34 @@ export function App() {
             <Route path="/resume" element={<ResumePage />} />
 
             <Route path="/applications" element={<ApplicationsPage />} />
-            <Route path="/applications/:id" element={<ApplicationDetailPage />} />
+            <Route
+              path="/applications/:id"
+              element={<ApplicationDetailPage />}
+            />
 
             <Route path="/match/:id" element={<MatchResultPage />} />
 
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/interview" element={<InterviewSetupPage />} />
-            <Route path="/interview/:sessionId" element={<InterviewSessionPage />} />
-            <Route path="/interview/:sessionId/report" element={<InterviewReportPage />} />
+            <Route
+              path="/interview/:sessionId"
+              element={<InterviewSessionPage />}
+            />
+            <Route
+              path="/interview/:sessionId/report"
+              element={<InterviewReportPage />}
+            />
+
+            <Route
+              path="/peer-interview/:roomId"
+              element={<PeerInterviewRoomPage />}
+            />
+
+            <Route
+              path="/peer-interview"
+              element={<PeerInterviewSetupPage />}
+            />
+
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Route>

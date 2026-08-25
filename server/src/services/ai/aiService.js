@@ -37,14 +37,14 @@ import { AppError } from "../../utils/errors.js";
  *   groqProvider already retries once with backoff.
  *   If still 429, re-throw — do NOT silently retry again here.
  */
-async function callWithValidation({ systemPrompt, userPrompt, zodSchema, featureName }) {
+async function callWithValidation({ systemPrompt, userPrompt, zodSchema, featureName, jsonMode = true }) {
   // ── Attempt 1: full prompt ──────────────────────────────────────────────────
   let rawOutput;
   try {
     rawOutput = await groqChat([
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
-    ]);
+    ], { jsonMode });
   } catch (err) {
     // Groq-level error (429, 503, etc.) — propagate immediately, do not retry here
     // groqProvider already handles its own one-retry for 429.
@@ -76,7 +76,7 @@ async function callWithValidation({ systemPrompt, userPrompt, zodSchema, feature
           "Do not include any markdown fences, explanations, or extra text — " +
           "only the raw JSON object."
       }
-    ]);
+    ], { jsonMode });
   } catch (err) {
     // If the correction call itself fails (e.g. a new 429), propagate it
     throw err;
@@ -94,6 +94,90 @@ async function callWithValidation({ systemPrompt, userPrompt, zodSchema, feature
     502,
     "AI_INVALID_RESPONSE"
   );
+}
+
+function chooseInterviewTopic(params = {}) {
+  const stack = Array.isArray(params.technologyStack) ? params.technologyStack.filter(Boolean) : [];
+  if (params.interviewType === "hr") return "Behavioral";
+  if (params.interviewType === "project") return "Projects";
+  if (params.interviewType === "mixed" && params.previousQuestions?.length) return "Behavioral";
+  return stack[params.previousQuestions?.length % Math.max(stack.length, 1)] || params.targetRole || "Software Engineering";
+}
+
+export function buildFallbackInterviewQuestion(params = {}, reason = "AI service unavailable") {
+  const topic = chooseInterviewTopic(params);
+  const difficulty = ["easy", "medium", "hard"].includes(params.difficulty) ? params.difficulty : "medium";
+
+  const questionText =
+    topic === "Behavioral"
+      ? `Tell me about a time you solved a difficult problem while working toward a ${params.targetRole || "target role"}. What was your action and result?`
+      : topic === "Projects"
+        ? "Pick one project from your resume and explain the architecture, your contribution, one major challenge, and how you solved it."
+        : `Explain one important ${topic} concept you have used in your work or projects, including how it works and what trade-offs you considered.`;
+
+  return {
+    questionText,
+    category: topic,
+    difficulty,
+    expectedConcepts:
+      topic === "Behavioral"
+        ? ["situation", "task", "action", "result", "specific evidence"]
+        : topic === "Projects"
+          ? ["architecture", "personal contribution", "challenge", "solution", "result"]
+          : [topic, "implementation details", "trade-offs", "example"],
+    followUpStrategy: "Ask why/how follow-ups based on the candidate's specificity and depth.",
+    generationSource: "deterministic_fallback",
+    fallbackReason: reason
+  };
+}
+
+function clampScore(score) {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+export function buildFallbackInterviewEvaluation(params = {}, reason = "AI service unavailable") {
+  const transcript = String(params.transcript || "").trim();
+  const words = transcript ? transcript.split(/\s+/).length : 0;
+  const expectedConcepts = params.expectedConcepts || [];
+  const lowerTranscript = transcript.toLowerCase();
+  const conceptHits = expectedConcepts.filter((concept) =>
+    lowerTranscript.includes(String(concept).toLowerCase())
+  ).length;
+  const conceptScore = expectedConcepts.length
+    ? (conceptHits / expectedConcepts.length) * 100
+    : Math.min(80, words * 2);
+  const relevance = words > 12 ? Math.max(45, conceptScore) : 25;
+  const completeness = Math.min(85, Math.max(20, words * 1.5 + conceptHits * 12));
+  const clarityPenalty = (params.metrics?.fillerWords || 0) * 4 + (params.metrics?.longPauses || 0) * 5;
+  const clarity = clampScore(Math.min(82, 45 + Math.min(words, 60) * 0.5) - clarityPenalty);
+  const structure = clampScore(transcript.match(/\b(first|second|because|for example|finally|result)\b/i) ? clarity + 8 : clarity - 8);
+  const communication = clampScore(75 - clarityPenalty);
+
+  return {
+    technicalAccuracy: clampScore(conceptScore),
+    relevance: clampScore(relevance),
+    completeness: clampScore(completeness),
+    clarity,
+    structure,
+    communication,
+    feedback: {
+      strengths: words > 20
+        ? ["You provided enough content for a basic evaluation."]
+        : ["You attempted the question and created a starting point for improvement."],
+      weaknesses: [
+        "AI evaluation was unavailable, so this is a conservative rules-based review.",
+        expectedConcepts.length && conceptHits < expectedConcepts.length
+          ? `Your answer did not clearly mention: ${expectedConcepts.filter((concept) => !lowerTranscript.includes(String(concept).toLowerCase())).slice(0, 4).join(", ")}.`
+          : "Add more concrete implementation details and examples."
+      ].filter(Boolean)
+    },
+    idealAnswer: {
+      text: `A stronger answer should directly define the concept, explain how it works, give a concrete example from your actual experience, discuss trade-offs, and close with the result or learning.`,
+      explanation: "This structure is useful because it stays specific, evidence-based, and easy for an interviewer to follow."
+    },
+    analysisSource: "deterministic_fallback",
+    fallbackReason: reason
+  };
 }
 
 /**
@@ -134,7 +218,7 @@ export async function explainMatchResult(matchData) {
   const text = await groqChat([
     { role: "system", content: MATCH_EXPLANATION_SYSTEM },
     { role: "user", content: buildMatchExplanationPrompt(matchData) }
-  ]);
+  ], { jsonMode: false });
   return text.trim();
 }
 
@@ -158,12 +242,18 @@ export async function generateTailoringRecommendations(params) {
  *                            jobDescription, previousQuestions, questionNumber, totalQuestions }
  */
 export async function generateInterviewQuestion(params) {
-  return callWithValidation({
-    systemPrompt: "You are an expert technical interviewer conducting a mock interview.",
-    userPrompt: generateQuestionPrompt(params),
-    zodSchema: interviewQuestionSchema,
-    featureName: "interview question generation"
-  });
+  try {
+    return await callWithValidation({
+      systemPrompt: "You are an expert technical interviewer conducting a mock interview. Return only valid JSON.",
+      userPrompt: generateQuestionPrompt(params),
+      zodSchema: interviewQuestionSchema,
+      featureName: "interview question generation",
+      jsonMode: true
+    });
+  } catch (error) {
+    console.error("[AI] Interview question fallback:", error.message);
+    return buildFallbackInterviewQuestion(params, error.code || error.message);
+  }
 }
 
 /**
@@ -171,10 +261,16 @@ export async function generateInterviewQuestion(params) {
  * @param {object} params
  */
 export async function evaluateInterviewAnswer(params) {
-  return callWithValidation({
-    systemPrompt: "You are an expert technical interviewer evaluating a candidate's answer.",
-    userPrompt: evaluateAnswerPrompt(params),
-    zodSchema: interviewEvaluationSchema,
-    featureName: "interview answer evaluation"
-  });
+  try {
+    return await callWithValidation({
+      systemPrompt: "You are an expert technical interviewer evaluating a candidate's answer. Return only valid JSON.",
+      userPrompt: evaluateAnswerPrompt(params),
+      zodSchema: interviewEvaluationSchema,
+      featureName: "interview answer evaluation",
+      jsonMode: true
+    });
+  } catch (error) {
+    console.error("[AI] Interview evaluation fallback:", error.message);
+    return buildFallbackInterviewEvaluation(params, error.code || error.message);
+  }
 }

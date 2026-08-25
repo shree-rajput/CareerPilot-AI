@@ -22,11 +22,13 @@
     "groq-sdk": "^1.5.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "livekit-server-sdk": "^2.18.0",
     "mammoth": "^1.12.1",
     "mongoose": "^8.5.2",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "pdfjs-dist": "^4.5.136",
+    "socket.io": "^4.8.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

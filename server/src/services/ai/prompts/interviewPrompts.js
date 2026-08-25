@@ -34,7 +34,10 @@ The JSON object must use EXACTLY these field names:
   "questionText": "<the full interview question as a string>",
   "category": "<topic category, e.g. React, System Design, Behavioral>",
   "difficulty": "<one of: easy | medium | hard>",
-  "expectedConcepts": ["<concept 1>", "<concept 2>", "..."]
+  "expectedConcepts": ["<concept 1>", "<concept 2>", "..."],
+  "followUpStrategy": "<how to adapt after this answer>",
+  "generationSource": "ai",
+  "fallbackReason": ""
 }`;
 };
 
@@ -80,6 +83,8 @@ The JSON object must use EXACTLY these field names:
   "idealAnswer": {
     "text": "<well-structured example answer>",
     "explanation": "<why this answer is strong>"
-  }
+  },
+  "analysisSource": "ai",
+  "fallbackReason": ""
 }`;
 };

@@ -553,22 +553,6 @@ export const restoreResumeVersion = asyncHandler(async (req, res) => {
   }
 
   /*
-   * Find the latest version in this user's
-   * resume chain.
-   */
-  const latestResume = await Resume.findOne({
-    userId: req.user._id,
-    $or: [
-      { _id: sourceResume._id },
-      {
-        parentVersionId: sourceResume._id,
-      },
-    ],
-  })
-    .sort({ version: -1 })
-    .lean();
-
-  /*
    * Because the chain can be longer than one level,
    * find the maximum version belonging to this chain.
    */

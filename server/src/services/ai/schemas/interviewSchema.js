@@ -4,7 +4,10 @@ export const interviewQuestionSchema = z.object({
   questionText: z.string().min(1, "questionText must not be empty").describe("The interview question to ask."),
   category: z.string().min(1, "category must not be empty").describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
   difficulty: z.enum(["easy", "medium", "hard"]).describe("The difficulty level of the question"),
-  expectedConcepts: z.array(z.string()).describe("List of key concepts or keywords expected in a good answer")
+  expectedConcepts: z.array(z.string()).describe("List of key concepts or keywords expected in a good answer"),
+  followUpStrategy: z.string().default("Ask a focused follow-up based on the candidate's depth and specificity."),
+  generationSource: z.enum(["ai", "deterministic_fallback"]).default("ai"),
+  fallbackReason: z.string().default("")
 });
 
 export const interviewEvaluationSchema = z.object({
@@ -21,5 +24,7 @@ export const interviewEvaluationSchema = z.object({
   idealAnswer: z.object({
     text: z.string().describe("A well-structured, strong example answer to this question"),
     explanation: z.string().describe("Why this ideal answer is strong (structure, concepts included, etc.)")
-  })
+  }),
+  analysisSource: z.enum(["ai", "deterministic_fallback"]).default("ai"),
+  fallbackReason: z.string().default("")
 });

@@ -16,7 +16,7 @@ import { matchRouter } from "./routes/matchRoutes.js";
 import { profileRouter } from "./routes/profileRoutes.js";
 import { resumeRouter } from "./routes/resumeRoutes.js";
 import { tailoringRouter } from "./routes/tailoringRoutes.js";
-
+import peerInterviewRoutes from "./routes/peerInterview.routes.js";
 export function createApp() {
   const app = express();
 
@@ -24,8 +24,8 @@ export function createApp() {
   app.use(
     cors({
       origin: env.clientOrigin,
-      credentials: true
-    })
+      credentials: true,
+    }),
   );
   app.use(express.json({ limit: "5mb" })); // Increased for large resume texts
   app.use(cookieParser());
@@ -37,8 +37,8 @@ export function createApp() {
       windowMs: 15 * 60 * 1000,
       limit: 200,
       standardHeaders: "draft-7",
-      legacyHeaders: false
-    })
+      legacyHeaders: false,
+    }),
   );
 
   app.get("/api/health", (_req, res) => {
@@ -54,7 +54,7 @@ export function createApp() {
   app.use("/api/tailor", tailoringRouter);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/interview", interviewRouter);
-
+  app.use("/api/interview-rooms", peerInterviewRoutes);
   app.use(notFound);
   app.use(errorHandler);
 

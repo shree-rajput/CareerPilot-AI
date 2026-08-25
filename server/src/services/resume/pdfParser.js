@@ -142,9 +142,7 @@ export async function extractPdfText(buffer) {
 
   try {
     pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  } catch (error) {
-    console.error("PDF.js import error:", error);
-
+  } catch {
     throw new AppError(
       "PDF processing library failed to load.",
       500,
@@ -169,12 +167,6 @@ export async function extractPdfText(buffer) {
       verbosity: 0,
     }).promise;
   } catch (error) {
-    console.error("========== PDF.JS ERROR ==========");
-    console.error("Name:", error?.name);
-    console.error("Message:", error?.message);
-    console.error("Stack:", error?.stack);
-    console.error("==================================");
-
     if (error?.name === "InvalidPDFException") {
       throw new AppError(
         "The uploaded file is not a valid PDF.",
@@ -243,8 +235,6 @@ export async function extractPdfText(buffer) {
       pageTexts.push(lines.join("\n"));
     }
   } catch (error) {
-    console.error("PDF text extraction error:", error);
-
     throw new AppError(
       `Failed while extracting PDF text: ${error?.message || "Unknown error"}`,
       422,
@@ -258,12 +248,6 @@ export async function extractPdfText(buffer) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-
-  console.log("========== PDF EXTRACTION ==========");
-  console.log("Pages:", doc.numPages);
-  console.log("Extracted characters:", fullText.length);
-  console.log("Preview:", fullText.substring(0, 300));
-  console.log("=====================================");
 
   if (!fullText || fullText.length < 50) {
     throw new AppError(
