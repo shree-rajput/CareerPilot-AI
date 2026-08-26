@@ -57,6 +57,48 @@ const peerInterviewRoomSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    targetRole: {
+      type: String,
+      default: "",
+    },
+    technologyStack: {
+      type: [String],
+      default: [],
+    },
+    interviewType: {
+      type: String,
+      enum: ["technical", "hr", "project", "mixed"],
+      default: "mixed",
+    },
+    difficulty: {
+      type: String,
+      enum: ["easy", "medium", "hard"],
+      default: "medium",
+    },
+    
+    plan: [
+      {
+        questionText: { type: String, required: true },
+        category: { type: String, default: "" },
+        difficulty: { type: String, default: "medium" },
+        expectedConcepts: { type: [String], default: [] }
+      }
+    ],
+
+    report: {
+      overallScore: { type: Number, default: 0 },
+      scores: {
+        technical: { type: Number, default: 0 },
+        communication: { type: Number, default: 0 },
+        codeQuality: { type: Number, default: 0 },
+      },
+      feedback: {
+        strengths: { type: [String], default: [] },
+        weaknesses: { type: [String], default: [] },
+        recommendedPractice: { type: [String], default: [] }
+      }
+    }
   },
   {
     timestamps: true,

@@ -26,9 +26,9 @@ import { http } from "./http";
 //   return liveKitData;
 // }
 export const getLiveKitToken = async (interviewId) => {
-  const response = await http.post(`/interview/${interviewId}/livekit-token`);
+  const response = await http.post(`/interview-rooms/${interviewId}/livekit-token`);
 
-  const liveKitData = response.data?.data;
+  const liveKitData = response.data;
 
   if (!liveKitData) {
     throw new Error("Invalid LiveKit token response");
@@ -41,9 +41,8 @@ export const getLiveKitToken = async (interviewId) => {
 
   return liveKitData;
 };
-export async function createPeerInterviewRoom() {
-  const response = await http.post("/interview-rooms");
-
+export async function createPeerInterviewRoom(params = {}) {
+  const response = await http.post("/interview-rooms", params);
   return response.data;
 }
 
@@ -52,3 +51,9 @@ export async function joinPeerInterviewRoom(roomId) {
 
   return response.data;
 }
+
+export const getCodingQuestion = async (sessionId) => {
+  const response = await http.get(`/interview/${sessionId}/coding-question`);
+
+  return response.data;
+};

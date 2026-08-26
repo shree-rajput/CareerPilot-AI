@@ -28,3 +28,32 @@ export const interviewEvaluationSchema = z.object({
   analysisSource: z.enum(["ai", "deterministic_fallback"]).default("ai"),
   fallbackReason: z.string().default("")
 });
+
+export const interviewPlanSchema = z.object({
+  plan: z.array(z.object({
+    questionText: z.string().describe("The interview question or topic description"),
+    category: z.string().describe("Topic category, e.g. Introduction, System Design, Behavioral, Wrap-up"),
+    difficulty: z.enum(["easy", "medium", "hard"]).describe("The difficulty level"),
+    expectedConcepts: z.array(z.string()).describe("Concepts expected in the answer")
+  })).describe("The sequence of interview questions")
+});
+
+export const copilotSuggestionSchema = z.object({
+  suggestedFollowUp: z.string().describe("A suggested follow-up question for the interviewer to ask"),
+  reason: z.string().describe("Why this question is useful right now"),
+  difficulty: z.string().describe("The difficulty of this follow-up")
+});
+
+export const codeReviewSchema = z.object({
+  metrics: z.object({
+    correctness: z.number().min(0).max(100).describe("Score out of 100 for correctness"),
+    efficiency: z.number().min(0).max(100).describe("Score out of 100 for algorithmic efficiency"),
+    codeQuality: z.number().min(0).max(100).describe("Score out of 100 for readability and practices"),
+    edgeCases: z.number().min(0).max(100).describe("Score out of 100 for handling edge cases")
+  }),
+  timeComplexity: z.string().describe("Big O time complexity"),
+  spaceComplexity: z.string().describe("Big O space complexity"),
+  strengths: z.array(z.string()).describe("Strengths of the code"),
+  potentialIssues: z.array(z.string()).describe("Bugs or missing edge cases"),
+  optimizationOpportunities: z.array(z.string()).describe("Ways to improve")
+});

@@ -16,9 +16,16 @@ export async function createPeerInterviewRoom(req, res) {
       });
     }
 
+    const { targetRole, technologyStack, interviewType, difficulty, durationMinutes } = req.body || {};
+
     const result = await createRoom({
       userId,
       clientUrl: process.env.CLIENT_URL,
+      targetRole,
+      technologyStack,
+      interviewType,
+      difficulty,
+      durationMinutes
     });
 
     return res.status(201).json({
@@ -95,8 +102,12 @@ export async function createPeerInterviewToken(req, res) {
     });
 
     return res.status(200).json({
-      success: true,
-      data: result,
+      token: result.token,
+      roomName: result.roomName,
+      livekitUrl: result.livekitUrl,
+      plan: result.plan,
+      interviewerName: result.interviewerName,
+      intervieweeName: result.intervieweeName
     });
   } catch (error) {
     console.error("generatePeerInterviewToken:", error);
@@ -108,5 +119,82 @@ export async function createPeerInterviewToken(req, res) {
         ? error.message
         : "Unable to create LiveKit token",
     });
+  }
+}
+
+import { generateCopilotSuggestion, analyzeCodeSubmission } from "../services/ai/aiService.js";
+import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
+
+export async function getCopilotSuggestion(req, res) {
+  try {
+    const { currentQuestion, context } = req.body;
+    const result = await generateCopilotSuggestion({ currentQuestion, context });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error("getCopilotSuggestion error:", error);
+    return res.status(500).json({ success: false, message: "Failed to generate suggestion" });
+  }
+}
+
+export async function submitCodeReview(req, res) {
+  try {
+    const { questionTitle, questionDescription, language, code, testResults } = req.body;
+    const result = await analyzeCodeSubmission({
+      questionTitle,
+      questionDescription,
+      language,
+      code,
+      testResults
+    });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error("submitCodeReview error:", error);
+    return res.status(500).json({ success: false, message: "Failed to review code" });
+  }
+}
+
+export async function endInterview(req, res) {
+  try {
+    const { roomId } = req.params;
+    const { scores, feedback } = req.body;
+
+    const room = await PeerInterviewRoom.findOne({ roomId });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+
+    room.status = "completed";
+    room.endedAt = new Date();
+    room.durationSeconds = room.startedAt ? Math.floor((room.endedAt - room.startedAt) / 1000) : 0;
+
+    room.report = {
+      overallScore: scores?.overall || 0,
+      scores: {
+        technical: scores?.technical || 0,
+        communication: scores?.communication || 0,
+        codeQuality: scores?.codeQuality || 0,
+      },
+      feedback: {
+        strengths: feedback?.strengths || [],
+        weaknesses: feedback?.weaknesses || [],
+        recommendedPractice: feedback?.recommendedPractice || []
+      }
+    };
+
+    await room.save();
+    return res.status(200).json({ success: true, data: room });
+  } catch (error) {
+    console.error("endInterview error:", error);
+    return res.status(500).json({ success: false, message: "Failed to end interview" });
+  }
+}
+
+export async function getPeerInterviewReport(req, res) {
+  try {
+    const { roomId } = req.params;
+    const room = await PeerInterviewRoom.findOne({ roomId });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    return res.status(200).json({ success: true, data: room.report });
+  } catch (error) {
+    console.error("getPeerInterviewReport error:", error);
+    return res.status(500).json({ success: false, message: "Failed to get report" });
   }
 }

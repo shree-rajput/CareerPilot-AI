@@ -22,8 +22,8 @@ import { buildTailoringPrompt, TAILORING_SYSTEM } from "./prompts/resumeTailorin
 import { jdStructureSchema } from "./schemas/jdSchema.js";
 import { resumeStructureSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
-import { generateQuestionPrompt, evaluateAnswerPrompt } from "./prompts/interviewPrompts.js";
-import { interviewQuestionSchema, interviewEvaluationSchema } from "./schemas/interviewSchema.js";
+import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt } from "./prompts/interviewPrompts.js";
+import { interviewQuestionSchema, interviewEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema } from "./schemas/interviewSchema.js";
 import { AppError } from "../../utils/errors.js";
 
 /**
@@ -271,6 +271,47 @@ export async function evaluateInterviewAnswer(params) {
     });
   } catch (error) {
     console.error("[AI] Interview evaluation fallback:", error.message);
-    return buildFallbackInterviewEvaluation(params, error.code || error.message);
   }
 }
+
+export async function generateInterviewPlan(params) {
+  try {
+    return await callWithValidation({
+      systemPrompt: "You are an expert technical interviewer planning a structured interview. Return only valid JSON.",
+      userPrompt: generateInterviewPlanPrompt(params),
+      zodSchema: interviewPlanSchema,
+      featureName: "interview plan generation",
+      jsonMode: true
+    });
+  } catch (error) {
+    console.error("[AI] Interview plan fallback:", error.message);
+    // Simple fallback plan
+    return {
+      plan: [
+        { questionText: "Introduce yourself and your experience.", category: "Introduction", difficulty: "easy", expectedConcepts: [] },
+        { questionText: "Explain a technical challenge you faced.", category: "Behavioral", difficulty: "medium", expectedConcepts: [] }
+      ]
+    };
+  }
+}
+
+export async function generateCopilotSuggestion(params) {
+  return await callWithValidation({
+    systemPrompt: "You are an AI Copilot assisting a human interviewer. Return only valid JSON.",
+    userPrompt: generateCopilotPrompt(params),
+    zodSchema: copilotSuggestionSchema,
+    featureName: "copilot suggestion",
+    jsonMode: true
+  });
+}
+
+export async function analyzeCodeSubmission(params) {
+  return await callWithValidation({
+    systemPrompt: "You are an expert code reviewer. Return only valid JSON.",
+    userPrompt: analyzeCodePrompt(params),
+    zodSchema: codeReviewSchema,
+    featureName: "code review",
+    jsonMode: true
+  });
+}
+

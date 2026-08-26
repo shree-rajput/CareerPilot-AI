@@ -17,6 +17,8 @@ import { profileRouter } from "./routes/profileRoutes.js";
 import { resumeRouter } from "./routes/resumeRoutes.js";
 import { tailoringRouter } from "./routes/tailoringRoutes.js";
 import peerInterviewRoutes from "./routes/peerInterview.routes.js";
+import codingQuestionRoutes from "./routes/codingQuestionRoutes.js";
+import codeExecutionRoutes from "./routes/codeExecutionRoutes.js";
 export function createApp() {
   const app = express();
 
@@ -55,6 +57,8 @@ export function createApp() {
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/interview", interviewRouter);
   app.use("/api/interview-rooms", peerInterviewRoutes);
+  app.use("/api/interview", codingQuestionRoutes);
+  app.use("/api/interview", codeExecutionRoutes);
   app.use(notFound);
   app.use(errorHandler);
 

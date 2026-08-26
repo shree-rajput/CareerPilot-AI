@@ -1,3 +1,4 @@
+import React from "react";
 export default function EditorToolbar({
   language,
   languages = [],
@@ -10,13 +11,14 @@ export default function EditorToolbar({
   onSubmit,
 }) {
   return (
-    <div className="flex min-h-[56px] items-center justify-between gap-4 border-b border-slate-700 bg-[#252526] px-4">
+    <div className="flex min-h-[48px] items-center justify-between gap-4 border-b border-[#2A3143] bg-[#151B2B] px-4 shrink-0">
       {/* Left */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-
-          <span className="text-sm font-medium text-slate-200">
+          <div className="flex items-center justify-center h-5 w-5 rounded bg-blue-500/20 text-blue-400">
+             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+          </div>
+          <span className="text-xs font-semibold text-white tracking-wide">
             Code Editor
           </span>
         </div>
@@ -26,7 +28,7 @@ export default function EditorToolbar({
             value={language}
             disabled={readOnly}
             onChange={(event) => onLanguageChange(event.target.value)}
-            className="rounded-md border border-slate-600 bg-[#1e1e1e] px-3 py-1.5 text-sm text-slate-200 outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-2 rounded border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-medium text-gray-300 outline-none transition focus:border-blue-500 hover:bg-black/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {languages.map((item) => (
               <option key={item} value={item}>
@@ -34,18 +36,6 @@ export default function EditorToolbar({
               </option>
             ))}
           </select>
-        )}
-
-        {mode === "peer" && (
-          <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400">
-            Collaborative
-          </span>
-        )}
-
-        {mode === "ai" && (
-          <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-400">
-            AI Interview
-          </span>
         )}
       </div>
 
@@ -55,16 +45,17 @@ export default function EditorToolbar({
           type="button"
           disabled={readOnly || isRunning || isSubmitting}
           onClick={onRun}
-          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded bg-white/5 border border-white/10 px-3 py-1 text-xs font-semibold text-gray-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isRunning ? "Running..." : "▶ Run"}
+          <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path></svg>
+          {isRunning ? "Running..." : "Run"}
         </button>
 
         <button
           type="button"
           disabled={readOnly || isRunning || isSubmitting}
           onClick={onSubmit}
-          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded bg-green-600 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-green-500 shadow-[0_0_10px_rgba(22,163,74,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button>

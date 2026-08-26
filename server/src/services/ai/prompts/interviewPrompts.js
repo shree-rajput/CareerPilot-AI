@@ -88,3 +88,81 @@ The JSON object must use EXACTLY these field names:
   "fallbackReason": ""
 }`;
 };
+
+export const generateInterviewPlanPrompt = (params) => {
+  return `You are an expert technical interviewer planning a structured interview.
+
+Candidate's Target Role: ${params.targetRole}
+Candidate's Technology Stack: ${params.technologyStack.join(", ")}
+Interview Type: ${params.interviewType}
+Interview Difficulty: ${params.difficulty}
+Duration: ${params.durationMinutes || 45} minutes
+
+Generate a structured interview plan.
+Include an Introduction, 1-3 Technical Questions (depending on duration), a Coding Problem (if technical or mixed), Follow-up Questions, and a Wrap-up.
+
+You MUST respond with ONLY a valid JSON object matching this structure:
+{
+  "plan": [
+    {
+      "questionText": "<the topic or exact question>",
+      "category": "<e.g. Introduction, Behavioral, System Design, Coding, Wrap-up>",
+      "difficulty": "<easy|medium|hard>",
+      "expectedConcepts": ["<concept1>", "<concept2>"]
+    }
+  ]
+}
+`;
+};
+
+export const generateCopilotPrompt = (params) => {
+  return `You are an AI Copilot assisting a human interviewer in real-time.
+
+Current Question being asked: "${params.currentQuestion}"
+Candidate's context/answer so far (or their code):
+"${params.context}"
+
+Provide a suggestion for what the interviewer should ask next to probe deeper into the candidate's understanding or to guide them if they are stuck.
+
+You MUST respond with ONLY a valid JSON object matching this structure:
+{
+  "suggestedFollowUp": "<the suggested question>",
+  "reason": "<why this is a good follow-up>",
+  "difficulty": "<difficulty of the follow-up>"
+}
+`;
+};
+
+export const analyzeCodePrompt = (params) => {
+  return `You are an expert code reviewer analyzing a candidate's submitted solution.
+
+Coding Problem: "${params.questionTitle}"
+Description: "${params.questionDescription}"
+Language Used: ${params.language}
+
+Candidate's Code:
+\`\`\`${params.language}
+${params.code}
+\`\`\`
+
+Test Execution Results (if any):
+"${params.testResults}"
+
+Analyze the code for correctness, time/space complexity, edge cases, and code quality.
+
+You MUST respond with ONLY a valid JSON object matching this structure:
+{
+  "metrics": {
+    "correctness": <0-100>,
+    "efficiency": <0-100>,
+    "codeQuality": <0-100>,
+    "edgeCases": <0-100>
+  },
+  "timeComplexity": "<Big O>",
+  "spaceComplexity": "<Big O>",
+  "strengths": ["<strength1>", "<strength2>"],
+  "potentialIssues": ["<issue1>", "<issue2>"],
+  "optimizationOpportunities": ["<opportunity1>", "<opportunity2>"]
+}
+`;
+};

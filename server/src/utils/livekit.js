@@ -1,6 +1,6 @@
 import { AccessToken } from "livekit-server-sdk";
 
-export function createLiveKitToken({ identity, roomName, name }) {
+export async function createLiveKitToken({ identity, roomName, name }) {
   if (!process.env.LIVEKIT_API_KEY) {
     throw new Error("LIVEKIT_API_KEY is not configured");
   }
@@ -34,5 +34,5 @@ export function createLiveKitToken({ identity, roomName, name }) {
     canSubscribe: true,
   });
 
-  return token.toJwt();
+  return await token.toJwt();
 }

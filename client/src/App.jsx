@@ -16,6 +16,7 @@ import { ResumePage } from "./pages/ResumePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import PeerInterviewRoomPage from "./pages/PeerInterviewRoomPage";
 import PeerInterviewSetupPage from "./pages/PeerInterviewSetup";
+import PeerInterviewReportPage from "./pages/PeerInterviewReportPage";
 export function App() {
   return (
     <div>
@@ -52,6 +53,11 @@ export function App() {
             <Route
               path="/peer-interview/:roomId"
               element={<PeerInterviewRoomPage />}
+            />
+
+            <Route
+              path="/peer-interview/:roomId/report"
+              element={<PeerInterviewReportPage />}
             />
 
             <Route

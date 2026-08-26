@@ -258,6 +258,6 @@ codingQuestionSchema.index({
   isActive: 1,
 });
 
-const CodingQuestion = mongoose.model("CodingQuestion", codingQuestionSchema);
+const StarterCode = mongoose.model("StarterCode", starterCodeSchema);
 
-export default CodingQuestion;
+export default StarterCode;

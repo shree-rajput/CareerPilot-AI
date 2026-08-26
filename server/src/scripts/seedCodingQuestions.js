@@ -1,10 +1,10 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import CodingQuestion from "../models/CodingQuestion.js";
-
+import CodingQuestion from "../models/CodingQuestions.js";
+import { env } from "../config/env.js";
 dotenv.config();
 
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = env.mongodbUri;
 
 if (!MONGO_URI) {
   throw new Error("MONGO_URI is not configured.");

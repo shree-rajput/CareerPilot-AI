@@ -38,5 +38,19 @@ export function registerPeerInterviewSocket(io) {
 
       console.log(`Socket ${socket.id} left room ${roomId}`);
     });
+
+    socket.on("code:change", (data) => {
+      const roomId = socket.data.roomId;
+      if (roomId) {
+        socket.to(`interview:${roomId}`).emit("code:change", data);
+      }
+    });
+
+    socket.on("language:change", (data) => {
+      const roomId = socket.data.roomId;
+      if (roomId) {
+        socket.to(`interview:${roomId}`).emit("language:change", data);
+      }
+    });
   });
 }

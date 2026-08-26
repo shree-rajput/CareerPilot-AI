@@ -2,18 +2,40 @@ import crypto from "crypto";
 import PeerInterviewRoom from "../../models/PeerInterviewRoom.js";
 import RoomParticipant from "../../models/RoomParticipant.js";
 import { createLiveKitToken } from "../../utils/livekit.js";
-export async function createPeerInterviewRoom({ userId, clientUrl }) {
+import { generateInterviewPlan } from "../ai/aiService.js";
+
+export async function createPeerInterviewRoom({ userId, clientUrl, targetRole, technologyStack, interviewType, difficulty, durationMinutes }) {
   if (!userId) {
     throw new Error("User ID is required");
   }
 
   const roomId = crypto.randomBytes(8).toString("hex");
+  
+  // Generate AI Plan
+  let plan = [];
+  try {
+    const aiResult = await generateInterviewPlan({
+      targetRole: targetRole || "Software Engineer",
+      technologyStack: technologyStack || ["JavaScript"],
+      interviewType: interviewType || "mixed",
+      difficulty: difficulty || "medium",
+      durationMinutes: durationMinutes || 45
+    });
+    plan = aiResult.plan || [];
+  } catch (err) {
+    console.error("Failed to generate AI plan during room creation:", err);
+  }
 
   const room = await PeerInterviewRoom.create({
     roomId,
     createdBy: userId,
     interviewerId: userId,
     status: "waiting",
+    targetRole,
+    technologyStack,
+    interviewType,
+    difficulty,
+    plan
   });
 
   await RoomParticipant.create({
@@ -149,7 +171,9 @@ export async function generatePeerInterviewToken({ roomId, userId }) {
 
   const room = await PeerInterviewRoom.findOne({
     roomId,
-  });
+  })
+    .populate("interviewerId", "name")
+    .populate("intervieweeId", "name");
 
   if (!room) {
     const error = new Error("Interview room not found");
@@ -160,9 +184,9 @@ export async function generatePeerInterviewToken({ roomId, userId }) {
     throw error;
   }
 
-  const isInterviewer = room.interviewerId?.toString() === userId.toString();
+  const isInterviewer = room.interviewerId?._id?.toString() === userId.toString();
 
-  const isInterviewee = room.intervieweeId?.toString() === userId.toString();
+  const isInterviewee = room.intervieweeId?._id?.toString() === userId.toString();
 
   if (!isInterviewer && !isInterviewee) {
     const error = new Error("You are not a participant of this interview room");
@@ -186,7 +210,7 @@ export async function generatePeerInterviewToken({ roomId, userId }) {
 
   const livekitRoomName = `peer-interview-${room.roomId}`;
 
-  const token = createLiveKitToken({
+  const token = await createLiveKitToken({
     identity: userId.toString(),
     roomName: livekitRoomName,
     name: role,
@@ -197,5 +221,8 @@ export async function generatePeerInterviewToken({ roomId, userId }) {
     roomName: livekitRoomName,
     role,
     livekitUrl: process.env.LIVEKIT_URL,
+    plan: room.plan || [],
+    interviewerName: room.interviewerId?.name || null,
+    intervieweeName: room.intervieweeId?.name || null,
   };
 }

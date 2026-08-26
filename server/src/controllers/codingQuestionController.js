@@ -1,5 +1,7 @@
-import CodingQuestion from "../models/CodingQuestion.js";
-import Interview from "../models/Interview.js";
+import CodingQuestion from "../models/CodingQuestions.js";
+import { InterviewSession } from "../models/InterviewSession.js";
+import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
+import mongoose from "mongoose";
 
 export const getCodingQuestion = async (req, res) => {
   try {
@@ -13,12 +15,24 @@ export const getCodingQuestion = async (req, res) => {
       });
     }
 
-    // Verify that the interview session exists.
-    const interview = await Interview.findById(sessionId)
-      .select("_id userId type status")
-      .lean();
+    let interviewExists = false;
 
-    if (!interview) {
+    // Check if it's a regular InterviewSession (24 char hex / valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(sessionId) && sessionId.length === 24) {
+      const interview = await InterviewSession.findById(sessionId)
+        .select("_id userId type status")
+        .lean();
+      if (interview) interviewExists = true;
+    } 
+    // Otherwise check if it's a PeerInterviewRoom (usually 16 char hex)
+    else {
+      const peerRoom = await PeerInterviewRoom.findOne({ roomId: sessionId })
+        .select("_id roomId status")
+        .lean();
+      if (peerRoom) interviewExists = true;
+    }
+
+    if (!interviewExists) {
       return res.status(404).json({
         success: false,
         code: "INTERVIEW_NOT_FOUND",
@@ -28,13 +42,6 @@ export const getCodingQuestion = async (req, res) => {
 
     /*
      * For now we select an active coding question.
-     *
-     * Later this will become adaptive:
-     * - difficulty based on candidate performance
-     * - interview role
-     * - required skills
-     * - previous questions
-     * - company/job description
      */
     const question = await CodingQuestion.findOne({
       isActive: true,
@@ -43,11 +50,9 @@ export const getCodingQuestion = async (req, res) => {
       .lean();
 
     if (!question) {
-      return res.status(404).json({
-        success: false,
-        code: "CODING_QUESTION_NOT_FOUND",
-        message: "No coding question is currently available.",
-      });
+      // Gracefully return null instead of 404 to avoid breaking the frontend
+      // Peer interviews can still proceed without a coding question.
+      return res.status(200).json(null);
     }
 
     /*
@@ -78,10 +83,7 @@ export const getCodingQuestion = async (req, res) => {
       testCases: safeTestCases,
     };
 
-    return res.status(200).json({
-      success: true,
-      data: response,
-    });
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Get coding question error:", error);
 

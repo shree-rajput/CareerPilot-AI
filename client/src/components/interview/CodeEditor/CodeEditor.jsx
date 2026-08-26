@@ -1,4 +1,6 @@
+import React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useRef } from "react";
 import Editor from "@monaco-editor/react";
 import EditorToolbar from "./EditorToolbar";
 import TestCasesPanel from "./TestCasesPanel";
@@ -78,6 +80,7 @@ export default function CodeEditor({
   readOnly = false,
 
   editorOptions = {},
+  socket = null,
 }) {
   const availableLanguages = useMemo(() => {
     return (question?.supportedLanguages || question?.languages || []).map(
@@ -102,6 +105,9 @@ export default function CodeEditor({
 
   const [activeTestCase, setActiveTestCase] = useState(0);
 
+  // Reference to track remote code to prevent emit loops
+  const remoteCode = useRef("");
+
   useEffect(() => {
     if (typeof value === "string") {
       setCode(value);
@@ -111,8 +117,8 @@ export default function CodeEditor({
   useEffect(() => {
     const newLanguage = normalizeLanguage(
       initialLanguage ||
-        question?.defaultLanguage ||
-        question?.supportedLanguages?.[0],
+      question?.defaultLanguage ||
+      question?.supportedLanguages?.[0],
     );
 
     if (!newLanguage) return;
@@ -123,6 +129,39 @@ export default function CodeEditor({
       setCode(getStarterCode(question, newLanguage));
     }
   }, [question?.id, question?._id]);
+
+  // Setup Socket Listeners
+  useEffect(() => {
+    if (!socket || mode !== "peer") return;
+
+    const handleCodeChange = (data) => {
+      // Use function state update to access latest code without adding it to dependencies
+      setCode((prevCode) => {
+        if (data.code !== prevCode) {
+          remoteCode.current = data.code;
+          return data.code;
+        }
+        return prevCode;
+      });
+    };
+
+    const handleLanguageChange = (data) => {
+      setLanguage((prevLang) => {
+        if (data.language !== prevLang) {
+          return data.language;
+        }
+        return prevLang;
+      });
+    };
+
+    socket.on("code:change", handleCodeChange);
+    socket.on("language:change", handleLanguageChange);
+
+    return () => {
+      socket.off("code:change", handleCodeChange);
+      socket.off("language:change", handleLanguageChange);
+    };
+  }, [socket, mode]);
 
   const testCases = question?.testCases || [];
 
@@ -135,6 +174,11 @@ export default function CodeEditor({
 
     setCode(newStarterCode);
 
+    if (socket && mode === "peer") {
+      socket.emit("language:change", { language: normalizedLanguage, sessionId });
+      socket.emit("code:change", { code: newStarterCode, sessionId });
+    }
+
     onChange?.(newStarterCode, {
       language: normalizedLanguage,
       sessionId,
@@ -146,6 +190,14 @@ export default function CodeEditor({
     const updatedCode = newValue || "";
 
     setCode(updatedCode);
+
+    // Only emit if the change originated from THIS user's keyboard
+    if (updatedCode !== remoteCode.current && socket && mode === "peer") {
+      socket.emit("code:change", { code: updatedCode, sessionId });
+    }
+
+    // Reset the remote change flag equivalence
+    remoteCode.current = "";
 
     onChange?.(updatedCode, {
       language,
@@ -174,7 +226,7 @@ export default function CodeEditor({
   };
 
   return (
-    <section className="flex h-full min-h-[600px] flex-col overflow-hidden rounded-xl border border-slate-700 bg-[#1e1e1e] shadow-xl">
+    <section className="flex h-full w-full flex-col overflow-hidden bg-transparent">
       <EditorToolbar
         language={language}
         languages={availableLanguages}
@@ -187,7 +239,7 @@ export default function CodeEditor({
         onSubmit={handleSubmit}
       />
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 relative">
         <Editor
           height="100%"
           language={language}
@@ -200,14 +252,14 @@ export default function CodeEditor({
             readOnly,
           }}
           loading={
-            <div className="flex h-full items-center justify-center bg-[#1e1e1e] text-sm text-slate-400">
+            <div className="flex h-full items-center justify-center bg-transparent text-sm text-slate-400">
               Loading editor...
             </div>
           }
         />
       </div>
 
-      <div className="border-t border-slate-700 bg-[#181818]">
+      <div className="border-t border-[#2A3143] bg-[#0B0F19]">
         <TestCasesPanel
           testCases={testCases}
           activeTestCase={activeTestCase}

@@ -1,10 +1,12 @@
+import React from "react";
+
 export default function OutputPanel({ result, isRunning, isSubmitting }) {
   const isLoading = isRunning || isSubmitting;
 
   return (
-    <div className="min-h-[120px] bg-[#181818]">
-      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+    <div className="min-h-[120px] bg-[#0B0F19]">
+      <div className="flex items-center justify-between border-b border-[#2A3143] bg-[#151B2B] px-4 py-2">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
           Output
         </span>
 
@@ -13,14 +15,14 @@ export default function OutputPanel({ result, isRunning, isSubmitting }) {
 
       <div className="max-h-[220px] overflow-auto p-4">
         {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-gray-400">
             <span className="h-2 w-2 animate-pulse rounded-full bg-blue-500" />
             {isRunning ? "Running test cases..." : "Submitting solution..."}
           </div>
         )}
 
         {!isLoading && !result && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-gray-500">
             Run your code to see the output.
           </p>
         )}
@@ -35,7 +37,7 @@ function ExecutionResult({ result }) {
   if (result.error) {
     return (
       <div className="rounded-md border border-red-500/20 bg-red-500/10 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase text-red-400">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-red-400">
           Execution Error
         </p>
 
@@ -68,7 +70,7 @@ function ExecutionResult({ result }) {
       </div>
 
       {result.output && (
-        <pre className="rounded-md border border-slate-700 bg-[#1e1e1e] p-3 text-xs text-slate-300">
+        <pre className="rounded-md border border-white/5 bg-black/40 p-3 text-xs text-gray-300 custom-scrollbar">
           {result.output}
         </pre>
       )}
@@ -79,9 +81,9 @@ function ExecutionResult({ result }) {
 function Metric({ label, value }) {
   return (
     <div>
-      <span className="text-xs text-slate-500">{label}</span>
+      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">{label}</span>
 
-      <p className="font-medium text-slate-200">{value}</p>
+      <p className="font-medium text-gray-200 text-sm">{value}</p>
     </div>
   );
 }
@@ -99,9 +101,8 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`rounded-full px-2 py-1 text-[10px] font-medium uppercase ${
-        styles[normalized] || "bg-slate-700 text-slate-300"
-      }`}
+      className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${styles[normalized] || "bg-gray-800 text-gray-300"
+        }`}
     >
       {status}
     </span>
