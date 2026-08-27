@@ -9,6 +9,12 @@ import {
   restoreResumeVersion,
   uploadResume,
 } from "../controllers/resumeController.js";
+import {
+  saveDraft,
+  saveAsVersion,
+  analyzeAgainstJob,
+  getInlineAiSuggestion
+} from "../controllers/resumeStudioController.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const resumeRouter = Router();
@@ -29,3 +35,9 @@ resumeRouter.delete("/:id", deleteResume);
 resumeRouter.get("/:id/versions", getResumeVersions);
 
 resumeRouter.post("/:id/restore", restoreResumeVersion);
+
+// Studio Routes
+resumeRouter.post("/:id/draft", saveDraft);
+resumeRouter.post("/:id/version", saveAsVersion);
+resumeRouter.post("/:id/analyze-job", analyzeAgainstJob);
+resumeRouter.post("/:id/ai-suggest", getInlineAiSuggestion);

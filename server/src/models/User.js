@@ -26,6 +26,15 @@ const interviewPreferencesSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const targetRoleSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true, trim: true },
+    techStack: { type: [String], default: [] },
+    isPrimary: { type: Boolean, default: false }
+  },
+  { _id: true }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, minlength: 2, maxlength: 80 },
@@ -40,15 +49,27 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     phone: { type: String, trim: true, default: "" },
     education: { type: educationSchema, default: () => ({}) },
-    targetRoles: { type: [String], default: [] },
+    
+    // Career Profile & Placement Command Center Fields
+    targetRoles: { type: [targetRoleSchema], default: [] },
+    targetCompanies: { type: [String], default: [] },
     preferredLocations: { type: [String], default: [] },
+    remotePreference: { 
+      type: String, 
+      enum: ["remote", "hybrid", "onsite", "any"], 
+      default: "any" 
+    },
+    salaryExpectation: { type: String, trim: true, default: "" },
+    placementDeadline: { type: Date },
+    
     experienceLevel: {
       type: String,
       enum: ["student", "fresher", "intern", "junior"],
       default: "student"
     },
     technicalSkills: { type: [String], default: [] },
-    primaryTechStack: { type: [String], default: [] },
+    primaryTechStack: { type: [String], default: [] }, // Kept for backwards compatibility/global reference
+    
     interviewPreferences: {
       type: interviewPreferencesSchema,
       default: () => ({})

@@ -14,9 +14,12 @@ export function Button({
   
   const variants = {
     primary: 'bg-primary text-white hover:bg-primary-hover focus:ring-primary',
-    secondary: 'bg-white text-text-secondary border border-border focus:ring-primary',
-    danger: 'bg-danger text-white hover:bg-red-600 focus:ring-danger',
-    ghost: 'bg-transparent text-text-secondary hover:bg-bg-secondary focus:ring-gray-200'
+    secondary: 'bg-surface text-text-secondary border border-border hover:bg-bg-secondary focus:ring-primary',
+    danger: 'bg-danger text-white hover:opacity-90 focus:ring-danger',
+    success: 'bg-success text-white hover:opacity-90 focus:ring-success',
+    outline: 'bg-transparent text-primary border border-primary hover:bg-primary-bg focus:ring-primary',
+    ghost: 'bg-transparent text-text-secondary hover:bg-bg-secondary focus:ring-border',
+    link: 'bg-transparent text-primary hover:underline focus:ring-primary p-0'
   };
 
   const sizes = {

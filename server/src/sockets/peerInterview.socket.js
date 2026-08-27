@@ -52,5 +52,19 @@ export function registerPeerInterviewSocket(io) {
         socket.to(`interview:${roomId}`).emit("language:change", data);
       }
     });
+
+    socket.on("whiteboard:draw", (data) => {
+      const roomId = socket.data.roomId;
+      if (roomId) {
+        socket.to(`interview:${roomId}`).emit("whiteboard:draw", data);
+      }
+    });
+
+    socket.on("whiteboard:clear", () => {
+      const roomId = socket.data.roomId;
+      if (roomId) {
+        socket.to(`interview:${roomId}`).emit("whiteboard:clear");
+      }
+    });
   });
 }

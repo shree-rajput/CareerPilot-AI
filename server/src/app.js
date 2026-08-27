@@ -19,6 +19,12 @@ import { tailoringRouter } from "./routes/tailoringRoutes.js";
 import peerInterviewRoutes from "./routes/peerInterview.routes.js";
 import codingQuestionRoutes from "./routes/codingQuestionRoutes.js";
 import codeExecutionRoutes from "./routes/codeExecutionRoutes.js";
+import jobRoutes from "./routes/jobRoutes.js";
+import skillRoutes from "./routes/skillRoutes.js";
+import projectRoutes from "./routes/projectRoutes.js";
+import preparationRoutes from "./routes/preparationRoutes.js";
+import copilotRoutes from "./routes/copilotRoutes.js";
+
 export function createApp() {
   const app = express();
 
@@ -59,6 +65,11 @@ export function createApp() {
   app.use("/api/interview-rooms", peerInterviewRoutes);
   app.use("/api/interview", codingQuestionRoutes);
   app.use("/api/interview", codeExecutionRoutes);
+  app.use("/api/jobs", jobRoutes);
+  app.use("/api/skills", skillRoutes);
+  app.use("/api/projects", projectRoutes);
+  app.use("/api/preparation", preparationRoutes);
+  app.use("/api/copilot", copilotRoutes);
   app.use(notFound);
   app.use(errorHandler);
 

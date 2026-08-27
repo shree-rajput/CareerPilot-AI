@@ -12,16 +12,18 @@ Current Question: ${questionNumber} of ${totalQuestions}
 ${params.jobDescription ? `Job Description / Context:\n${params.jobDescription}` : ""}
 
 ${params.previousQuestions && params.previousQuestions.length > 0
-    ? `Previously asked questions in this session (do NOT repeat these):\n${params.previousQuestions.map((q, i) => `${i + 1}. ${q.questionText}`).join("\n")}`
-    : "This is the first question of the interview."}
+    ? `Previous Questions & Candidate Performance:\n${params.previousQuestions.map((q, i) => 
+        `${i + 1}. Question: ${q.questionText}\n   Candidate Score (out of 100): ${q.analysis?.technicalAccuracy || 'N/A'} (Tech), ${q.analysis?.communication || 'N/A'} (Comm)`
+      ).join("\n")}`
+    : "This is the first question of the interview. Start at the baseline difficulty."}
 
-Based on the candidate's profile and the context above, generate ONE highly relevant interview question.
+Based on the candidate's profile, requested difficulty, and their PREVIOUS PERFORMANCE (if any), generate ONE highly relevant and ADAPTIVE interview question.
 
 Guidelines:
-1. If the interview type is "technical", focus on the technology stack (e.g., how things work under the hood, tradeoffs).
-2. If the interview type is "hr" or "project", focus on behavioral scenarios (STAR method) or project decisions.
-3. If "mixed", pick a balanced question.
-4. The question should match the requested difficulty.
+1. ADAPTIVE DIFFICULTY: If the candidate answered previous questions well (high scores), ask a harder, more complex question. If they struggled (low scores), ask a simpler question or a useful follow-up to check fundamentals.
+2. If the interview type is "technical", focus on the technology stack (e.g., how things work under the hood, tradeoffs).
+3. If the interview type is "hr" or "project", focus on behavioral scenarios (STAR method) or project decisions.
+4. If "mixed", pick a balanced question.
 5. Do NOT repeat any previously asked question.
 6. Make it sound like a real question spoken by a human interviewer.
 7. Return exactly one question.

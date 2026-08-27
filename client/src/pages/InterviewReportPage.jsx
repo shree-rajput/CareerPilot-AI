@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Target, BrainCircuit, Video, Mic, CheckCircle, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Target, BrainCircuit, Video, Mic, CheckCircle, AlertTriangle, Lightbulb } from "lucide-react";
 import { interviewApi } from "../api/interview.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Spinner } from "../components/ui/Spinner";
 
 export function InterviewReportPage() {
   const { sessionId } = useParams();
@@ -28,8 +30,9 @@ export function InterviewReportPage() {
 
   if (loading) {
     return (
-      <div className="content-layout" style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-        <p className="text-secondary">Loading report...</p>
+      <div className="flex flex-col items-center justify-center h-64 text-text-secondary font-medium">
+        <Spinner size="lg" className="mb-4" />
+        Loading report...
       </div>
     );
   }
@@ -39,113 +42,146 @@ export function InterviewReportPage() {
   const { session, questions } = report;
   const answeredQuestions = questions.filter(q => q.status === "answered");
 
+  const getScoreBg = (score) => {
+    if (score >= 75) return "bg-success-bg text-success border-success/20";
+    if (score >= 60) return "bg-warning-bg text-warning border-warning/20";
+    return "bg-danger-bg text-danger border-danger/20";
+  };
+
+  const getScoreColor = (score) => {
+    if (score >= 75) return "text-success";
+    if (score >= 60) return "text-warning";
+    return "text-danger";
+  };
+
   return (
-    <div className="content-layout" style={{ maxWidth: "1000px", margin: "0 auto" }}>
-      <div className="content-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
-        <div>
-          <button className="btn btn-secondary" style={{ padding: "0.5rem 1rem", marginBottom: "1.5rem", borderRadius: "30px" }} onClick={() => navigate("/interview")}>
-            <ArrowLeft size={18} /> Back to Setup
+    <div className="max-w-5xl mx-auto flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+      
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-surface p-6 sm:p-8 rounded-2xl border border-border shadow-sm">
+        <div className="flex flex-col items-start gap-4">
+          <button 
+            className="inline-flex items-center gap-2 text-text-secondary hover:text-primary font-bold text-sm bg-bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-primary/30 transition-colors"
+            onClick={() => navigate("/interview")}
+          >
+            <ArrowLeft size={16} /> Back to Setup
           </button>
-          <h2 style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>Interview Performance Report</h2>
-          <p className="text-secondary" style={{ fontSize: "1.1rem" }}>Detailed breakdown of your session for <strong>{session.targetRole}</strong></p>
+          <div>
+            <h2 className="text-3xl font-extrabold text-text mb-1 tracking-tight">Interview Performance Report</h2>
+            <p className="text-text-secondary text-sm font-medium">Detailed breakdown of your session for <strong className="text-text">{session.targetRole}</strong></p>
+          </div>
         </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "0.875rem", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "0.5rem", color: "var(--text-secondary)" }}>Overall Score</div>
-          <div className="score-badge" style={{ 
-            fontSize: "3rem", 
-            padding: "1rem 2rem", 
-            borderRadius: "16px",
-            backgroundColor: session.overallScore >= 75 ? 'var(--success-bg)' : session.overallScore >= 60 ? 'var(--warning-bg)' : 'var(--danger-bg)', 
-            color: session.overallScore >= 75 ? 'var(--success-color)' : session.overallScore >= 60 ? 'var(--warning-color)' : 'var(--danger-color)' 
-          }}>
+        <div className="flex flex-col items-center justify-center bg-bg-secondary p-5 rounded-2xl border border-border min-w-[160px] shadow-inner">
+          <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Overall Score</div>
+          <div className={`text-4xl font-extrabold px-6 py-2 rounded-xl border ${getScoreBg(session.overallScore)} shadow-sm`}>
             {Math.round(session.overallScore)}
           </div>
         </div>
       </div>
 
-      <h3 style={{ marginBottom: "1.5rem" }}>Performance Categories</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "1rem", marginBottom: "3rem" }}>
-        <div className="card" style={{ padding: "1.5rem", textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <BrainCircuit size={24} style={{ margin: "0 auto", color: "var(--primary-color)" }} />
-          <div className="eyebrow">Answer Quality</div>
-          <div style={{ fontSize: "1.75rem", fontWeight: "bold" }}>{Math.round((session.scores?.technical + session.scores?.structure) / 2 || 0)}</div>
-        </div>
-        <div className="card" style={{ padding: "1.5rem", textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <Mic size={24} style={{ margin: "0 auto", color: "var(--primary-color)" }} />
-          <div className="eyebrow">Communication</div>
-          <div style={{ fontSize: "1.75rem", fontWeight: "bold" }}>{Math.round(session.scores?.communication || 0)}</div>
-        </div>
-        <div className="card" style={{ padding: "1.5rem", textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <Target size={24} style={{ margin: "0 auto", color: "var(--primary-color)" }} />
-          <div className="eyebrow">Clarity</div>
-          <div style={{ fontSize: "1.75rem", fontWeight: "bold" }}>{Math.round(session.scores?.clarity || 0)}</div>
-        </div>
-        <div className="card" style={{ padding: "1.5rem", textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <Video size={24} style={{ margin: "0 auto", color: "var(--primary-color)" }} />
-          <div className="eyebrow">Video/Presence</div>
-          <div style={{ fontSize: "1.75rem", fontWeight: "bold" }}>{Math.round(session.scores?.videoPresence || 0)}</div>
-        </div>
-        <div className="card" style={{ padding: "1.5rem", textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <BrainCircuit size={24} style={{ margin: "0 auto", color: "var(--primary-color)" }} />
-          <div className="eyebrow">Technical</div>
-          <div style={{ fontSize: "1.75rem", fontWeight: "bold" }}>{Math.round(session.scores?.technical || 0)}</div>
+      {/* CATEGORIES */}
+      <div>
+        <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+          <div className="h-5 w-1.5 bg-primary rounded-full"></div>
+          Performance Categories
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[
+            { label: "Answer Quality", value: Math.round((session.scores?.technical + session.scores?.structure) / 2 || 0), icon: BrainCircuit },
+            { label: "Communication", value: Math.round(session.scores?.communication || 0), icon: Mic },
+            { label: "Clarity", value: Math.round(session.scores?.clarity || 0), icon: Target },
+            { label: "Video/Presence", value: Math.round(session.scores?.videoPresence || 0), icon: Video },
+            { label: "Technical", value: Math.round(session.scores?.technical || 0), icon: BrainCircuit },
+          ].map((cat, i) => {
+            const Icon = cat.icon;
+            return (
+              <Card key={i} className="shadow-sm border-border">
+                <CardContent className="p-5 flex flex-col items-center justify-center text-center gap-3">
+                  <div className="bg-primary/10 p-2 rounded-xl text-primary">
+                    <Icon size={24} />
+                  </div>
+                  <div className="text-xs font-bold text-text-secondary uppercase tracking-wider leading-tight">{cat.label}</div>
+                  <div className={`text-3xl font-extrabold ${getScoreColor(cat.value)}`}>{cat.value}</div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </div>
 
-      <h3 style={{ marginBottom: "1.5rem" }}>Question-by-Question Analysis ({answeredQuestions.length})</h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-        {answeredQuestions.length === 0 ? (
-          <p className="text-secondary card">No questions were answered in this session.</p>
-        ) : (
-          answeredQuestions.map((q, idx) => (
-            <div key={q._id} className="card" style={{ padding: "2rem", borderTop: "4px solid var(--primary-color)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
-                <div style={{ paddingRight: "2rem" }}>
-                  <span className="eyebrow" style={{ color: "var(--primary-color)" }}>Question {idx + 1} • {q.category} • {q.difficulty}</span>
-                  <h4 style={{ fontSize: "1.25rem", marginTop: "0.75rem", lineHeight: "1.4" }}>{q.questionText}</h4>
-                </div>
-                <div className="score-badge" style={{ fontSize: "1.25rem", padding: "0.5rem 1rem" }}>
-                  {q.analysis.technicalAccuracy} / 100
-                </div>
-              </div>
+      {/* QUESTION ANALYSIS */}
+      <div>
+        <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+          <div className="h-5 w-1.5 bg-primary rounded-full"></div>
+          Question-by-Question Analysis ({answeredQuestions.length})
+        </h3>
+        <div className="flex flex-col gap-6">
+          {answeredQuestions.length === 0 ? (
+            <Card className="bg-surface border-border border-dashed shadow-none">
+              <CardContent className="p-8 text-center text-text-secondary font-medium italic">
+                No questions were answered in this session.
+              </CardContent>
+            </Card>
+          ) : (
+            answeredQuestions.map((q, idx) => (
+              <Card key={q._id} className="shadow-md border-t-4 border-t-primary overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="p-6 border-b border-border bg-surface flex flex-col md:flex-row justify-between items-start gap-4">
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-primary uppercase tracking-widest mb-2 block bg-primary/10 inline-block px-2.5 py-1 rounded-md">
+                        Question {idx + 1} • {q.category} • {q.difficulty}
+                      </span>
+                      <h4 className="text-xl font-bold text-text leading-snug">{q.questionText}</h4>
+                    </div>
+                    <div className={`text-xl font-extrabold px-4 py-2 rounded-lg border ${getScoreBg(q.analysis.technicalAccuracy)} shrink-0 shadow-sm`}>
+                      {q.analysis.technicalAccuracy} / 100
+                    </div>
+                  </div>
 
-              <div style={{ backgroundColor: "var(--bg-secondary)", padding: "1.25rem", borderRadius: "8px", color: "var(--text-secondary)", marginBottom: "2rem", fontStyle: "italic", lineHeight: "1.6" }}>
-                <strong>Your Answer: </strong> "{q.transcript}"
-              </div>
+                  <div className="p-6 flex flex-col gap-6 bg-bg-secondary">
+                    <div className="bg-white p-5 rounded-xl border border-border shadow-sm">
+                      <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Your Answer</div>
+                      <p className="text-text text-base italic leading-relaxed">"{q.transcript}"</p>
+                    </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "2rem" }}>
-                <div style={{ backgroundColor: "rgba(34, 197, 94, 0.05)", padding: "1.25rem", borderRadius: "8px", border: "1px solid rgba(34, 197, 94, 0.2)" }}>
-                  <strong style={{ color: "var(--success-color)", display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                    <CheckCircle size={18} /> Strengths
-                  </strong>
-                  <ul style={{ margin: 0, paddingLeft: "1.25rem", lineHeight: "1.5" }}>
-                    {q.feedback.strengths.map((s, i) => <li key={i} style={{ marginBottom: "0.5rem" }}>{s}</li>)}
-                  </ul>
-                </div>
-                <div style={{ backgroundColor: "rgba(239, 68, 68, 0.05)", padding: "1.25rem", borderRadius: "8px", border: "1px solid rgba(239, 68, 68, 0.2)" }}>
-                  <strong style={{ color: "var(--danger-color)", display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                    <AlertTriangle size={18} /> Improvement Suggestions
-                  </strong>
-                  <ul style={{ margin: 0, paddingLeft: "1.25rem", lineHeight: "1.5" }}>
-                    {q.feedback.weaknesses.map((w, i) => <li key={i} style={{ marginBottom: "0.5rem" }}>{w}</li>)}
-                  </ul>
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="bg-success-bg p-5 rounded-xl border border-success/20 shadow-sm">
+                        <strong className="text-success flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
+                          <CheckCircle size={18} /> Strengths
+                        </strong>
+                        <ul className="list-disc list-inside text-sm text-text-secondary flex flex-col gap-2">
+                          {q.feedback.strengths.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
+                        </ul>
+                      </div>
+                      
+                      <div className="bg-danger-bg p-5 rounded-xl border border-danger/20 shadow-sm">
+                        <strong className="text-danger flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
+                          <AlertTriangle size={18} /> Improvement Suggestions
+                        </strong>
+                        <ul className="list-disc list-inside text-sm text-text-secondary flex flex-col gap-2">
+                          {q.feedback.weaknesses.map((w, i) => <li key={i} className="leading-relaxed">{w}</li>)}
+                        </ul>
+                      </div>
+                    </div>
 
-              <div style={{ backgroundColor: "rgba(59, 130, 246, 0.05)", padding: "1.5rem", borderRadius: "8px", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
-                <h4 style={{ color: "var(--primary-color)", display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", margin: 0 }}>
-                  <BrainCircuit size={20} /> Better Answer Suggestion
-                </h4>
-                <p style={{ lineHeight: "1.6", marginBottom: "1rem", color: "var(--text-color)" }}>
-                  "{q.idealAnswer?.text}"
-                </p>
-                <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", backgroundColor: "rgba(0,0,0,0.05)", padding: "1rem", borderRadius: "6px" }}>
-                  <strong>Why this works: </strong> {q.idealAnswer?.explanation}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
+                    <div className="bg-info-bg p-6 rounded-xl border border-blue-200 shadow-sm">
+                      <h4 className="text-primary flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
+                        <Lightbulb size={20} /> Better Answer Suggestion
+                      </h4>
+                      <p className="text-text text-base leading-relaxed mb-4 font-medium">
+                        "{q.idealAnswer?.text}"
+                      </p>
+                      <div className="text-sm text-text-secondary bg-white p-4 rounded-lg border border-border shadow-sm">
+                        <strong className="text-text font-bold uppercase tracking-wider text-xs block mb-1">Why this works</strong>
+                        {q.idealAnswer?.explanation}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

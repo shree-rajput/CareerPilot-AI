@@ -4,7 +4,10 @@ import {
   createPeerInterviewRoom,
   joinPeerInterviewRoom,
 } from "../api/peerInterview";
-import { Video, Users, ArrowRight, Plus, KeyRound, Loader2, AlertCircle } from "lucide-react";
+import { Video, Users, ArrowRight, Plus, KeyRound, AlertCircle } from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Card, CardContent } from "../components/ui/Card";
 
 export default function PeerInterviewSetupPage() {
   const navigate = useNavigate();
@@ -76,43 +79,39 @@ export default function PeerInterviewSetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center pt-20 px-4 font-sans relative overflow-hidden">
-      {/* Background ambient light */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-
-      <div className="w-full max-w-2xl relative z-10">
-        <div className="text-center mb-12">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/5 mb-6 shadow-[0_0_30px_rgba(59,130,246,0.15)] transform transition-transform hover:scale-105 duration-300">
-            <Users className="h-10 w-10 text-blue-400" />
+    <div className="min-h-screen bg-bg text-text flex flex-col items-center pt-16 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="w-full max-w-2xl">
+        <div className="text-center mb-10">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-info-bg border border-blue-100 mb-6 shadow-sm">
+            <Users className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-100 to-gray-400 mb-4 drop-shadow-sm">
+          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-text mb-4">
             Peer Interview
           </h1>
-          <p className="text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">
+          <p className="text-lg text-text-secondary max-w-xl mx-auto leading-relaxed">
             Practice mock interviews with another person in a real-time, interactive coding environment with high quality audio and video.
           </p>
         </div>
 
-        <div className="bg-[#111111]/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_0_40px_rgba(59,130,246,0.1)]">
-          <div className="flex border-b border-white/10 bg-black/20">
+        <Card className="shadow-lg border-border">
+          <div className="flex border-b border-border bg-bg-secondary">
             <button
               onClick={() => {
                 setMode("create");
                 setError("");
               }}
-              className={`flex-1 py-5 px-6 text-sm font-medium transition-all duration-300 relative overflow-hidden ${
+              className={`flex-1 py-4 px-6 text-sm font-semibold transition-all relative ${
                 mode === "create" 
-                  ? "text-blue-400 bg-blue-500/5" 
-                  : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
+                  ? "text-primary bg-white" 
+                  : "text-text-secondary hover:text-text hover:bg-white/50"
               }`}
             >
-              <div className="flex items-center justify-center gap-2 relative z-10">
-                <Plus className={`h-4 w-4 transition-transform duration-300 ${mode === "create" ? "scale-110" : ""}`} />
+              <div className="flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" />
                 Create New Room
               </div>
               {mode === "create" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]" />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
               )}
             </button>
             <button
@@ -120,66 +119,60 @@ export default function PeerInterviewSetupPage() {
                 setMode("join");
                 setError("");
               }}
-              className={`flex-1 py-5 px-6 text-sm font-medium transition-all duration-300 relative overflow-hidden ${
+              className={`flex-1 py-4 px-6 text-sm font-semibold transition-all relative ${
                 mode === "join" 
-                  ? "text-blue-400 bg-blue-500/5" 
-                  : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
+                  ? "text-primary bg-white" 
+                  : "text-text-secondary hover:text-text hover:bg-white/50"
               }`}
             >
-              <div className="flex items-center justify-center gap-2 relative z-10">
-                <KeyRound className={`h-4 w-4 transition-transform duration-300 ${mode === "join" ? "scale-110" : ""}`} />
+              <div className="flex items-center justify-center gap-2">
+                <KeyRound className="h-4 w-4" />
                 Join Existing
               </div>
               {mode === "join" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]" />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
               )}
             </button>
           </div>
 
-          <div className="p-8">
+          <CardContent className="p-6 sm:p-8">
             {error && (
-              <div className="mb-6 flex items-start gap-3 rounded-xl bg-red-500/10 p-4 border border-red-500/20 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)] animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="mb-6 flex items-start gap-3 rounded-lg bg-danger-bg p-4 border border-danger/20 text-danger">
                 <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                <p className="text-sm">{error}</p>
+                <p className="text-sm font-medium">{error}</p>
               </div>
             )}
 
             {mode === "create" ? (
-              <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
+              <div className="space-y-6 fade-in">
                 <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Host an AI-Assisted Interview</h2>
-                  <p className="text-gray-400 text-sm">
+                  <h2 className="text-xl font-bold text-text mb-1">Host an AI-Assisted Interview</h2>
+                  <p className="text-text-secondary text-sm">
                     Configure the interview parameters. An AI plan will be generated to assist you.
                   </p>
                 </div>
                 
                 <div className="space-y-5">
-                  <div className="group">
-                    <label className="block text-sm font-medium text-gray-300 mb-1.5 transition-colors group-focus-within:text-blue-400">Target Role</label>
-                    <input
-                      type="text"
-                      value={targetRole}
-                      onChange={(e) => setTargetRole(e.target.value)}
-                      className="block w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-300 hover:border-white/20"
-                    />
-                  </div>
-                  <div className="group">
-                    <label className="block text-sm font-medium text-gray-300 mb-1.5 transition-colors group-focus-within:text-blue-400">Technology Stack</label>
-                    <input
-                      type="text"
-                      value={technologyStack}
-                      onChange={(e) => setTechnologyStack(e.target.value)}
-                      placeholder="e.g. React, Node.js, Python"
-                      className="block w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-300 hover:border-white/20"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-5">
-                    <div className="group">
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5 transition-colors group-focus-within:text-blue-400">Interview Type</label>
+                  <Input
+                    label="Target Role"
+                    value={targetRole}
+                    onChange={(e) => setTargetRole(e.target.value)}
+                  />
+                  
+                  <Input
+                    label="Technology Stack"
+                    placeholder="e.g. React, Node.js, Python"
+                    value={technologyStack}
+                    onChange={(e) => setTechnologyStack(e.target.value)}
+                  />
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Interview Type</label>
                       <select
                         value={interviewType}
                         onChange={(e) => setInterviewType(e.target.value)}
-                        className="block w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-300 hover:border-white/20 appearance-none cursor-pointer"
+                        className="w-full bg-white border border-border rounded-lg min-h-[44px] px-3 py-2 text-text focus:border-primary focus:ring-4 focus:ring-primary/15 focus:outline-none transition-shadow appearance-none"
                       >
                         <option value="mixed">Mixed</option>
                         <option value="technical">Technical Focus</option>
@@ -187,12 +180,12 @@ export default function PeerInterviewSetupPage() {
                         <option value="project">Project Deep Dive</option>
                       </select>
                     </div>
-                    <div className="group">
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5 transition-colors group-focus-within:text-blue-400">Difficulty</label>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Difficulty</label>
                       <select
                         value={difficulty}
                         onChange={(e) => setDifficulty(e.target.value)}
-                        className="block w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-300 hover:border-white/20 appearance-none cursor-pointer"
+                        className="w-full bg-white border border-border rounded-lg min-h-[44px] px-3 py-2 text-text focus:border-primary focus:ring-4 focus:ring-primary/15 focus:outline-none transition-shadow appearance-none"
                       >
                         <option value="easy">Easy</option>
                         <option value="medium">Medium</option>
@@ -200,95 +193,64 @@ export default function PeerInterviewSetupPage() {
                       </select>
                     </div>
                   </div>
-                  <div className="group">
-                    <label className="block text-sm font-medium text-gray-300 mb-1.5 transition-colors group-focus-within:text-blue-400">Duration (minutes)</label>
-                    <input
-                      type="number"
-                      value={durationMinutes}
-                      onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                      className="block w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-300 hover:border-white/20"
-                    />
-                  </div>
+                  
+                  <Input
+                    type="number"
+                    label="Duration (minutes)"
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                  />
                 </div>
 
-                <div className="bg-blue-500/5 rounded-2xl p-4 border border-blue-500/10 flex items-center gap-4 mt-2">
-                  <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                    <Video className="h-5 w-5 text-blue-400 animate-pulse" />
+                <div className="bg-info-bg rounded-xl p-4 border border-blue-200 flex items-start gap-4">
+                  <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Video className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="text-sm text-blue-200/70">
+                  <div className="text-sm text-blue-900 mt-1.5 font-medium">
                     Camera and microphone permissions will be requested on the next screen.
                   </div>
                 </div>
 
-                <button
-                  disabled={loading}
+                <Button
+                  className="w-full h-12 text-base"
                   onClick={handleCreateRoom}
-                  className="w-full relative group overflow-hidden flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 px-4 text-sm font-bold text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#111111] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  isLoading={loading}
                 >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
-                  <div className="relative flex items-center gap-2">
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Creating Workspace...
-                      </>
-                    ) : (
-                      <>
-                        Start Interview Workspace
-                        <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </div>
-                </button>
+                  Start Interview Workspace
+                  {!loading && <ArrowRight className="ml-2 h-5 w-5" />}
+                </Button>
               </div>
             ) : (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="space-y-6 fade-in">
                 <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Join an Interview</h2>
-                  <p className="text-gray-400 text-sm">
+                  <h2 className="text-xl font-bold text-text mb-1">Join an Interview</h2>
+                  <p className="text-text-secondary text-sm">
                     Enter the room ID provided by your host to join the session.
                   </p>
                 </div>
 
-                <div className="group">
-                  <label htmlFor="roomId" className="block text-sm font-medium text-gray-300 mb-1.5 transition-colors group-focus-within:text-blue-400">
-                    Room ID
-                  </label>
-                  <input
-                    id="roomId"
-                    type="text"
-                    value={roomId}
-                    onChange={(event) => setRoomId(event.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleJoinRoom()}
-                    placeholder="e.g. 64a7c9f..."
-                    className="block w-full rounded-xl border border-white/10 bg-black/50 px-4 py-4 text-lg tracking-wider text-white placeholder-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-300 hover:border-white/20"
-                  />
-                </div>
+                <Input
+                  label="Room ID"
+                  placeholder="e.g. 64a7c9f..."
+                  value={roomId}
+                  onChange={(event) => setRoomId(event.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleJoinRoom()}
+                  className="text-lg tracking-wider font-mono"
+                />
 
-                <button
-                  disabled={loading || !roomId.trim()}
+                <Button
+                  className="w-full h-12 text-base"
                   onClick={handleJoinRoom}
-                  className="w-full relative group overflow-hidden flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 px-4 text-sm font-bold text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#111111] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  isLoading={loading}
+                  disabled={!roomId.trim()}
                 >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
-                  <div className="relative flex items-center gap-2">
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Connecting...
-                      </>
-                    ) : (
-                      <>
-                        Join Interview Room
-                        <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </div>
-                </button>
+                  Join Interview Room
+                  {!loading && <ArrowRight className="ml-2 h-5 w-5" />}
+                </Button>
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

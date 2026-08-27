@@ -13,13 +13,21 @@ import { InterviewSetupPage } from "./pages/InterviewSetupPage";
 import { MatchResultPage } from "./pages/MatchResultPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ResumePage } from "./pages/ResumePage";
+import { ResumeStudioPage } from "./pages/ResumeStudioPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import PeerInterviewRoomPage from "./pages/PeerInterviewRoomPage";
 import PeerInterviewSetupPage from "./pages/PeerInterviewSetup";
 import PeerInterviewReportPage from "./pages/PeerInterviewReportPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { JobBoardPage } from "./pages/JobBoardPage";
+import { JobDetailPage } from "./pages/JobDetailPage";
+import { SkillsPage } from "./pages/SkillsPage";
+import { PreparationPage } from "./pages/PreparationPage";
+import { ProjectsPage } from "./pages/ProjectsPage";
+
 export function App() {
   return (
-    <div>
+    <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
@@ -30,12 +38,19 @@ export function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
 
             <Route path="/resume" element={<ResumePage />} />
+            <Route path="/resume/studio/:id" element={<ResumeStudioPage />} />
 
             <Route path="/applications" element={<ApplicationsPage />} />
             <Route
               path="/applications/:id"
               element={<ApplicationDetailPage />}
             />
+            
+            <Route path="/jobs" element={<JobBoardPage />} />
+            <Route path="/jobs/:id" element={<JobDetailPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/preparation" element={<PreparationPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
 
             <Route path="/match/:id" element={<MatchResultPage />} />
 
@@ -69,6 +84,6 @@ export function App() {
           </Route>
         </Route>
       </Routes>
-    </div>
+    </ErrorBoundary>
   );
 }

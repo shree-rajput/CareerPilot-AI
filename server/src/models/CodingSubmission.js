@@ -246,6 +246,10 @@ const codingQuestionSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    skillsUpdated: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

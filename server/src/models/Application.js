@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const STATUS_VALUES = ["saved", "applied", "screening", "interview", "offer", "rejected"];
+const STATUS_VALUES = ["saved", "applied", "shortlisted", "oa", "interview", "offer", "rejected", "withdrawn", "on_hold"];
 
 const statusHistorySchema = new mongoose.Schema(
   {
@@ -18,6 +18,26 @@ const applicationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
       index: true
+    },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job",
+      default: null,
+      index: true
+    },
+    priority: {
+      type: String,
+      enum: ["HIGH", "MEDIUM", "LOW"],
+      default: "MEDIUM"
+    },
+    preparationStatus: {
+      type: String,
+      enum: ["pending", "in_progress", "ready"],
+      default: "pending"
+    },
+    skillGaps: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     },
     company: {
       type: String,

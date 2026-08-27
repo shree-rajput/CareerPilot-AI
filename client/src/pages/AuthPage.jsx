@@ -2,6 +2,10 @@ import React from "react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Card, CardContent } from "../components/ui/Card";
+import { AlertCircle } from "lucide-react";
 
 export function AuthPage({ mode }) {
   const isSignup = mode === "signup";
@@ -36,22 +40,28 @@ export function AuthPage({ mode }) {
   }
 
   return (
-    <main className="auth-screen">
-      <section className="auth-panel" aria-labelledby="auth-title">
-        <div>
-          <span className="eyebrow">CareerPilot AI</span>
-          <h1 id="auth-title">{isSignup ? "Create your workspace" : "Log in to your workspace"}</h1>
-          <p>
-            Build your resume, application tracker, match engine, and interview practice loop from
-            one place.
-          </p>
-        </div>
+    <main className="min-h-screen bg-bg flex items-center justify-center p-4 sm:p-8 relative overflow-hidden font-sans">
+      {/* Background decorations */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          {isSignup && (
-            <label>
-              Name
-              <input
+      <Card className="w-full max-w-md relative z-10 shadow-xl border-border animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <CardContent className="p-8 sm:p-10 flex flex-col gap-8">
+          <div>
+            <span className="text-primary font-bold text-xs uppercase tracking-widest mb-2 block">CareerPilot AI</span>
+            <h1 id="auth-title" className="text-3xl font-extrabold text-text tracking-tight mb-2">
+              {isSignup ? "Create workspace" : "Log in to workspace"}
+            </h1>
+            <p className="text-text-secondary text-sm leading-relaxed">
+              Build your resume, application tracker, match engine, and interview practice loop from
+              one place.
+            </p>
+          </div>
+
+          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+            {isSignup && (
+              <Input
+                label="Name"
                 autoComplete="name"
                 name="name"
                 onChange={updateField}
@@ -59,12 +69,10 @@ export function AuthPage({ mode }) {
                 type="text"
                 value={form.name}
               />
-            </label>
-          )}
+            )}
 
-          <label>
-            Email
-            <input
+            <Input
+              label="Email"
               autoComplete="email"
               name="email"
               onChange={updateField}
@@ -72,11 +80,9 @@ export function AuthPage({ mode }) {
               type="email"
               value={form.email}
             />
-          </label>
 
-          <label>
-            Password
-            <input
+            <Input
+              label="Password"
               autoComplete={isSignup ? "new-password" : "current-password"}
               minLength={8}
               name="password"
@@ -85,20 +91,27 @@ export function AuthPage({ mode }) {
               type="password"
               value={form.password}
             />
-          </label>
 
-          {error && <div className="error-banner">{error}</div>}
+            {error && (
+              <div className="flex items-start gap-3 rounded-lg bg-danger-bg p-4 border border-danger/20 text-danger">
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                <p className="text-sm font-medium">{error}</p>
+              </div>
+            )}
 
-          <button className="primary-button" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Working..." : isSignup ? "Sign up" : "Log in"}
-          </button>
-        </form>
+            <Button className="w-full h-12 text-base mt-2" disabled={isSubmitting} type="submit" isLoading={isSubmitting}>
+              {isSignup ? "Sign up" : "Log in"}
+            </Button>
+          </form>
 
-        <p className="auth-switch">
-          {isSignup ? "Already have an account?" : "New to CareerPilot?"}{" "}
-          <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Log in" : "Create account"}</Link>
-        </p>
-      </section>
+          <p className="text-center text-text-secondary text-sm">
+            {isSignup ? "Already have an account?" : "New to CareerPilot?"}{" "}
+            <Link to={isSignup ? "/login" : "/signup"} className="text-primary hover:text-primary-hover font-bold transition-colors">
+              {isSignup ? "Log in" : "Create account"}
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
     </main>
   );
 }

@@ -36,10 +36,12 @@ export const env = {
   jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS || 12),
 
-  // AI provider — swap model without touching business logic.
-  // groqModel is always a single sanitized token, never a fallback expression.
+  // AI provider — logical model roles
   groqApiKey: process.env.GROQ_API_KEY || "",
-  groqModel,
+  groqModelFast: sanitizeModel(process.env.GROQ_MODEL_FAST, "llama3-8b-8192"),
+  groqModelGeneral: sanitizeModel(process.env.GROQ_MODEL_GENERAL, "llama-3.3-70b-versatile"),
+  groqModelComplex: sanitizeModel(process.env.GROQ_MODEL_COMPLEX, "llama3-70b-8192"),
+  groqModel: groqModel, // legacy fallback
   aiRequestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS || 30000),
 
   // File uploads

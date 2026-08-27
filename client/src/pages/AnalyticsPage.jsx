@@ -2,6 +2,8 @@ import React from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
 import { useEffect, useState } from "react";
 import { analyticsApi } from "../api/features";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Spinner } from "../components/ui/Spinner";
 
 export function AnalyticsPage() {
   const [stats, setStats] = useState(null);
@@ -21,8 +23,18 @@ export function AnalyticsPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p>Loading analytics...</p>;
-  if (!stats) return <p>Failed to load analytics.</p>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-64 text-text-secondary font-medium">
+      <Spinner size="lg" className="mb-4" />
+      Loading analytics...
+    </div>
+  );
+  
+  if (!stats) return (
+    <div className="bg-danger-bg text-danger p-6 rounded-xl border border-danger/20 font-medium">
+      Failed to load analytics. Please try again later.
+    </div>
+  );
 
   const metricCards = [
     { label: "Total Applications", value: stats.total },
@@ -34,83 +46,120 @@ export function AnalyticsPage() {
   ];
 
   return (
-    <section style={{ display: "grid", gap: "24px" }}>
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto">
+      <div>
+        <h1 className="text-3xl font-extrabold text-text tracking-tight">Analytics Dashboard</h1>
+        <p className="text-text-secondary text-sm mt-1">Track your job search performance and application pipeline.</p>
+      </div>
 
       {/* Metric Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
-        {metricCards.map(m => (
-          <div key={m.label} style={{ background: "white", padding: "20px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <span style={{ display: "block", color: "#5b6475", fontSize: "0.9rem", marginBottom: "8px" }}>{m.label}</span>
-            <strong style={{ fontSize: "2rem", color: "#172033" }}>{m.value}</strong>
-          </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {metricCards.map((m, idx) => (
+          <Card key={m.label} className="shadow-sm border-border">
+            <CardContent className="p-5 flex flex-col justify-center items-center text-center sm:items-start sm:text-left h-full">
+              <span className="block text-text-secondary text-xs font-bold uppercase tracking-wider mb-2">{m.label}</span>
+              <strong className="text-3xl font-extrabold text-primary">{m.value}</strong>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
         {/* Charts */}
-        <div style={{ display: "grid", gap: "24px" }}>
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 20px" }}>Application Volume (6 Months)</h3>
-            <div style={{ height: "300px" }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trends}>
-                  <defs>
-                    <linearGradient id="colorApps" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#1463ff" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#1463ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#5b6475', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#5b6475', fontSize: 12 }} />
-                  <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
-                  <Area type="monotone" dataKey="applications" stroke="#1463ff" strokeWidth={3} fillOpacity={1} fill="url(#colorApps)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+              <CardTitle className="text-lg m-0">Application Volume (6 Months)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorApps" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#1463ff" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#1463ff" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }} 
+                      itemStyle={{ color: '#1e293b', fontWeight: 600 }}
+                      labelStyle={{ color: '#64748b', fontWeight: 600, marginBottom: '4px' }}
+                    />
+                    <Area type="monotone" dataKey="applications" stroke="#1463ff" strokeWidth={3} fillOpacity={1} fill="url(#colorApps)" activeDot={{ r: 6, strokeWidth: 0, fill: '#1463ff' }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
 
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 20px" }}>Status Pipeline</h3>
-            <div style={{ height: "300px" }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={distribution} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eee" />
-                  <XAxis type="number" axisLine={false} tickLine={false} />
-                  <YAxis dataKey="status" type="category" axisLine={false} tickLine={false} tick={{ textTransform: "capitalize", fill: '#5b6475', fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: '#f5f7fb' }} contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
-                  <Bar dataKey="count" fill="#101828" radius={[0, 4, 4, 0]} barSize={32} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+              <CardTitle className="text-lg m-0">Status Pipeline</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={distribution} layout="vertical" margin={{ top: 0, right: 30, left: 30, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
+                    <YAxis dataKey="status" type="category" axisLine={false} tickLine={false} tick={{ textTransform: "capitalize", fill: '#1e293b', fontSize: 13, fontWeight: 600 }} dx={-10} />
+                    <Tooltip 
+                      cursor={{ fill: '#f1f5f9' }} 
+                      contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}
+                      itemStyle={{ color: '#1e293b', fontWeight: 600 }}
+                      labelStyle={{ textTransform: 'capitalize', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}
+                    />
+                    <Bar dataKey="count" fill="#1463ff" radius={[0, 6, 6, 0]} barSize={28} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Skill Gaps Sidebar */}
-        <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-          <h3 style={{ margin: "0 0 16px" }}>Top Skill Gaps</h3>
-          <p style={{ margin: "0 0 20px", fontSize: "0.9rem", color: "#5b6475", lineHeight: 1.5 }}>
-            These skills frequently appear in job descriptions you apply to, but are missing from your matched resumes.
-          </p>
+        <Card className="shadow-sm border-border">
+          <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+            <CardTitle className="text-lg m-0">Top Skill Gaps</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <p className="text-sm text-text-secondary leading-relaxed mb-6">
+              These skills frequently appear in job descriptions you apply to, but are missing from your matched resumes.
+            </p>
 
-          <div style={{ display: "grid", gap: "12px" }}>
-            {stats.topSkillGaps.map((gap, i) => (
-              <div key={gap.skill} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", background: "#f5f7fb", borderRadius: "6px" }}>
-                <div>
-                  <span style={{ fontWeight: "bold", marginRight: "8px", color: "#5b6475" }}>#{i + 1}</span>
-                  <strong>{gap.skill}</strong>
+            <div className="flex flex-col gap-3">
+              {stats.topSkillGaps.map((gap, i) => (
+                <div key={gap.skill} className="flex justify-between items-center p-3 bg-surface border border-border rounded-xl hover:border-primary/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center justify-center h-6 w-6 rounded-full bg-bg-secondary text-text-secondary text-xs font-bold">
+                      {i + 1}
+                    </span>
+                    <strong className="text-text font-bold text-sm">{gap.skill}</strong>
+                  </div>
+                  <span className="text-xs font-bold text-danger bg-danger-bg px-2.5 py-1 rounded-full border border-danger/20 shadow-sm">
+                    Missing {gap.count}x
+                  </span>
                 </div>
-                <span style={{ fontSize: "0.85rem", color: "#b4233c", background: "#fff1f2", padding: "2px 8px", borderRadius: "99px" }}>
-                  Missing {gap.count}x
-                </span>
-              </div>
-            ))}
-            {stats.topSkillGaps.length === 0 && <p style={{ color: "#5b6475", fontStyle: "italic" }}>No skill gaps identified yet.</p>}
-          </div>
-        </div>
+              ))}
+              {stats.topSkillGaps.length === 0 && (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-success-bg text-success mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <p className="text-text font-bold">No skill gaps identified!</p>
+                  <p className="text-xs text-text-secondary mt-1">Your resumes match the JDs well.</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
       </div>
-    </section>
+    </div>
   );
 }

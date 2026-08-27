@@ -24,5 +24,14 @@ export const interviewApi = {
   getSessionReport: async (sessionId) => {
     const res = await http.get(`/interview/${sessionId}/report`);
     return res.data.data;
+  },
+  transcribeAudio: async (formData) => {
+    // formData must contain the audio file
+    const res = await http.post(`/interview/transcribe`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
   }
 };

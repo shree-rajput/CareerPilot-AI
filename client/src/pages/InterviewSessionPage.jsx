@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   Mic,
   StopCircle,
-  SkipForward,
   CheckCircle,
   Brain,
   Video,
@@ -12,6 +11,9 @@ import {
   Clock,
 } from "lucide-react";
 import { interviewApi } from "../api/interview.js";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { useSpeech } from "../hooks/useSpeech.js";
 
 // ─── Error message helpers ────────────────────────────────────────────────────
 function parseQuestionError(err) {
@@ -50,8 +52,8 @@ export function InterviewSessionPage() {
   const [currentQuestion, setCurrentQuestion] = useState(null);
 
   // ── Recording / evaluation state ────────────────────────────────────────────
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState("");
+  const { transcript, setTranscript, isRecording, startRecording, stopRecording, speakText } = useSpeech();
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState(null);
   const [isProcessingSubmission, setIsProcessingSubmission] = useState(false);
@@ -60,7 +62,6 @@ export function InterviewSessionPage() {
   const [recordTime, setRecordTime] = useState(0);
 
   // ── Refs ────────────────────────────────────────────────────────────────────
-  const recognitionRef = useRef(null);
   const timerRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -75,10 +76,8 @@ export function InterviewSessionPage() {
   // ── Camera init ─────────────────────────────────────────────────────────────
   useEffect(() => {
     initCamera();
-    initSpeechRecognition();
 
     return () => {
-      if (recognitionRef.current) recognitionRef.current.stop();
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
@@ -120,127 +119,7 @@ export function InterviewSessionPage() {
     }
   };
 
-  // const speakText = (text) => {
-  //   window.speechSynthesis.cancel();
-  //   const utterance = new SpeechSynthesisUtterance(text);
-  //   const voices = window.speechSynthesis.getVoices();
-  //   const preferredVoice = voices.find(
-  //     (v) => v.name.includes("Google") || v.name.includes("Natural"),
-  //   );
-  //   if (preferredVoice) utterance.voice = preferredVoice;
-  //   // utterance.pitch = 0.8;
-  //   utterance.rate = 0.95;
-  //   window.speechSynthesis.speak(utterance);
-  // };
 
-  // ─── High-quality browser Text-to-Speech ─────────────────────────────────────
-  const speakText = (text) => {
-    if (!text || !text.trim()) return;
-
-    const synth = window.speechSynthesis;
-
-    // Stop anything currently speaking
-    synth.cancel();
-
-    const speak = () => {
-      const voices = synth.getVoices();
-
-      if (!voices.length) {
-        console.warn("No speech voices available.");
-        return;
-      }
-
-      // Prefer natural-sounding English voices.
-      // Order matters: voices earlier in this list are preferred.
-      const preferredVoiceNames = [
-        "Google UK English Female",
-        "Google US English",
-        "Microsoft Jenny Online",
-        "Microsoft Aria Online",
-        "Microsoft Jenny",
-        "Microsoft Aria",
-        "Microsoft Guy Online",
-        "Microsoft David",
-        "Natural",
-        "Google",
-      ];
-
-      let selectedVoice = null;
-
-      // Try preferred voices first
-      for (const preferred of preferredVoiceNames) {
-        selectedVoice = voices.find((voice) =>
-          voice.name.toLowerCase().includes(preferred.toLowerCase()),
-        );
-
-        if (selectedVoice) break;
-      }
-
-      // Fallback: prefer English voices
-      if (!selectedVoice) {
-        selectedVoice = voices.find(
-          (voice) =>
-            voice.lang === "en-US" ||
-            voice.lang === "en-GB" ||
-            voice.lang.startsWith("en"),
-        );
-      }
-
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang;
-      } else {
-        utterance.lang = "en-US";
-      }
-
-      // Natural interview-style delivery
-      utterance.rate = 0.92;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      // Prevent speech from becoming stuck
-      utterance.onend = () => {
-        synth.cancel();
-      };
-
-      utterance.onerror = (event) => {
-        console.error("Speech synthesis error:", event);
-      };
-
-      synth.speak(utterance);
-    };
-
-    // Chrome sometimes loads voices asynchronously
-    if (synth.getVoices().length === 0) {
-      synth.addEventListener("voiceschanged", speak, { once: true });
-    } else {
-      speak();
-    }
-  };
-
-  const initSpeechRecognition = () => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("Speech recognition is not supported in this browser.");
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onresult = (event) => {
-      let currentTranscript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        currentTranscript += event.results[i][0].transcript;
-      }
-      setTranscript(currentTranscript);
-    };
-    recognitionRef.current = recognition;
-  };
 
   /**
    * Fetch the next question from the backend.
@@ -328,19 +207,34 @@ export function InterviewSessionPage() {
     [sessionId, navigate],
   );
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (isRecording) {
-      recognitionRef.current?.stop();
+      const audioBlob = await stopRecording();
       clearInterval(timerRef.current);
-      setIsRecording(false);
+      
+      // Whisper fallback if transcript is poor or empty
+      if (audioBlob && (!transcript || transcript.trim().length < 10)) {
+        try {
+          setIsTranscribing(true);
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "answer.webm");
+          const res = await interviewApi.transcribeAudio(formData);
+          if (res.transcript) {
+            setTranscript(res.transcript);
+          }
+        } catch (err) {
+          console.error("Whisper fallback transcription failed", err);
+        } finally {
+          setIsTranscribing(false);
+        }
+      }
     } else {
       window.speechSynthesis.cancel();
       if (!transcript) {
         setRecordTime(0);
         videoMetricsRef.current = { presenceScore: 100, checks: 0 };
       }
-      recognitionRef.current?.start();
-      setIsRecording(true);
+      await startRecording();
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
         setRecordTime((prev) => prev + 1);
@@ -367,9 +261,8 @@ export function InterviewSessionPage() {
       setProcessingStep("Evaluating answer...");
 
       if (isRecording) {
-        recognitionRef.current?.stop();
+        await stopRecording();
         clearInterval(timerRef.current);
-        setIsRecording(false);
       }
 
       const words = transcript.trim().split(/\s+/).length;
@@ -438,26 +331,10 @@ export function InterviewSessionPage() {
   // ── Loading state: first fetch in progress, no question yet ─────────────────
   if (isFetching && !currentQuestion) {
     return (
-      <div
-        className="content-layout"
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100%",
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <Brain
-            className="spin"
-            size={40}
-            style={{ color: "var(--primary-color)", margin: "0 auto 1rem" }}
-          />
-          <h3>Generating your question…</h3>
-          <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem" }}>
-            This usually takes 2–5 seconds.
-          </p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+        <Brain className="animate-pulse text-primary mb-4" size={48} />
+        <h3 className="text-xl font-bold text-text mb-2">Generating your question…</h3>
+        <p className="text-text-secondary">This usually takes 2–5 seconds.</p>
       </div>
     );
   }
@@ -465,420 +342,198 @@ export function InterviewSessionPage() {
   // ── Error state: fetch failed and no question loaded yet ─────────────────────
   if (fetchStatus === "error" && !currentQuestion) {
     return (
-      <div
-        className="content-layout"
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100%",
-        }}
-      >
-        <div
-          className="card"
-          style={{ maxWidth: "500px", textAlign: "center", padding: "2.5rem" }}
-        >
-          <AlertTriangle
-            size={40}
-            style={{ color: "var(--danger-color)", margin: "0 auto 1rem" }}
-          />
-          <h3 style={{ marginBottom: "0.75rem" }}>
-            Could not generate question
-          </h3>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              marginBottom: "1.5rem",
-              lineHeight: "1.6",
-            }}
-          >
-            {questionError}
-          </p>
-          <button
-            className="btn btn-primary"
-            onClick={() => fetchNextQuestion()}
-            disabled={isFetching}
-          >
-            {isFetching ? (
-              <>
-                <Brain className="spin" size={16} /> Trying again…
-              </>
-            ) : (
-              "Try Again"
-            )}
-          </button>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+        <Card className="max-w-md w-full shadow-sm text-center">
+          <CardContent className="p-8">
+            <AlertTriangle className="text-danger mx-auto mb-4" size={48} />
+            <h3 className="text-xl font-bold text-text mb-3">Could not generate question</h3>
+            <p className="text-text-secondary leading-relaxed mb-6">{questionError}</p>
+            <Button onClick={() => fetchNextQuestion()} disabled={isFetching} isLoading={isFetching} className="w-full">
+              {isFetching ? "Trying again…" : "Try Again"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="content-layout" style={{ maxWidth: "1200px" }}>
-      <div
-        className="content-header"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
+    <div className="max-w-7xl mx-auto flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 h-full">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2>AI Interview Session</h2>
-          <p>
-            Answer the question clearly. The AI will evaluate your response.
-          </p>
+          <h2 className="text-2xl font-extrabold text-text tracking-tight">AI Interview Session</h2>
+          <p className="text-text-secondary mt-1">Answer the question clearly. The AI will evaluate your response.</p>
         </div>
-        <button className="btn btn-secondary" onClick={handleEndSession}>
+        <Button variant="secondary" onClick={handleEndSession}>
           End Interview
-        </button>
+        </Button>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 350px",
-          gap: "2rem",
-        }}
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start h-full">
         {/* Main Content Area */}
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
-        >
+        <div className="lg:col-span-2 flex flex-col gap-6 h-full">
           {/* Question Display */}
-          <div
-            className="card"
-            style={{
-              backgroundColor: "#1e293b",
-              color: "white",
-              padding: "2rem",
-              border: "none",
-            }}
-          >
-            <span
-              style={{
-                display: "inline-block",
-                marginBottom: "1rem",
-                backgroundColor: "rgba(255,255,255,0.1)",
-                padding: "4px 12px",
-                borderRadius: "99px",
-                fontSize: "0.85rem",
-              }}
-            >
-              {currentQuestion?.category} • {currentQuestion?.difficulty}
-            </span>
-            <h2
-              style={{
-                fontSize: "1.75rem",
-                lineHeight: "1.4",
-                margin: 0,
-                fontWeight: 500,
-              }}
-            >
-              {currentQuestion?.questionText}
-            </h2>
+          <Card className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] text-white border-none shadow-md">
+            <CardContent className="p-8 md:p-10">
+              <span className="inline-block mb-6 bg-white/10 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-blue-200">
+                {currentQuestion?.category} • {currentQuestion?.difficulty}
+              </span>
+              <h2 className="text-2xl md:text-3xl leading-relaxed font-bold tracking-tight">
+                {currentQuestion?.questionText}
+              </h2>
 
-            {/* Inline error banner (when there's a question on screen but the next-question fetch failed) */}
-            {fetchStatus === "error" && questionError && currentQuestion && (
-              <div
-                style={{
-                  marginTop: "1.25rem",
-                  backgroundColor: "rgba(239,68,68,0.15)",
-                  border: "1px solid rgba(239,68,68,0.4)",
-                  borderRadius: "8px",
-                  padding: "0.75rem 1rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  fontSize: "0.9rem",
-                }}
-              >
-                <AlertTriangle
-                  size={16}
-                  style={{ flexShrink: 0, color: "#f87171" }}
-                />
-                <span>{questionError}</span>
-              </div>
-            )}
-          </div>
-
-          <div
-            className="card"
-            style={{ flex: 1, display: "flex", flexDirection: "column" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "1rem",
-              }}
-            >
-              <strong>Your Answer Transcript</strong>
-              {isRecording && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    color: "var(--danger-color)",
-                    fontWeight: "bold",
-                  }}
-                >
-                  <div
-                    className="pulsing-dot"
-                    style={{
-                      width: "10px",
-                      height: "10px",
-                      borderRadius: "50%",
-                      backgroundColor: "var(--danger-color)",
-                    }}
-                  ></div>
-                  {formatTime(recordTime)}
+              {/* Inline error banner */}
+              {fetchStatus === "error" && questionError && currentQuestion && (
+                <div className="mt-6 bg-red-500/10 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl flex items-center gap-3 text-sm font-medium">
+                  <AlertTriangle size={18} className="shrink-0 text-red-400" />
+                  <span>{questionError}</span>
                 </div>
               )}
-            </div>
+            </CardContent>
+          </Card>
 
-            {isRecording ? (
-              <p
-                style={{
-                  minHeight: "150px",
-                  color: transcript ? "inherit" : "var(--text-secondary)",
-                  fontStyle: transcript ? "normal" : "italic",
-                  fontSize: "1.1rem",
-                  lineHeight: "1.6",
-                }}
-              >
-                {transcript || "Listening…"}
-              </p>
-            ) : (
-              <textarea
-                className="input-field"
-                style={{
-                  minHeight: "150px",
-                  resize: "vertical",
-                  fontSize: "1.1rem",
-                  lineHeight: "1.6",
-                }}
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                placeholder="Click the microphone to record, or type your answer here if preferred."
-                disabled={isProcessingSubmission}
-              />
-            )}
+          <Card className="flex-1 flex flex-col shadow-sm border-border min-h-[400px]">
+            <CardContent className="p-6 md:p-8 flex-1 flex flex-col h-full">
+              <div className="flex justify-between items-center mb-6">
+                <strong className="text-sm font-bold text-text-secondary uppercase tracking-widest">Your Answer Transcript</strong>
+                {isRecording && (
+                  <div className="flex items-center gap-2 text-danger font-bold text-sm bg-danger-bg px-3 py-1 rounded-full border border-danger/20">
+                    <div className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse"></div>
+                    {formatTime(recordTime)}
+                  </div>
+                )}
+              </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                gap: "1rem",
-                marginTop: "auto",
-                paddingTop: "2rem",
-                flexWrap: "wrap",
-              }}
-            >
-              {isProcessingSubmission ? (
-                <button
-                  className="btn btn-primary"
-                  disabled
-                  style={{ padding: "0.75rem 2rem", width: "100%" }}
-                >
-                  <Brain className="spin" size={20} />
-                  {processingStep}
-                </button>
+              {isRecording ? (
+                <div className={`flex-1 min-h-[200px] text-lg leading-relaxed ${transcript ? 'text-text' : 'text-text-secondary italic'}`}>
+                  {transcript || "Listening…"}
+                </div>
+              ) : isTranscribing ? (
+                <div className="flex-1 min-h-[200px] flex items-center justify-center text-text-secondary italic">
+                  <div className="flex items-center gap-2">
+                    <Brain className="animate-pulse" size={20} />
+                    Processing audio via Whisper...
+                  </div>
+                </div>
               ) : (
-                <>
-                  <button
-                    className={`btn ${isRecording ? "btn-danger" : "btn-secondary"}`}
-                    onClick={toggleRecording}
-                    style={{
-                      padding: "0.75rem 2rem",
-                      borderRadius: "30px",
-                      fontSize: "1.1rem",
-                    }}
-                    disabled={isProcessingSubmission}
-                  >
-                    {isRecording ? (
-                      <>
-                        <StopCircle size={20} /> Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        <Mic size={20} />{" "}
-                        {transcript ? "Resume Recording" : "Record Answer"}
-                      </>
-                    )}
-                  </button>
-                  {transcript.trim() && (
-                    <button
-                      className="btn btn-primary"
-                      onClick={submitAnswerAndNext}
-                      style={{
-                        padding: "0.75rem 2rem",
-                        borderRadius: "30px",
-                        fontSize: "1.1rem",
-                      }}
-                      disabled={isProcessingSubmission || isRecording}
-                    >
-                      <CheckCircle size={20} /> Submit Answer &amp; Next
-                      Question
-                    </button>
-                  )}
-                </>
+                <textarea
+                  className="flex-1 min-h-[200px] w-full resize-y text-lg leading-relaxed text-text bg-transparent focus:outline-none placeholder:text-text-secondary placeholder:italic"
+                  value={transcript}
+                  onChange={(e) => setTranscript(e.target.value)}
+                  placeholder="Click the microphone to record, or type your answer here if preferred."
+                  disabled={isProcessingSubmission}
+                />
               )}
-            </div>
-          </div>
+
+              <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 pt-8 border-t border-border">
+                {isProcessingSubmission ? (
+                  <Button disabled isLoading={true} className="w-full sm:w-auto px-8">
+                    {processingStep}
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant={isRecording ? "danger" : "secondary"}
+                      onClick={toggleRecording}
+                      disabled={isProcessingSubmission || isTranscribing}
+                      className="w-full sm:w-auto px-8 rounded-full"
+                    >
+                      {isRecording ? (
+                        <>
+                          <StopCircle size={18} className="mr-2" /> Stop Recording
+                        </>
+                      ) : (
+                        <>
+                          <Mic size={18} className="mr-2" />{" "}
+                          {transcript ? "Resume Recording" : "Record Answer"}
+                        </>
+                      )}
+                    </Button>
+                    {transcript.trim() && (
+                      <Button
+                        onClick={submitAnswerAndNext}
+                        disabled={isProcessingSubmission || isRecording || isTranscribing}
+                        className="w-full sm:w-auto px-8 rounded-full"
+                      >
+                        <CheckCircle size={18} className="mr-2" /> Submit Answer & Next Question
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar / Video Feed Area */}
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
-        >
-          <div className="card" style={{ padding: "1rem" }}>
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                aspectRatio: "4/3",
-                backgroundColor: "#0f172a",
-                borderRadius: "8px",
-                overflow: "hidden",
-              }}
-            >
-              {isVideoEnabled ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    transform: "scaleX(-1)",
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    height: "100%",
-                    color: "#64748b",
-                  }}
-                >
-                  <VideoOff size={48} style={{ marginBottom: "1rem" }} />
-                  <span>Camera Disabled</span>
+        <div className="flex flex-col gap-6">
+          <Card className="shadow-sm border-border overflow-hidden">
+            <CardContent className="p-3">
+              <div className="relative w-full aspect-4/3 bg-gray-900 rounded-xl overflow-hidden shadow-inner">
+                {isVideoEnabled ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                    <VideoOff size={48} className="mb-4 opacity-50" />
+                    <span className="text-sm font-medium">Camera Disabled</span>
+                  </div>
+                )}
+                {isRecording && isVideoEnabled && (
+                  <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border border-white/10">
+                    <Video size={14} /> Analyzing Presence
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+              <CardTitle className="text-lg m-0">Interview Metrics</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="flex flex-col gap-4">
+                <div className="flex justify-between items-center pb-3 border-b border-border">
+                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Pace (WPM)</span>
+                  <strong className="text-lg font-extrabold text-text">
+                    {evaluation ? evaluation.analysis.communication : "—"}
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center pb-3 border-b border-border">
+                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Clarity</span>
+                  <strong className="text-lg font-extrabold text-text">
+                    {evaluation ? evaluation.analysis.clarity : "—"}
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Structure</span>
+                  <strong className="text-lg font-extrabold text-text">
+                    {evaluation ? evaluation.analysis.structure : "—"}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Status indicator */}
+              {isFetching && (
+                <div className="mt-6 bg-info-bg border border-blue-200 text-primary px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-bold shadow-sm">
+                  <Clock size={16} className="shrink-0" />
+                  Generating next question…
                 </div>
               )}
-              {isRecording && isVideoEnabled && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "10px",
-                    right: "10px",
-                    backgroundColor: "rgba(0,0,0,0.6)",
-                    color: "white",
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                    fontSize: "0.75rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <Video size={14} /> Analyzing Presence
+              {fetchStatus === "ready" && !isFetching && (
+                <div className="mt-6 bg-success-bg border border-success/20 text-success px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-bold shadow-sm">
+                  <CheckCircle size={16} className="shrink-0" />
+                  Question ready
                 </div>
               )}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 style={{ margin: "0 0 1rem", fontSize: "1.1rem" }}>
-              Interview Metrics
-            </h3>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <span className="text-secondary">Pace (WPM)</span>
-                <strong>
-                  {evaluation ? evaluation.analysis.communication : "—"}
-                </strong>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <span className="text-secondary">Clarity</span>
-                <strong>
-                  {evaluation ? evaluation.analysis.clarity : "—"}
-                </strong>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <span className="text-secondary">Structure</span>
-                <strong>
-                  {evaluation ? evaluation.analysis.structure : "—"}
-                </strong>
-              </div>
-            </div>
-
-            {/* Status indicator */}
-            {isFetching && (
-              <div
-                style={{
-                  marginTop: "1rem",
-                  padding: "0.6rem 0.75rem",
-                  borderRadius: "6px",
-                  backgroundColor: "rgba(99,102,241,0.1)",
-                  border: "1px solid rgba(99,102,241,0.25)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  fontSize: "0.85rem",
-                  color: "var(--primary-color)",
-                }}
-              >
-                <Clock size={14} />
-                Generating next question…
-              </div>
-            )}
-            {fetchStatus === "ready" && !isFetching && (
-              <div
-                style={{
-                  marginTop: "1rem",
-                  padding: "0.6rem 0.75rem",
-                  borderRadius: "6px",
-                  backgroundColor: "rgba(34,197,94,0.1)",
-                  border: "1px solid rgba(34,197,94,0.25)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  fontSize: "0.85rem",
-                  color: "var(--success-color)",
-                }}
-              >
-                <CheckCircle size={14} />
-                Question ready
-              </div>
-            )}
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

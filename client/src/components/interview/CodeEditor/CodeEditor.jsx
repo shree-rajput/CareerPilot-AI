@@ -244,7 +244,7 @@ export default function CodeEditor({
           height="100%"
           language={language}
           value={code}
-          theme="vs-dark"
+          theme="light"
           onChange={handleEditorChange}
           options={{
             ...DEFAULT_EDITOR_OPTIONS,

@@ -1,127 +1,159 @@
-import React from "react";
-import { BarChart3, BriefcaseBusiness, FileText, Lightbulb, Mic, Target, TrendingUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { BriefcaseBusiness, Target, TrendingUp, AlertCircle, CheckCircle, ChevronRight, Bookmark, Send, Mic, Award, XCircle } from "lucide-react";
 import { analyticsApi } from "../api/features";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Spinner } from "../components/ui/Spinner";
+import { Link } from "react-router-dom";
 
 export function DashboardPage() {
   const [stats, setStats] = useState(null);
-  const [intelligence, setIntelligence] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      analyticsApi.getDashboard(),
-      analyticsApi.getCareerIntelligence()
-    ])
-      .then(([dashboardRes, intelligenceRes]) => {
+    analyticsApi.getDashboard()
+      .then((dashboardRes) => {
         setStats(dashboardRes.stats);
-        setIntelligence(intelligenceRes.intelligence);
       })
-      .catch(() => setError("Failed to load dashboard intelligence."))
+      .catch(() => setError("Failed to load dashboard data."))
       .finally(() => setLoading(false));
   }, []);
 
-  const metrics = [
-    { label: "Applications", value: stats?.total ?? "--", icon: BriefcaseBusiness },
-    { label: "Average Match", value: stats?.averageMatchScore ? `${stats.averageMatchScore}%` : "--", icon: TrendingUp },
-    { label: "Interviews", value: stats?.interviews ?? "--", icon: Mic },
-    { label: "Career Readiness", value: intelligence ? `${intelligence.readinessScore}%` : "--", icon: Target }
+  if (loading) {
+    return <div className="flex items-center justify-center py-20"><Spinner /></div>;
+  }
+
+  const { readiness, pipeline, primaryRole, priorities, recentApplications } = stats || {};
+
+  const pipelineStages = [
+    { label: "Saved", value: pipeline?.saved || 0, icon: Bookmark, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "Applied", value: pipeline?.applied || 0, icon: Send, color: "text-purple-500", bg: "bg-purple-500/10" },
+    { label: "Interviewing", value: pipeline?.interviewing || 0, icon: Mic, color: "text-orange-500", bg: "bg-orange-500/10" },
+    { label: "Offered", value: pipeline?.offered || 0, icon: Award, color: "text-success", bg: "bg-success/10" },
+    { label: "Rejected", value: pipeline?.rejected || 0, icon: XCircle, color: "text-danger", bg: "bg-danger/10" },
   ];
 
   return (
-    <section className="page-grid">
-      {error && <div className="error-banner">{error}</div>}
-
-      <div className="metric-grid">
-        {metrics.map((metric) => {
-          const Icon = metric.icon;
-
-          return (
-            <article className="metric-card" key={metric.label}>
-              <Icon size={20} aria-hidden="true" />
-              <span>{metric.label}</span>
-              <strong>{loading ? "..." : metric.value}</strong>
-            </article>
-          );
-        })}
-      </div>
-
-      <section className="content-band">
-        <div>
-          <span className="eyebrow">Your next best action</span>
-          <h2>{loading ? "Calculating..." : intelligence?.nextAction?.title || "Build your career profile"}</h2>
-          <p>
-            {loading
-              ? "Reading your resumes, applications, matches, and interviews."
-              : intelligence?.nextAction?.reason || "Upload a resume and add a target job to unlock personalized guidance."}
-          </p>
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
+      {error && (
+        <div className="flex items-start gap-3 rounded-lg bg-danger-bg p-4 border border-danger/20 text-danger">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+          <p className="text-sm font-medium">{error}</p>
         </div>
-        <Lightbulb size={64} aria-hidden="true" />
-      </section>
+      )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px" }}>
-        <section className="content-band" style={{ alignItems: "flex-start" }}>
-          <div style={{ width: "100%" }}>
-            <span className="eyebrow">Skill Signals</span>
-            <h2>Strong Skills</h2>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "16px" }}>
-              {(intelligence?.strongSkills || []).map((skill) => (
-                <span key={skill} style={{ background: "#eaf8f0", color: "#137547", padding: "6px 10px", borderRadius: "999px", fontWeight: 700, fontSize: "0.85rem" }}>
-                  {skill}
-                </span>
-              ))}
-              {!loading && intelligence?.strongSkills?.length === 0 && (
-                <p style={{ color: "#5b6475" }}>No strong skill signals yet. Add a structured resume or run job matches.</p>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="content-band" style={{ alignItems: "flex-start" }}>
-          <div style={{ width: "100%" }}>
-            <span className="eyebrow">Learning Priorities</span>
-            <h2>Weak or Missing Skills</h2>
-            <div style={{ display: "grid", gap: "10px", marginTop: "16px" }}>
-              {(intelligence?.weakSkills || []).slice(0, 4).map((gap) => (
-                <div key={gap.skill} style={{ background: "#f5f7fb", borderRadius: "8px", padding: "12px" }}>
-                  <strong>{gap.skill}</strong>
-                  <span style={{ marginLeft: "8px", color: gap.priority === "high" ? "#b4233c" : "#8a5a00", fontSize: "0.85rem", fontWeight: 800 }}>
-                    {gap.priority}
-                  </span>
-                  <p style={{ margin: "6px 0 0", fontSize: "0.9rem" }}>{gap.whyItMatters}</p>
+      {/* Target Role & Readiness Header */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 shadow-sm border-border">
+          <CardContent className="p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start gap-6">
+            <div className="flex-1">
+              <span className="text-xs font-bold text-primary uppercase tracking-widest mb-2 block">Primary Target Role</span>
+              <h2 className="text-3xl font-extrabold text-text mb-2">
+                {primaryRole?.title || "Not Set"}
+              </h2>
+              {primaryRole?.techStack?.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {primaryRole.techStack.map(tech => (
+                    <span key={tech} className="bg-bg-secondary border border-border text-text px-3 py-1 rounded-full text-sm font-medium">
+                      {tech}
+                    </span>
+                  ))}
                 </div>
-              ))}
-              {!loading && intelligence?.weakSkills?.length === 0 && (
-                <p style={{ color: "#5b6475" }}>No weak skill signals yet. CareerPilot will calculate these after matches or interviews.</p>
+              )}
+              {!primaryRole && (
+                <p className="text-text-secondary mt-2">Set a target role in your profile settings to get personalized guidance.</p>
               )}
             </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="shadow-sm border-border flex flex-col justify-center items-center p-6 bg-gradient-to-br from-bg to-bg-secondary">
+          <span className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Readiness Score</span>
+          <div className="text-5xl font-black text-primary drop-shadow-sm">
+            {readiness?.score || 0}<span className="text-2xl text-text-secondary">/100</span>
           </div>
-        </section>
+          <p className="text-sm text-text-secondary mt-3 text-center">Based on profile, resume, match rate, and pipeline.</p>
+        </Card>
       </div>
 
-      <section className="content-band" style={{ alignItems: "flex-start" }}>
-        <div style={{ width: "100%" }}>
-          <span className="eyebrow">Personalized Roadmap</span>
-          <h2>Placement Preparation Path</h2>
-          <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
-            {(intelligence?.roadmap || []).map((item) => (
-              <div key={`${item.phase}-${item.title}`} style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "14px", background: "#f5f7fb", borderRadius: "8px", padding: "14px" }}>
-                <strong>Phase {item.phase}</strong>
-                <div>
-                  <strong>{item.title}</strong>
-                  <p style={{ margin: "6px 0", color: "#5b6475" }}>{item.action}</p>
-                  <small>{item.focus.join(", ")}</small>
-                </div>
+      {/* Pipeline Overview */}
+      <div>
+        <h3 className="text-xl font-extrabold text-text mb-4">Application Pipeline</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {pipelineStages.map((stage) => {
+            const Icon = stage.icon;
+            return (
+              <Card key={stage.label} className="border-border shadow-sm transition-all hover:-translate-y-1 hover:shadow-md">
+                <CardContent className="p-5 flex flex-col items-center text-center gap-2">
+                  <div className={`p-3 rounded-xl ${stage.bg} ${stage.color}`}>
+                    <Icon size={24} strokeWidth={2.5} />
+                  </div>
+                  <div className="text-3xl font-black text-text mt-2">{stage.value}</div>
+                  <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">{stage.label}</span>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Next Best Actions */}
+        <Card className="shadow-sm border-border flex flex-col">
+          <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CheckCircle className="text-success" size={20} /> Next Best Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 flex-1">
+            {priorities?.length > 0 ? (
+              <div className="flex flex-col divide-y divide-border">
+                {priorities.map((priority, i) => (
+                  <Link key={i} to={priority.action} className="p-5 hover:bg-bg-secondary transition-colors flex items-center justify-between group">
+                    <span className="text-text font-medium">{priority.text}</span>
+                    <ChevronRight size={18} className="text-text-secondary group-hover:text-primary transition-colors" />
+                  </Link>
+                ))}
               </div>
-            ))}
-            {!loading && intelligence?.roadmap?.length === 0 && (
-              <p style={{ color: "#5b6475" }}>Add applications and run matches to generate a role-specific roadmap.</p>
+            ) : (
+              <div className="p-8 text-center text-text-secondary italic">
+                You're all caught up! Keep applying and practicing.
+              </div>
             )}
-          </div>
-        </div>
-        <BarChart3 size={56} aria-hidden="true" />
-      </section>
-    </section>
+          </CardContent>
+        </Card>
+
+        {/* Recent Applications */}
+        <Card className="shadow-sm border-border flex flex-col">
+          <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row justify-between items-center">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BriefcaseBusiness className="text-primary" size={20} /> Recent Applications
+            </CardTitle>
+            <Link to="/applications" className="text-sm text-primary font-bold hover:underline">View All</Link>
+          </CardHeader>
+          <CardContent className="p-0 flex-1">
+            {recentApplications?.length > 0 ? (
+              <div className="flex flex-col divide-y divide-border">
+                {recentApplications.map((app) => (
+                  <div key={app._id} className="p-5 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-text">{app.role}</h4>
+                      <p className="text-sm text-text-secondary">{app.company}</p>
+                    </div>
+                    <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-bg-secondary border border-border text-text">
+                      {app.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-text-secondary italic">
+                No recent applications found. Start applying!
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }

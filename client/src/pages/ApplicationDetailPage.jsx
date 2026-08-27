@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Sparkles, MapPin, Link as LinkIcon, History, Edit3, Save } from "lucide-react";
+import { ArrowLeft, Sparkles, MapPin, Link as LinkIcon, History, Edit3, Save, CheckCircle, Target, Briefcase } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { applicationsApi } from "../api/applications";
 import { matchApi, tailoringApi } from "../api/features";
 import { resumeApi } from "../api/resume";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Spinner } from "../components/ui/Spinner";
 
 const STATUSES = [
   { id: "saved", label: "Saved" },
@@ -105,7 +108,6 @@ export function ApplicationDetailPage() {
     try {
       const result = await tailoringApi.getRecommendations(id, selectedResumeId);
       if (result.success) {
-        // Handle format from new ATS response. (result.data.tailoring.recommendations or string)
         setTailoringData(result.data?.tailoring?.recommendations || "No specific recommendations provided.");
       }
     } catch (err) {
@@ -115,249 +117,369 @@ export function ApplicationDetailPage() {
     }
   }
 
-  if (loading) return <p>Loading application...</p>;
-  if (!app) return <p>Not found.</p>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-64 text-text-secondary font-medium">
+      <Spinner size="lg" className="mb-4" />
+      Loading application details...
+    </div>
+  );
+  
+  if (!app) return (
+    <div className="bg-danger-bg text-danger p-6 rounded-xl border border-danger/20 font-medium max-w-xl mx-auto text-center mt-12">
+      Application not found.
+      <Link to="/applications" className="block mt-4 text-primary hover:underline">Return to Applications</Link>
+    </div>
+  );
 
   return (
-    <section>
-      <Link to="/applications" style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#5b6475", textDecoration: "none", marginBottom: "20px" }}>
+    <div className="max-w-6xl mx-auto flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+      <Link to="/applications" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary font-bold text-sm self-start transition-colors px-2 py-1 -ml-2 rounded-lg hover:bg-primary/10">
         <ArrowLeft size={16} /> Back to Board
       </Link>
 
-      <div style={{ background: "white", padding: "30px", borderRadius: "8px", border: "1px solid #dde4ef", marginBottom: "24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      {/* HEADER CARD */}
+      <Card className="shadow-md border-primary/20 overflow-hidden relative">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-purple-500"></div>
+        <CardContent className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
-            <h1 style={{ margin: "0 0 8px" }}>{app.role}</h1>
-            <h2 style={{ margin: "0 0 16px", fontSize: "1.2rem", color: "#5b6475", fontWeight: "normal" }}>{app.company}</h2>
-            <div style={{ display: "flex", gap: "16px", color: "#5b6475", fontSize: "0.9rem" }}>
+            <h1 className="text-3xl font-extrabold text-text mb-1 tracking-tight">{app.role}</h1>
+            <h2 className="text-xl font-bold text-text-secondary mb-4 flex items-center gap-2">
+              <Briefcase size={20} className="text-border" />
+              {app.company}
+            </h2>
+            <div className="flex flex-wrap gap-4 text-text-secondary font-medium text-sm">
               {app.location && (
-                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><MapPin size={16}/> {app.location}</span>
+                <span className="flex items-center gap-1.5 bg-bg-secondary px-3 py-1 rounded-md border border-border">
+                  <MapPin size={16} className="text-primary"/> {app.location}
+                </span>
               )}
               {app.jobUrl && (
-                <a href={app.jobUrl} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: "4px", color: "#1463ff", textDecoration: "none" }}><LinkIcon size={16}/> Job Link</a>
+                <a href={app.jobUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:text-primary-hover bg-info-bg px-3 py-1 rounded-md border border-blue-200 transition-colors">
+                  <LinkIcon size={16}/> Job Link
+                </a>
               )}
             </div>
           </div>
-          <div>
-            <label style={{ display: "block", fontSize: "0.85rem", color: "#5b6475", marginBottom: "6px", fontWeight: 600 }}>Status</label>
+          <div className="w-full md:w-auto bg-surface p-4 rounded-xl border border-border shadow-sm">
+            <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Application Status</label>
             <select
               value={app.status}
               onChange={handleStatusChange}
-              style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white", fontWeight: 600, textTransform: "capitalize" }}
+              className="w-full md:w-48 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-bold text-text focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer shadow-sm capitalize"
             >
               {STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", marginBottom: "24px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="lg:col-span-2 flex flex-col gap-6">
           
           {/* Notes Section */}
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}><Edit3 size={18}/> Notes</h3>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Add interview notes, recruiter contacts, or next steps here..."
-              style={{ width: "100%", padding: "12px", border: "1px solid #cbd5e1", borderRadius: "8px", minHeight: "100px", fontFamily: "inherit" }}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
-              <button onClick={saveNotes} disabled={isSavingNotes} className="primary-button" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <Save size={16}/> {isSavingNotes ? "Saving..." : "Save Notes"}
-              </button>
-            </div>
-          </div>
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+              <div className="bg-gray-100 p-1.5 rounded-md text-gray-600 border border-gray-200">
+                <Edit3 size={18} />
+              </div>
+              <CardTitle className="text-lg m-0">Notes & Next Steps</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Add interview notes, recruiter contacts, or next steps here..."
+                className="w-full p-4 border border-border rounded-xl min-h-[120px] text-sm text-text focus:border-primary focus:ring-4 focus:ring-primary/15 focus:outline-none transition-shadow bg-surface resize-y"
+              />
+              <div className="flex justify-end mt-4">
+                <Button onClick={saveNotes} isLoading={isSavingNotes}>
+                  {!isSavingNotes && <Save size={16} className="mr-2"/>} Save Notes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* JD Section */}
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 16px" }}>Job Requirements</h3>
-            {app.extractedJd ? (
-              <div>
-                <div style={{ marginBottom: "16px" }}>
-                  <strong style={{ display: "block", marginBottom: "4px" }}>Required Skills:</strong>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                    {app.extractedJd.requiredSkills.map(s => <span key={s} style={{ background: "#eef2f6", padding: "4px 8px", borderRadius: "4px", fontSize: "0.85rem" }}>{s}</span>)}
-                  </div>
-                </div>
-                <div>
-                  <strong style={{ display: "block", marginBottom: "4px" }}>Tools:</strong>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                    {app.extractedJd.tools.map(s => <span key={s} style={{ background: "#eef2f6", padding: "4px 8px", borderRadius: "4px", fontSize: "0.85rem" }}>{s}</span>)}
-                  </div>
-                </div>
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+              <div className="bg-green-100 p-1.5 rounded-md text-green-700 border border-green-200">
+                <Target size={18} />
               </div>
-            ) : (
-              <p style={{ color: "#5b6475" }}>AI extraction pending or failed.</p>
-            )}
-          </div>
+              <CardTitle className="text-lg m-0">Job Requirements Extraction</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {app.extractedJd ? (
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <strong className="block text-sm font-bold text-text-secondary uppercase tracking-wider mb-3">Required Skills</strong>
+                    <div className="flex flex-wrap gap-2">
+                      {app.extractedJd.requiredSkills.map(s => (
+                        <span key={s} className="bg-surface border border-border text-text font-bold px-3 py-1.5 rounded-lg text-sm shadow-sm">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                  {app.extractedJd.tools?.length > 0 && (
+                    <div>
+                      <strong className="block text-sm font-bold text-text-secondary uppercase tracking-wider mb-3">Tools & Technologies</strong>
+                      <div className="flex flex-wrap gap-2">
+                        {app.extractedJd.tools.map(s => (
+                          <span key={s} className="bg-bg-secondary border border-border text-text-secondary font-bold px-3 py-1.5 rounded-lg text-sm">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-secondary text-text-secondary mb-3">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <p className="text-text-secondary font-medium">AI extraction pending or failed.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
           
           {/* Resume Tailoring Section */}
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}>
-              <Sparkles size={20} color="#1463ff" /> Resume Tailoring Recommendations
-            </h3>
-            {!matchResult ? (
-              <p style={{ color: "#5b6475" }}>Run the match engine first to get tailoring recommendations.</p>
-            ) : !tailoringData ? (
-              <button className="secondary-button" onClick={fetchTailoring} disabled={loadingTailoring}>
-                {loadingTailoring ? "Generating..." : "Generate Tailoring Recommendations"}
-              </button>
-            ) : (
-              <div style={{ display: "grid", gap: "16px" }}>
-                {Array.isArray(tailoringData) ? tailoringData.map((rec, i) => (
-                  <div key={i} style={{ background: "#f8fafc", padding: "16px", borderRadius: "8px" }}>
-                    <strong style={{ display: "block", marginBottom: "8px", color: "#1e293b" }}>{rec.suggestion || rec.title || "Suggestion"}</strong>
-                    <p style={{ margin: 0, color: "#475569", fontSize: "0.95rem" }}>{rec.rationale || rec.description || JSON.stringify(rec)}</p>
-                  </div>
-                )) : (
-                  <p style={{ whiteSpace: "pre-wrap", color: "#475569" }}>{typeof tailoringData === 'string' ? tailoringData : JSON.stringify(tailoringData, null, 2)}</p>
-                )}
+          <Card className="shadow-sm border-border border-l-4 border-l-primary">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+              <div className="bg-info-bg p-1.5 rounded-md text-primary border border-blue-200">
+                <Sparkles size={18} />
               </div>
-            )}
-          </div>
+              <CardTitle className="text-lg m-0">Resume Tailoring Recommendations</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {!matchResult ? (
+                <div className="bg-surface border border-border p-5 rounded-xl text-center">
+                  <p className="text-text-secondary font-medium mb-4">Run the match engine first to generate specific tailoring recommendations for this job description.</p>
+                </div>
+              ) : !tailoringData ? (
+                <div className="text-center py-4">
+                  <Button onClick={fetchTailoring} isLoading={loadingTailoring} className="w-full sm:w-auto">
+                    {!loadingTailoring && <Sparkles size={16} className="mr-2"/>} Generate Recommendations
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {Array.isArray(tailoringData) ? tailoringData.map((rec, i) => (
+                    <div key={i} className="bg-surface border border-border p-4 rounded-xl shadow-sm hover:border-primary/30 transition-colors">
+                      <strong className="block text-base font-bold text-text mb-2 flex items-start gap-2">
+                        <CheckCircle size={18} className="text-primary mt-0.5 shrink-0" />
+                        {rec.suggestion || rec.title || "Suggestion"}
+                      </strong>
+                      <p className="text-text-secondary text-sm leading-relaxed pl-6">{rec.rationale || rec.description || JSON.stringify(rec)}</p>
+                    </div>
+                  )) : (
+                    <p className="whitespace-pre-wrap text-text-secondary text-sm p-4 bg-surface rounded-xl border border-border">
+                      {typeof tailoringData === 'string' ? tailoringData : JSON.stringify(tailoringData, null, 2)}
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        <div className="flex flex-col gap-6">
           
           {/* Semantic Match Section */}
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}>
-              <Sparkles size={20} color="#1463ff" /> Semantic Match Engine
-            </h3>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "0.85rem", color: "#5b6475", marginBottom: "6px", fontWeight: 600 }}>Selected Resume</label>
-              <select
-                style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
-                value={selectedResumeId}
-                onChange={e => setSelectedResumeId(e.target.value)}
-              >
-                <option value="">Select a resume to match...</option>
-                {resumes.map(r => <option key={r._id} value={r._id}>{r.name} (v{r.version})</option>)}
-              </select>
-            </div>
-
-            {matchResult ? (
-              <div>
-                <div style={{ textAlign: "center", marginBottom: "24px" }}>
-                  <div style={{ fontSize: "3rem", fontWeight: "900", color: matchResult.overallScore >= 75 ? "#00a884" : matchResult.overallScore >= 50 ? "#f59e0b" : "#b4233c" }}>
-                    {matchResult.overallScore}%
-                  </div>
-                  <span style={{ color: "#5b6475", fontSize: "0.9rem" }}>Overall Match Score</span>
-                </div>
-                <div style={{ display: "flex", gap: "12px", flexDirection: "column" }}>
-                  <button className="primary-button" onClick={handleRunMatch} disabled={runningMatch || !selectedResumeId} style={{ width: "100%", background: "white", color: "#1463ff", border: "1px solid #1463ff" }}>
-                    {runningMatch ? "Analyzing..." : "Re-run Match"}
-                  </button>
-                  <Link to={`/match/${matchResult._id}`} className="primary-button" style={{ width: "100%", textDecoration: "none", textAlign: "center", boxSizing: "border-box" }}>
-                    View Full Evidence & Explanation
-                  </Link>
-                </div>
+          <Card className="shadow-sm border-border overflow-visible z-10">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+              <div className="bg-purple-100 p-1.5 rounded-md text-purple-600 border border-purple-200">
+                <Target size={18} />
               </div>
-            ) : (
-              <div>
-                <p style={{ color: "#5b6475", marginBottom: "16px", lineHeight: 1.5 }}>
-                  Run the match engine to compare your resume against the JD requirements using local semantic embeddings.
-                </p>
-                <button
-                  className="primary-button"
-                  style={{ width: "100%" }}
-                  onClick={handleRunMatch}
-                  disabled={runningMatch || !selectedResumeId}
+              <CardTitle className="text-lg m-0">Match Engine</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="mb-5">
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Selected Resume</label>
+                <select
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-bold text-text focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+                  value={selectedResumeId}
+                  onChange={e => setSelectedResumeId(e.target.value)}
                 >
-                  {runningMatch ? "Analyzing..." : "Run Match"}
-                </button>
+                  <option value="">Select a resume to match...</option>
+                  {resumes.map(r => <option key={r._id} value={r._id}>{r.name} (v{r.version})</option>)}
+                </select>
               </div>
-            )}
-          </div>
+
+              {matchResult ? (
+                <div className="flex flex-col items-center">
+                  <div className="relative mb-6">
+                    <svg className="w-32 h-32 transform -rotate-90">
+                      <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-border" />
+                      <circle 
+                        cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" 
+                        strokeDasharray={2 * Math.PI * 56} 
+                        strokeDashoffset={2 * Math.PI * 56 * (1 - matchResult.overallScore / 100)} 
+                        className={matchResult.overallScore >= 75 ? "text-success" : matchResult.overallScore >= 50 ? "text-warning" : "text-danger"}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className={`text-3xl font-extrabold ${matchResult.overallScore >= 75 ? "text-success" : matchResult.overallScore >= 50 ? "text-warning" : "text-danger"}`}>
+                        {matchResult.overallScore}%
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col gap-3 w-full">
+                    <Button variant="secondary" onClick={handleRunMatch} disabled={runningMatch || !selectedResumeId} className="w-full">
+                      {runningMatch ? "Analyzing..." : "Re-run Match"}
+                    </Button>
+                    <Link to={`/match/${matchResult._id}`} className="w-full">
+                      <Button className="w-full">View Full Explanation</Button>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-2">
+                  <p className="text-sm text-text-secondary mb-4 leading-relaxed">
+                    Compare your resume against the JD requirements using our semantic engine.
+                  </p>
+                  <Button
+                    className="w-full"
+                    onClick={handleRunMatch}
+                    disabled={runningMatch || !selectedResumeId}
+                    isLoading={runningMatch}
+                  >
+                    {!runningMatch && "Run Match"}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Timeline Section */}
-          <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef" }}>
-            <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}><History size={18} /> Timeline</h3>
-            <div style={{ position: "relative", paddingLeft: "16px", borderLeft: "2px solid #eef2f6" }}>
-              {app.statusHistory.map((sh, idx) => (
-                <div key={idx} style={{ marginBottom: idx === app.statusHistory.length - 1 ? 0 : "16px", position: "relative" }}>
-                  <div style={{ position: "absolute", left: "-23px", top: "4px", width: "10px", height: "10px", borderRadius: "50%", background: "#1463ff", border: "2px solid white" }}></div>
-                  <strong style={{ display: "block", textTransform: "capitalize", color: "#1e293b" }}>{sh.status}</strong>
-                  <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>{new Date(sh.changedAt).toLocaleString()}</span>
-                  {sh.note && <p style={{ margin: "4px 0 0", fontSize: "0.9rem", color: "#475569" }}>{sh.note}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+              <div className="bg-gray-100 p-1.5 rounded-md text-gray-600 border border-gray-200">
+                <History size={18} />
+              </div>
+              <CardTitle className="text-lg m-0">Timeline</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="relative pl-6 border-l-2 border-border ml-2 space-y-6">
+                {app.statusHistory.map((sh, idx) => (
+                  <div key={idx} className="relative">
+                    <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-primary border-[3px] border-surface shadow-sm"></div>
+                    <strong className="block text-sm font-bold text-text capitalize mb-0.5">{sh.status}</strong>
+                    <span className="text-xs font-medium text-text-secondary">{new Date(sh.changedAt).toLocaleString()}</span>
+                    {sh.note && <p className="mt-2 text-sm text-text bg-surface p-3 rounded-lg border border-border">{sh.note}</p>}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
       
-      {/* Existing Intelligent Assistant UI below */}
-      <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #dde4ef", marginTop: "24px" }}>
-        <h3 style={{ margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}>
-          <Sparkles size={20} color="#1463ff" /> Intelligent Application Assistant
-        </h3>
-
-        {intelligenceError && <div className="error-banner">{intelligenceError}</div>}
-
-        {intelligence ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "20px" }}>
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px", marginBottom: "18px" }}>
-                <div style={{ background: "#f5f7fb", borderRadius: "8px", padding: "14px" }}>
-                  <span style={{ color: "#5b6475", fontSize: "0.85rem", fontWeight: 700 }}>Suitability</span>
-                  <strong style={{ display: "block", marginTop: "6px", textTransform: "capitalize" }}>{intelligence.suitability}</strong>
-                </div>
-                <div style={{ background: "#f5f7fb", borderRadius: "8px", padding: "14px" }}>
-                  <span style={{ color: "#5b6475", fontSize: "0.85rem", fontWeight: 700 }}>Match</span>
-                  <strong style={{ display: "block", marginTop: "6px" }}>
-                    {intelligence.matchPercentage === null ? "Run match" : `${intelligence.matchPercentage}%`}
-                  </strong>
-                </div>
-              </div>
-
-              <strong>Personalized advice</strong>
-              <p style={{ color: "#5b6475", lineHeight: 1.6 }}>{intelligence.personalizedAdvice}</p>
-
-              <strong>Missing keywords</strong>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
-                {intelligence.missingKeywords.slice(0, 8).map((keyword) => (
-                  <span key={keyword} style={{ background: "#fff1f2", color: "#b4233c", padding: "5px 9px", borderRadius: "999px", fontSize: "0.85rem", fontWeight: 700 }}>
-                    {keyword}
-                  </span>
-                ))}
-                {intelligence.missingKeywords.length === 0 && <span style={{ color: "#5b6475" }}>No missing keywords detected from current match evidence.</span>}
-              </div>
-            </div>
-
-            <div>
-              <strong>Relevant projects from your resume</strong>
-              <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
-                {intelligence.relevantProjects.map((project) => (
-                  <div key={`${project.name}-${project.description}`} style={{ background: "#f5f7fb", borderRadius: "8px", padding: "12px" }}>
-                    <strong>{project.name}</strong>
-                    <p style={{ margin: "6px 0", color: "#5b6475" }}>{project.description || "No description available."}</p>
-                    <small>{(project.technologies || []).join(", ")}</small>
-                  </div>
-                ))}
-                {intelligence.relevantProjects.length === 0 && (
-                  <p style={{ color: "#5b6475" }}>No resume project clearly matches this JD yet. Do not fabricate one; improve your resume only with real evidence.</p>
-                )}
-              </div>
-
-              <strong style={{ display: "block", marginTop: "16px" }}>Resume suggestions</strong>
-              <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
-                {intelligence.resumeImprovementSuggestions.slice(0, 4).map((item) => (
-                  <p key={item.skill} style={{ margin: 0, color: "#5b6475" }}>
-                    <strong style={{ color: "#172033" }}>{item.skill}:</strong> {item.suggestion}
-                  </p>
-                ))}
-              </div>
-            </div>
+      {/* Intelligent Assistant UI */}
+      <Card className="shadow-md border-primary/20 overflow-hidden relative">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+        <CardHeader className="bg-info-bg border-b border-blue-200 py-4 px-6 flex flex-row items-center gap-3">
+          <div className="bg-primary p-1.5 rounded-md text-white shadow-sm">
+            <Sparkles size={18} />
           </div>
-        ) : (
-          !intelligenceError && <p style={{ color: "#5b6475" }}>Loading application intelligence...</p>
-        )}
-      </div>
-    </section>
+          <CardTitle className="text-lg m-0 text-primary">Intelligent Application Assistant</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {intelligenceError && (
+            <div className="bg-danger-bg border border-danger/20 text-danger p-4 rounded-xl text-sm font-medium mb-4">
+              {intelligenceError}
+            </div>
+          )}
+
+          {intelligence ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col gap-6">
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-surface border border-border rounded-xl p-4 shadow-sm text-center">
+                    <span className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Suitability</span>
+                    <strong className="text-xl font-extrabold text-primary capitalize">{intelligence.suitability}</strong>
+                  </div>
+                  <div className="bg-surface border border-border rounded-xl p-4 shadow-sm text-center">
+                    <span className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Match</span>
+                    <strong className="text-xl font-extrabold text-primary">
+                      {intelligence.matchPercentage === null ? "Run match" : `${intelligence.matchPercentage}%`}
+                    </strong>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-text mb-2">Personalized Advice</h4>
+                  <p className="text-sm text-text-secondary leading-relaxed bg-bg-secondary p-4 rounded-xl border border-border">
+                    {intelligence.personalizedAdvice}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-text mb-3 flex items-center gap-2">
+                    Missing Keywords
+                    <span className="bg-danger-bg text-danger px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border border-danger/20">Critical</span>
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {intelligence.missingKeywords.slice(0, 8).map((keyword) => (
+                      <span key={keyword} className="bg-danger-bg border border-danger/20 text-danger px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
+                        {keyword}
+                      </span>
+                    ))}
+                    {intelligence.missingKeywords.length === 0 && (
+                      <span className="text-sm text-text-secondary italic">No missing keywords detected.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                <div>
+                  <h4 className="text-sm font-bold text-text mb-3">Relevant Projects from Resume</h4>
+                  <div className="flex flex-col gap-3">
+                    {intelligence.relevantProjects.map((project) => (
+                      <div key={`${project.name}-${project.description}`} className="bg-surface border border-border rounded-xl p-4 shadow-sm hover:border-primary/30 transition-colors">
+                        <strong className="block text-sm font-bold text-text mb-1">{project.name}</strong>
+                        <p className="text-xs text-text-secondary leading-relaxed mb-3 line-clamp-2">{project.description || "No description available."}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(project.technologies || []).map(t => (
+                            <span key={t} className="bg-bg-secondary border border-border px-2 py-0.5 rounded text-[10px] uppercase font-bold text-text-secondary tracking-wider">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {intelligence.relevantProjects.length === 0 && (
+                      <div className="bg-warning-bg border border-warning/20 p-4 rounded-xl">
+                        <p className="text-sm font-medium text-warning">No resume project clearly matches this JD yet. Do not fabricate one; improve your resume only with real evidence.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-text mb-3">Resume Content Suggestions</h4>
+                  <div className="flex flex-col gap-2">
+                    {intelligence.resumeImprovementSuggestions.slice(0, 4).map((item) => (
+                      <div key={item.skill} className="bg-bg-secondary border border-border rounded-lg p-3 text-sm">
+                        <strong className="text-primary block mb-1">{item.skill}</strong>
+                        <span className="text-text-secondary leading-relaxed">{item.suggestion}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            !intelligenceError && (
+              <div className="flex justify-center items-center py-8 text-text-secondary text-sm font-medium">
+                <Spinner size="md" className="mr-3" /> Loading application intelligence...
+              </div>
+            )
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

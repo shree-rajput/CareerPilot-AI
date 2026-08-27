@@ -8,6 +8,16 @@ const resumeSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    targetRole: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job",
+      default: null,
+    },
     name: {
       type: String,
       trim: true,
@@ -60,6 +70,37 @@ const resumeSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isDraft: {
+      type: Boolean,
+      default: false,
+    },
+    atsScore: {
+      type: Number,
+      default: null,
+    },
+    matchScore: {
+      type: Number,
+      default: null,
+    },
+    keywordCoverage: {
+      type: Number,
+      default: null,
+    },
+    missingSkills: {
+      type: [String],
+      default: [],
+    },
+    healthIndicators: {
+      ats: { type: Number, default: null },
+      match: { type: Number, default: null },
+      content: { type: Number, default: null },
+      clarity: { type: Number, default: null },
+      completeness: { type: Number, default: null },
+    },
+    aiSuggestions: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
   },
   { timestamps: true },

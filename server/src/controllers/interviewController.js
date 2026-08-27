@@ -9,6 +9,8 @@ import {
 import { AppError } from "../utils/errors.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { env } from "../config/env.js";
+import { groqTranscribe } from "../services/ai/groqProvider.js";
+import fs from "fs";
 
 // 1. Initialize a new interview session
 export async function createSession(req, res, next) {
@@ -331,6 +333,41 @@ export async function listSessions(req, res, next) {
       data: sessions
     });
   } catch (error) {
+    next(error);
+  }
+}
+
+// 7. Transcribe audio
+export async function transcribeAudio(req, res, next) {
+  try {
+    if (!req.file) {
+      throw new AppError("No audio file provided", 400);
+    }
+    
+    // Check AI limit
+    const limitCheck = await checkAiLimit(req.user._id, "mock_evaluation", env.aiLimitMockEvaluations);
+    if (!limitCheck.allowed) {
+      // Just fallback to returning empty text or let frontend handle it
+      throw new AppError("Daily AI limit reached. Please type your answer.", 429);
+    }
+
+    // Call Groq whisper API
+    const audioStream = fs.createReadStream(req.file.path);
+    const transcript = await groqTranscribe(audioStream);
+    
+    // Clean up temp file
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error("Failed to delete temp audio file:", err);
+    });
+
+    res.status(200).json({
+      success: true,
+      transcript
+    });
+  } catch (error) {
+    if (req.file && req.file.path) {
+      fs.unlink(req.file.path, () => {});
+    }
     next(error);
   }
 }

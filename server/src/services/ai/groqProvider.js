@@ -46,6 +46,8 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+import { getModelForRole } from "./modelRouter.js";
+
 /**
  * Send a chat completion request to Groq.
  *
@@ -59,11 +61,32 @@ function sleep(ms) {
  * @param {number} [options.temperature=0.3]
  * @param {number} [options.maxTokens=2048]
  * @param {boolean} [options.jsonMode=false]
+ * @param {string} [options.modelRole]
  * @returns {Promise<string>} - The assistant message content
  */
-export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, jsonMode = false } = {}) {
+export async function groqTranscribe(audioFileStream) {
   const client = getClient();
-  const model = env.groqModel;
+  try {
+    const transcription = await client.audio.transcriptions.create({
+      file: audioFileStream,
+      model: "whisper-large-v3",
+      response_format: "json",
+      language: "en"
+    });
+    return transcription.text;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      `Audio transcription failed: ${error.message || "unknown error"}`,
+      502,
+      "AI_TRANSCRIPTION_FAILED"
+    );
+  }
+}
+
+export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, jsonMode = false, modelRole } = {}) {
+  const client = getClient();
+  const model = getModelForRole(modelRole);
 
   assertCleanModel(model);
 

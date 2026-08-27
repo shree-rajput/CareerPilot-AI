@@ -13,6 +13,20 @@ const interviewSessionSchema = new mongoose.Schema(
       ref: "Application",
       default: null
     },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job",
+      default: null
+    },
+    projectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Project",
+      default: null
+    },
+    weaknessesToTest: {
+      type: [String],
+      default: []
+    },
     targetRole: {
       type: String,
       required: true,
