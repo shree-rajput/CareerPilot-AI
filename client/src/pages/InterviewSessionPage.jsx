@@ -395,7 +395,37 @@ export function InterviewSessionPage() {
           <Card className="flex-1 flex flex-col shadow-sm border-border min-h-[400px]">
             <CardContent className="p-6 md:p-8 flex-1 flex flex-col h-full">
               <div className="flex justify-between items-center mb-6">
-                <strong className="text-sm font-bold text-text-secondary uppercase tracking-widest">Your Answer Transcript</strong>
+                <div className="flex items-center gap-3">
+                  <strong className="text-sm font-bold text-text-secondary uppercase tracking-widest">Your Answer Transcript</strong>
+                  {/* Dynamic Speech Workflow Banner */}
+                  <span className="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm border" style={{
+                    backgroundColor: isProcessingSubmission ? '#eff6ff' : isRecording ? '#fef2f2' : isFetching ? '#fefce8' : 'rgba(255,255,255,0.05)',
+                    color: isProcessingSubmission ? '#1d4ed8' : isRecording ? '#dc2626' : isFetching ? '#ca8a04' : 'inherit',
+                    borderColor: isProcessingSubmission ? '#bfdbfe' : isRecording ? '#fca5a5' : isFetching ? '#fef08a' : 'rgba(255,255,255,0.1)'
+                  }}>
+                    {isProcessingSubmission ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
+                        Processing Answer...
+                      </>
+                    ) : isFetching ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-yellow-600 animate-ping"></span>
+                        AI Thinking...
+                      </>
+                    ) : isRecording ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                        Listening...
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        Your Turn — Click Record to Speak
+                      </>
+                    )}
+                  </span>
+                </div>
                 {isRecording && (
                   <div className="flex items-center gap-2 text-danger font-bold text-sm bg-danger-bg px-3 py-1 rounded-full border border-danger/20">
                     <div className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse"></div>

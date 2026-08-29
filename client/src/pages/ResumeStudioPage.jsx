@@ -1,14 +1,24 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { resumeApi } from "../api/resume";
 import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
-import { AlertTriangle, Sparkles, Layout, Save, CheckCircle, Clock } from "lucide-react";
+import { AlertTriangle, Sparkles, Layout, Save, CheckCircle, Clock, GitCompare, ArrowUpDown } from "lucide-react";
 import ResumeEditor from "../components/resume/ResumeEditor";
 import ResumePreview from "../components/resume/ResumePreview";
 import ResumeIntelligence from "../components/resume/ResumeIntelligence";
 import api from "../api/axios";
-import debounce from "lodash/debounce";
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 
 export function ResumeStudioPage() {
   const { id } = useParams();
@@ -20,8 +30,15 @@ export function ResumeStudioPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState("saved"); // saved, saving, error
   
-  // Right panel view: "preview" or "intelligence"
+  // Right panel views: "preview", "intelligence", or "diff"
   const [rightPanel, setRightPanel] = useState("preview");
+
+  // Version Diff states
+  const [versions, setVersions] = useState([]);
+  const [compareVersionId, setCompareVersionId] = useState("");
+  const [diffData, setDiffData] = useState(null);
+  const [loadingDiff, setLoadingDiff] = useState(false);
+  const [diffError, setDiffError] = useState("");
 
   useEffect(() => {
     loadResume();
@@ -30,17 +47,52 @@ export function ResumeStudioPage() {
   const loadResume = async () => {
     try {
       setLoading(true);
+      setError("");
       const data = await resumeApi.getOne(id);
       setResume(data.resume);
       setStructuredData(data.resume.structuredData || {});
+      
+      // Load available versions for diff comparison
+      const baseId = data.resume.parentVersionId || data.resume._id;
+      const versionsData = await resumeApi.getVersions(baseId);
+      if (versionsData?.versions) {
+        // Filter out current version from comparison selection
+        const otherVersions = versionsData.versions.filter(v => v._id !== id);
+        setVersions(otherVersions);
+        if (otherVersions.length > 0) {
+          setCompareVersionId(otherVersions[0]._id);
+        }
+      }
     } catch (err) {
-      setError("Failed to load resume");
+      console.error(err);
+      setError("Failed to load resume workspace.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Debounced save
+  // Trigger diff comparison when selected version changes
+  useEffect(() => {
+    if (compareVersionId && rightPanel === "diff") {
+      fetchDiff();
+    }
+  }, [compareVersionId, rightPanel]);
+
+  const fetchDiff = async () => {
+    try {
+      setLoadingDiff(true);
+      setDiffError("");
+      const diff = await resumeApi.getDiff(compareVersionId, id);
+      setDiffData(diff);
+    } catch (err) {
+      console.error(err);
+      setDiffError("Failed to calculate version difference.");
+    } finally {
+      setLoadingDiff(false);
+    }
+  };
+
+  // Debounced save draft
   const debouncedSaveDraft = useCallback(
     debounce(async (dataToSave) => {
       try {
@@ -64,10 +116,10 @@ export function ResumeStudioPage() {
     try {
       setSaving(true);
       const res = await api.post(`/resumes/${id}/version`, {
-        versionName: `${resume.name} (Saved)`,
+        versionName: `${resume.name} (v${resume.version + 1})`,
         structuredData
       });
-      // Navigate to the new version's studio or just back to resumes list
+      // Navigate to the new version's studio
       navigate(`/resume/studio/${res.data.data._id}`);
     } catch (err) {
       setError("Failed to save version");
@@ -81,23 +133,34 @@ export function ResumeStudioPage() {
   if (!resume) return <div className="p-10">Resume not found</div>;
 
   return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden animate-in fade-in">
-      {/* LEFT: EDITOR (Scrollable) */}
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden animate-in fade-in bg-bg">
+      
+      {/* LEFT PANEL: RESUME EDITOR (Scrollable) */}
       <div className="w-1/2 flex flex-col border-r border-border bg-bg-secondary">
         <div className="p-4 bg-surface border-b border-border flex justify-between items-center z-10 shadow-sm">
           <div>
-            <h1 className="font-bold text-lg text-text truncate max-w-[300px]">{resume.name}</h1>
-            <div className="flex items-center gap-2 text-xs text-text-secondary mt-1">
-              {resume.isDraft ? <span className="text-warning flex items-center gap-1"><Clock size={12}/> Draft</span> : <span className="text-success flex items-center gap-1"><CheckCircle size={12}/> Saved Version</span>}
-              <span>• Version {resume.version}</span>
-              <span className="flex items-center gap-1">
-                {saveStatus === "saving" ? <Spinner size="xs" /> : saveStatus === "error" ? <AlertTriangle size={12} className="text-danger" /> : <CheckCircle size={12} className="text-success" />}
+            <h1 className="font-bold text-sm text-text truncate max-w-[280px] m-0">{resume.name}</h1>
+            <div className="flex items-center gap-2 text-[10px] text-text-secondary mt-1">
+              {resume.isDraft ? (
+                <span className="text-warning font-bold flex items-center gap-1"><Clock size={10}/> Draft</span>
+              ) : (
+                <span className="text-success font-bold flex items-center gap-1"><CheckCircle size={10}/> Saved</span>
+              )}
+              <span className="font-bold">• Version {resume.version}</span>
+              <span className="flex items-center gap-1 font-semibold">
+                {saveStatus === "saving" ? (
+                  <Spinner size="xs" />
+                ) : saveStatus === "error" ? (
+                  <AlertTriangle size={10} className="text-danger" />
+                ) : (
+                  <CheckCircle size={10} className="text-success" />
+                )}
                 {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Save failed" : "All changes saved"}
               </span>
             </div>
           </div>
-          <Button variant="primary" size="sm" onClick={handleSaveVersion} disabled={saving} className="flex items-center gap-2">
-            <Save size={16} /> Save as New Version
+          <Button variant="primary" size="xs" onClick={handleSaveVersion} disabled={saving} className="flex items-center gap-1">
+            <Save size={14} /> Commit Version
           </Button>
         </div>
         
@@ -106,33 +169,140 @@ export function ResumeStudioPage() {
         </div>
       </div>
 
-      {/* RIGHT: PREVIEW / INTELLIGENCE (Scrollable/Fixed) */}
+      {/* RIGHT PANEL: INTERACTIVE SWITCHBOARD */}
       <div className="w-1/2 flex flex-col bg-bg">
         <div className="p-2 border-b border-border flex gap-2 bg-surface">
           <Button 
             variant={rightPanel === "preview" ? "primary" : "outline"} 
-            size="sm" 
-            className="flex-1 flex items-center justify-center gap-2"
+            size="xs" 
+            className="flex-1 flex items-center justify-center gap-1"
             onClick={() => setRightPanel("preview")}
           >
-            <Layout size={16} /> Live Preview
+            <Layout size={14} /> Preview
           </Button>
           <Button 
             variant={rightPanel === "intelligence" ? "primary" : "outline"} 
-            size="sm" 
-            className="flex-1 flex items-center justify-center gap-2"
+            size="xs" 
+            className="flex-1 flex items-center justify-center gap-1"
             onClick={() => setRightPanel("intelligence")}
           >
-            <Sparkles size={16} /> Intelligence & ATS
+            <Sparkles size={14} /> Intelligence
+          </Button>
+          <Button 
+            variant={rightPanel === "diff" ? "primary" : "outline"} 
+            size="xs" 
+            className="flex-1 flex items-center justify-center gap-1"
+            onClick={() => setRightPanel("diff")}
+          >
+            <GitCompare size={14} /> Version Diff
           </Button>
         </div>
         
+        {/* Workspace Display Area */}
         <div className="flex-1 overflow-y-auto bg-[#525659] p-6 relative">
-           {rightPanel === "preview" ? (
-              <ResumePreview data={structuredData} />
-           ) : (
-              <ResumeIntelligence resumeId={id} structuredData={structuredData} />
-           )}
+          
+          {rightPanel === "preview" && (
+            <ResumePreview data={structuredData} />
+          )}
+
+          {rightPanel === "intelligence" && (
+            <ResumeIntelligence resumeId={id} structuredData={structuredData} />
+          )}
+
+          {rightPanel === "diff" && (
+            <div className="bg-surface rounded-xl border border-border p-6 shadow-lg max-w-2xl mx-auto flex flex-col gap-6 h-full overflow-hidden">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-border pb-4">
+                <div>
+                  <h3 className="text-sm font-extrabold text-text m-0 flex items-center gap-1.5">
+                    <GitCompare size={16} className="text-primary" /> Version Comparisons
+                  </h3>
+                  <p className="text-[10px] text-text-secondary m-0 mt-0.5 font-medium">Compare current edits with past commits.</p>
+                </div>
+                
+                {versions.length > 0 ? (
+                  <div className="flex items-center gap-2 bg-bg-secondary border border-border px-3 py-1 rounded-lg">
+                    <span className="text-[10px] font-bold text-text-secondary uppercase">Compare:</span>
+                    <select 
+                      className="bg-transparent border-0 outline-none text-xs font-bold text-text cursor-pointer"
+                      value={compareVersionId}
+                      onChange={(e) => setCompareVersionId(e.target.value)}
+                    >
+                      {versions.map(v => (
+                        <option key={v._id} value={v._id}>Version {v.version} ({v.name || "Unnamed"})</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <span className="text-[10px] font-bold text-text-secondary">No other versions to compare.</span>
+                )}
+              </div>
+
+              {loadingDiff ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                  <Spinner className="text-primary" />
+                  <span className="text-[10px] font-semibold text-text-secondary">Generating diff analysis...</span>
+                </div>
+              ) : diffError ? (
+                <div className="text-center p-6 text-danger text-xs font-medium bg-danger-bg rounded-lg border border-danger/10">
+                  {diffError}
+                </div>
+              ) : diffData ? (
+                <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                  
+                  {/* Diff Summary Indicators */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-success/5 border border-success/15 p-2.5 rounded-lg flex flex-col items-center">
+                      <span className="text-[10px] font-bold text-success uppercase leading-none">Words Added</span>
+                      <strong className="text-lg font-black text-success mt-1">{diffData.diff?.summary?.added || 0}</strong>
+                    </div>
+                    <div className="bg-danger/5 border border-danger/15 p-2.5 rounded-lg flex flex-col items-center">
+                      <span className="text-[10px] font-bold text-danger uppercase leading-none">Words Removed</span>
+                      <strong className="text-lg font-black text-danger mt-1">{diffData.diff?.summary?.removed || 0}</strong>
+                    </div>
+                    <div className="bg-bg-secondary border border-border p-2.5 rounded-lg flex flex-col items-center">
+                      <span className="text-[10px] font-bold text-text-secondary uppercase leading-none">Unchanged</span>
+                      <strong className="text-lg font-black text-text mt-1">{diffData.diff?.summary?.unchanged || 0}</strong>
+                    </div>
+                  </div>
+
+                  {/* Character Highlight Diff Block */}
+                  <div className="flex-1 overflow-y-auto border border-border rounded-lg p-4 bg-bg-secondary/40 font-mono text-xs leading-relaxed max-h-[300px]">
+                    {diffData.diff?.parts && diffData.diff.parts.length > 0 ? (
+                      diffData.diff.parts.map((part, index) => {
+                        if (part.added) {
+                          return (
+                            <ins 
+                              key={index} 
+                              className="bg-success/20 text-success-dark font-extrabold no-underline px-1 border-b border-success rounded"
+                            >
+                              {part.value}
+                            </ins>
+                          );
+                        }
+                        if (part.removed) {
+                          return (
+                            <del 
+                              key={index} 
+                              className="bg-danger/20 text-danger-dark line-through px-1 border-b border-danger rounded opacity-80"
+                            >
+                              {part.value}
+                            </del>
+                          );
+                        }
+                        return <span key={index} className="text-text-secondary">{part.value}</span>;
+                      })
+                    ) : (
+                      <span className="text-text-secondary italic">Versions are identical.</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-text-secondary italic text-xs">
+                  Select a version above to view modifications.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

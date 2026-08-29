@@ -73,6 +73,54 @@ const userSchema = new mongoose.Schema(
     interviewPreferences: {
       type: interviewPreferencesSchema,
       default: () => ({})
+    },
+
+    // Final Phase Extended Fields: Readiness, Onboarding, and Mentorship
+    readinessScore: { type: Number, default: -1 },
+    readinessBreakdown: {
+      resume: { type: Number, default: -1 },
+      technical: { type: Number, default: -1 },
+      interview: { type: Number, default: -1 },
+      projects: { type: Number, default: -1 },
+      applications: { type: Number, default: -1 },
+      preparation: { type: Number, default: -1 },
+      profile: { type: Number, default: 0 },
+      communication: { type: Number, default: -1 },
+      careerStrategy: { type: Number, default: -1 }
+    },
+    readinessHistory: {
+      type: [{
+        score: { type: Number, required: true },
+        date: { type: Date, default: Date.now },
+        changeReason: { type: String, default: "" }
+      }],
+      default: []
+    },
+    dismissedActions: { type: [String], default: [] },
+    snoozedActions: {
+      type: [{
+        actionId: { type: String, required: true },
+        snoozeUntil: { type: Date, required: true }
+      }],
+      default: []
+    },
+    completedActions: { type: [String], default: [] },
+    mentorStatus: {
+      type: String,
+      enum: ["none", "pending", "approved", "suspended"],
+      default: "none"
+    },
+    mentorProfile: {
+      role: { type: String, trim: true, default: "" },
+      company: { type: String, trim: true, default: "" },
+      experienceYears: { type: Number, default: 0 },
+      skills: { type: [String], default: [] },
+      specialties: { type: [String], default: [] },
+      availability: { type: [String], default: [] },
+      bio: { type: String, trim: true, default: "" },
+      rating: { type: Number, default: 4.8 },
+      reviewsCount: { type: Number, default: 0 },
+      topics: { type: [String], default: [] }
     }
   },
   { timestamps: true }

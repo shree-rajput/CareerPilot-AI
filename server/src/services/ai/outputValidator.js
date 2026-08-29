@@ -70,6 +70,9 @@ export function validateOutput(parsedJson, schema) {
   if (!parsedJson) {
     throw new AppError("Failed to extract JSON from AI output.", 500, "VALIDATION_ERROR");
   }
+  if (!schema) {
+    return parsedJson;
+  }
   const result = schema.safeParse(parsedJson);
   if (!result.success) {
     throw new AppError(`Schema validation failed: ${result.error.message}`, 500, "SCHEMA_MISMATCH");

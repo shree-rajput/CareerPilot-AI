@@ -127,7 +127,16 @@ import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
 
 export async function getCopilotSuggestion(req, res) {
   try {
+    const { roomId } = req.params;
     const { currentQuestion, context } = req.body;
+    
+    if (roomId) {
+      const room = await PeerInterviewRoom.findOne({ roomId });
+      if (room && room.interviewerId && room.interviewerId.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: "Only the interviewer can access AI Copilot suggestions." });
+      }
+    }
+
     const result = await generateCopilotSuggestion({ currentQuestion, context });
     return res.status(200).json({ success: true, data: result });
   } catch (error) {
@@ -160,6 +169,12 @@ export async function endInterview(req, res) {
 
     const room = await PeerInterviewRoom.findOne({ roomId });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+
+    // Only interviewer or creator can end the interview
+    const isInterviewer = room.interviewerId?.toString() === req.user._id.toString() || room.createdBy?.toString() === req.user._id.toString();
+    if (!isInterviewer) {
+      return res.status(403).json({ success: false, message: "Only the interviewer can end this interview session." });
+    }
 
     room.status = "completed";
     room.endedAt = new Date();

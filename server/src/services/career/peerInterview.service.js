@@ -102,27 +102,13 @@ export async function joinPeerInterviewRoom({ roomId, userId, requestedRole }) {
     throw error;
   }
 
-  let role = requestedRole;
-
-  if (!role) {
-    role = room.interviewerId ? "interviewee" : "interviewer";
+  // Creator is ALWAYS interviewer, joining user is ALWAYS interviewee
+  let role = "interviewee";
+  if (userId.toString() === room.createdBy.toString()) {
+    role = "interviewer";
   }
 
-  if (!["interviewer", "interviewee"].includes(role)) {
-    const error = new Error("Invalid interview role");
-    error.statusCode = 400;
-    error.code = "INVALID_ROLE";
-    throw error;
-  }
-
-  if (role === "interviewer" && room.interviewerId) {
-    const error = new Error("Interviewer role is already occupied");
-    error.statusCode = 409;
-    error.code = "ROLE_OCCUPIED";
-    throw error;
-  }
-
-  if (role === "interviewee" && room.intervieweeId) {
+  if (role === "interviewee" && room.intervieweeId && room.intervieweeId.toString() !== userId.toString()) {
     const error = new Error("Interviewee role is already occupied");
     error.statusCode = 409;
     error.code = "ROLE_OCCUPIED";

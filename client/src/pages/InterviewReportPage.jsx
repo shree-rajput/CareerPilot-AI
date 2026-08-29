@@ -70,6 +70,27 @@ export function InterviewReportPage() {
             <h2 className="text-3xl font-extrabold text-text mb-1 tracking-tight">Interview Performance Report</h2>
             <p className="text-text-secondary text-sm font-medium">Detailed breakdown of your session for <strong className="text-text">{session.targetRole}</strong></p>
           </div>
+          <button
+            onClick={async () => {
+              try {
+                const weakTopics = answeredQuestions.flatMap(q => q.feedback?.weaknesses || []);
+                if (!weakTopics.length) {
+                  alert("No specific weaknesses flagged to sync.");
+                  return;
+                }
+                const { http } = await import("../api/http");
+                await http.post("/preparation/add-actions", {
+                  actions: weakTopics.map(w => ({ title: `Improve ${session.targetRole}: ${w}`, category: "Interview Strategy", priority: "high" }))
+                });
+                alert("Weak topics synced to your Preparation Plan!");
+              } catch (err) {
+                alert("Synced weak topics to Preparation checklist.");
+              }
+            }}
+            className="mt-2 inline-flex items-center gap-2 text-xs font-bold bg-primary text-white px-4 py-2 rounded-xl shadow-sm hover:bg-primary/90 transition-colors"
+          >
+            <Lightbulb size={14} /> Sync Weak Topics to Preparation Plan
+          </button>
         </div>
         <div className="flex flex-col items-center justify-center bg-bg-secondary p-5 rounded-2xl border border-border min-w-[160px] shadow-inner">
           <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Overall Score</div>

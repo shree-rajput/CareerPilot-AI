@@ -1,11 +1,9 @@
 import { Resume } from "../models/Resume.js";
 import { Job } from "../models/Job.js";
 import { Application } from "../models/Application.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createError } from "../utils/error.js";
-import { validateStructuredData } from "../utils/resumeParser.js";
+import { analyzeResumeAgainstJob, getInlineResumeSuggestion } from "../services/resume/resumeIntelligenceService.js";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export const saveDraft = async (req, res, next) => {
   try {
@@ -99,112 +97,31 @@ export const analyzeAgainstJob = async (req, res, next) => {
     const { id } = req.params;
     const { jobId } = req.body;
 
-    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
-    if (!resume) {
-      return next(createError(404, "Resume not found."));
-    }
-
-    const job = await Job.findById(jobId);
-    if (!job) {
-      return next(createError(404, "Job not found."));
-    }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro", generationConfig: { responseMimeType: "application/json" } });
-    
-    const prompt = `
-    Analyze this resume against the following job description.
-    Do NOT fabricate scores. If data is insufficient, note it.
-    
-    Job Description:
-    ${job.description}
-    ${job.requirements?.join("\n")}
-    
-    Resume Data:
-    ${JSON.stringify(resume.structuredData)}
-    
-    Return a JSON object with:
-    {
-      "matchScore": number (0-100),
-      "atsScore": number (0-100),
-      "keywordCoverage": number (0-100),
-      "missingSkills": [string],
-      "foundSkills": [string],
-      "healthIndicators": {
-        "ats": number,
-        "match": number,
-        "content": number,
-        "clarity": number,
-        "completeness": number
-      },
-      "aiSuggestions": [
-        {
-          "section": string (e.g. "experience", "skills"),
-          "sourceText": string (the text to improve),
-          "suggestedText": string (the proposed improvement),
-          "reason": string (why this improves the resume),
-          "risk": string ("low", "medium", "high")
-        }
-      ]
-    }
-    
-    Ensure suggestions are grounded in the user's actual resume data. Do not invent experience.
-    `;
-
-    const result = await model.generateContent(prompt);
-    const analysis = JSON.parse(result.response.text());
-
-    resume.matchScore = analysis.matchScore;
-    resume.atsScore = analysis.atsScore;
-    resume.keywordCoverage = analysis.keywordCoverage;
-    resume.missingSkills = analysis.missingSkills;
-    resume.healthIndicators = analysis.healthIndicators;
-    resume.aiSuggestions = analysis.aiSuggestions;
-    
-    await resume.save();
+    const analysis = await analyzeResumeAgainstJob(id, jobId, req.user.id);
 
     res.status(200).json({
       success: true,
       data: analysis,
       message: "Analysis complete.",
     });
-
   } catch (error) {
     next(error);
   }
 };
 
 export const getInlineAiSuggestion = async (req, res, next) => {
-    try {
-        const { text, context, instruction } = req.body;
-        
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `
-        You are an expert resume writer. 
-        The user has selected the following text from their resume:
-        "${text}"
-        
-        Context (which section it belongs to):
-        "${context}"
-        
-        Instruction from user:
-        "${instruction}"
-        
-        Provide an improved version of the text based on the instruction.
-        CRITICAL: DO NOT invent fake metrics, fake companies, or fake skills. Only improve the phrasing, impact, and clarity of the existing factual content.
-        
-        Return ONLY the improved text, nothing else. No markdown formatting.
-        `;
-        
-        const result = await model.generateContent(prompt);
-        const suggestion = result.response.text().trim();
-        
-        res.status(200).json({
-            success: true,
-            data: suggestion
-        });
-    } catch (error) {
-        next(error);
-    }
+  try {
+    const { text, context, instruction } = req.body;
+    
+    const suggestion = await getInlineResumeSuggestion(text, context, instruction);
+    
+    res.status(200).json({
+      success: true,
+      data: suggestion
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 function calculateBasicATS(structuredData) {

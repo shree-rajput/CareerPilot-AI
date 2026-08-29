@@ -21,7 +21,8 @@ export function PreparationPage() {
     setLoading(true);
     try {
       const res = await preparationApi.getActivePlan();
-      setActivePlan(res.data || res || null);
+      const planObj = res?.data !== undefined ? res.data : res;
+      setActivePlan(planObj && planObj._id ? planObj : null);
     } catch (err) {
       if (err.response?.status === 404) {
         setActivePlan(null); // No active plan is fine
@@ -38,7 +39,8 @@ export function PreparationPage() {
     setGenerating(true);
     try {
       const res = await preparationApi.generateDailyPlan(form);
-      setActivePlan(res.data || res);
+      const planObj = res?.data !== undefined ? res.data : res;
+      setActivePlan(planObj && planObj._id ? planObj : null);
     } catch (err) {
       alert("Failed to generate plan.");
     } finally {
@@ -146,12 +148,12 @@ export function PreparationPage() {
               Target: <span className="text-text">{activePlan.targetRole}</span>
             </span>
             <span className="text-sm font-medium text-text-secondary ml-auto">
-              {activePlan.actionItems.filter(i => i.status === 'completed').length} / {activePlan.actionItems.length} completed
+              {(activePlan.actionItems || []).filter(i => i.status === 'completed').length} / {(activePlan.actionItems || []).length} completed
             </span>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {activePlan.actionItems.map(item => (
+            {(activePlan.actionItems || []).map(item => (
               <Card 
                 key={item._id} 
                 className={`transition-all duration-200 ${item.status === 'completed' ? 'opacity-60 bg-bg-secondary' : 'bg-surface hover:shadow-md border-border'}`}

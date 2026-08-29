@@ -15,10 +15,8 @@ export default function AIAssistantPanel({ plan = [], roomId, currentCode = "", 
   const [codeReview, setCodeReview] = useState(null);
   const [reviewError, setReviewError] = useState(null);
 
-  if (role !== "interviewer") {
-    return null; // Interviewee does not see this panel
-  }
-
+  const isInterviewer = role === "interviewer";
+  
   const getSuggestion = async () => {
     try {
       setCopilotLoading(true);

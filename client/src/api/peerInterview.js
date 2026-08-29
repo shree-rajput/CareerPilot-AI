@@ -57,3 +57,13 @@ export const getCodingQuestion = async (sessionId) => {
 
   return response.data;
 };
+
+export const executeCode = async (sessionId, questionId, language, code) => {
+  const response = await http.post(`/interview/${sessionId}/execute`, {
+    questionId,
+    language,
+    code,
+  });
+
+  return response.data;
+};

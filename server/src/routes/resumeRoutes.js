@@ -3,6 +3,7 @@ import multer from "multer";
 import {
   deleteResume,
   diffResumeVersions,
+  downloadResume,
   getResume,
   getResumes,
   getResumeVersions,
@@ -33,6 +34,7 @@ resumeRouter.get("/diff", diffResumeVersions);
 resumeRouter.get("/:id", getResume);
 resumeRouter.delete("/:id", deleteResume);
 resumeRouter.get("/:id/versions", getResumeVersions);
+resumeRouter.get("/:id/download", downloadResume);
 
 resumeRouter.post("/:id/restore", restoreResumeVersion);
 

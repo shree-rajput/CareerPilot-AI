@@ -47,16 +47,21 @@ const normalizeLanguage = (language) => {
   return aliases[language.toLowerCase()] || language.toLowerCase();
 };
 
-const getStarterCode = (question, language) => {
-  if (!question?.starterCode) {
-    return "";
-  }
+const DEFAULT_STARTER_CODES = {
+  javascript: `/**\n * @param {any} input\n * @return {any}\n */\nfunction solution(input) {\n  // Write your JavaScript code here\n  return input;\n}`,
+  python: `# Solution function\ndef solution(input):\n    # Write your Python code here\n    return input\n`,
+  java: `public class Solution {\n    public Object solve(Object input) {\n        // Write your Java code here\n        return input;\n    }\n}`
+};
 
-  if (typeof question.starterCode === "string") {
+const getStarterCode = (question, language) => {
+  const norm = normalizeLanguage(language);
+  if (question?.starterCode && typeof question.starterCode === "object" && question.starterCode[norm]) {
+    return question.starterCode[norm];
+  }
+  if (typeof question?.starterCode === "string" && question.starterCode.trim() !== "") {
     return question.starterCode;
   }
-
-  return question.starterCode[language] || "";
+  return DEFAULT_STARTER_CODES[norm] || DEFAULT_STARTER_CODES.javascript;
 };
 
 export default function CodeEditor({
@@ -83,9 +88,12 @@ export default function CodeEditor({
   socket = null,
 }) {
   const availableLanguages = useMemo(() => {
-    return (question?.supportedLanguages || question?.languages || []).map(
-      normalizeLanguage,
-    );
+    const raw = (question?.supportedLanguages?.length > 0
+      ? question.supportedLanguages
+      : question?.languages?.length > 0
+      ? question.languages
+      : ["javascript", "python", "java"]);
+    return raw.map(normalizeLanguage);
   }, [question]);
 
   const firstLanguage =

@@ -40,16 +40,28 @@ export const runCode = async (req, res) => {
       });
     }
 
-    // 1. Verify interview session
+    // 1. Verify interview session or peer interview room
+    let userId = null;
     const session = await InterviewSession.findById(sessionId)
       .select("_id userId")
       .lean();
 
-    if (!session) {
+    if (session) {
+      userId = session.userId;
+    } else {
+      const peerRoom = await PeerInterviewRoom.findOne({ roomId: sessionId })
+        .select("_id createdBy")
+        .lean();
+      if (peerRoom) {
+        userId = peerRoom.createdBy;
+      }
+    }
+
+    if (!userId) {
       return res.status(404).json({
         success: false,
         code: "INTERVIEW_SESSION_NOT_FOUND",
-        message: "Interview session not found.",
+        message: "Interview session or room not found.",
       });
     }
 
@@ -95,7 +107,7 @@ export const runCode = async (req, res) => {
 
     // 6. Create submission
     const submission = await CodingSubmission.create({
-      candidateId: session.userId,
+      candidateId: userId || req.user._id,
       interviewSessionId: sessionId,
       questionId,
       language,

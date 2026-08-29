@@ -9,7 +9,9 @@ import {
   Target,
   Award,
   BookOpen,
-  FolderGit2
+  FolderGit2,
+  GraduationCap,
+  Code2
 } from "lucide-react";
 
 export const FEATURE_STATUS = {
@@ -87,6 +89,13 @@ export const FEATURES = [
     to: "/analytics", 
     label: "Analytics", 
     icon: BarChart3,
+    status: FEATURE_STATUS.WORKING 
+  },
+  { 
+    id: "mentorship",
+    to: "/mentorship", 
+    label: "AI Mentor Connect", 
+    icon: GraduationCap,
     status: FEATURE_STATUS.WORKING 
   },
   { 

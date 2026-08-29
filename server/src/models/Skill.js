@@ -13,7 +13,6 @@ const skillSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-skillSchema.index({ canonicalName: 1 });
 skillSchema.index({ aliases: 1 });
 
 export const Skill = mongoose.model("Skill", skillSchema);

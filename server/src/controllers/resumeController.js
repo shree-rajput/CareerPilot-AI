@@ -731,3 +731,29 @@ export const diffResumeVersions = asyncHandler(async (req, res) => {
     diff,
   });
 });
+
+/**
+ * GET /api/resume/:id/download
+ * Download exact snapshot of requested resume version.
+ */
+export const downloadResume = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  }).lean();
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  // If Cloudinary URL exists, redirect directly
+  if (resume.cloudinaryUrl) {
+    return res.redirect(resume.cloudinaryUrl);
+  }
+
+  // Fallback: Send formatted text attachment
+  const filename = `${(resume.name || "Resume").replace(/\s+/g, "_")}_v${resume.version}.txt`;
+  res.setHeader("Content-Type", "text/plain");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.send(resume.rawText || JSON.stringify(resume.structuredData, null, 2));
+});

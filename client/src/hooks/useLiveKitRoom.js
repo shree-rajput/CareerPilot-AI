@@ -14,7 +14,11 @@ export function useLiveKitRoom(roomId, enabled = true) {
         setLoading(true);
         setError("");
 
-        const data = await getLiveKitToken(roomId);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Room token request timed out after 10s")), 10000)
+        );
+
+        const data = await Promise.race([getLiveKitToken(roomId), timeoutPromise]);
         console.log("LIVEKIT DATA RECEIVED:", data);
 
         if (mounted) {
@@ -23,7 +27,7 @@ export function useLiveKitRoom(roomId, enabled = true) {
       } catch (err) {
         console.error("LiveKit connection failed:", err);
         if (mounted) {
-          setError(err?.response?.data?.message || err?.message || "Unable to join interview");
+          setError(err?.response?.data?.message || err?.message || "Unable to join interview room");
         }
       } finally {
         if (mounted) {

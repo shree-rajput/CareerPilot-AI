@@ -5,9 +5,11 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 
 import { registerPeerInterviewSocket } from "./sockets/peerInterview.socket.js";
+import { seedDefaultMentors } from "./scripts/seedMentors.js";
 
 async function bootstrap() {
   await connectDatabase();
+  await seedDefaultMentors();
 
   const app = createApp();
 

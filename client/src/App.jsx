@@ -24,6 +24,9 @@ import { JobDetailPage } from "./pages/JobDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { PreparationPage } from "./pages/PreparationPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { MentorshipPage } from "./pages/MentorshipPage";
+import { MentorDashboardPage } from "./pages/MentorDashboardPage";
+import { CodingPracticePage } from "./pages/CodingPracticePage";
 
 export function App() {
   return (
@@ -81,6 +84,11 @@ export function App() {
             />
 
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/coding" element={<CodingPracticePage />} />
+            <Route path="/coding/:id" element={<CodingPracticePage />} />
+            <Route path="/mentorship" element={<MentorshipPage />} />
+            <Route path="/mentor" element={<Navigate to="/mentor/dashboard" replace />} />
+            <Route path="/mentor/dashboard" element={<MentorDashboardPage />} />
           </Route>
         </Route>
       </Routes>

@@ -24,6 +24,8 @@ import skillRoutes from "./routes/skillRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
 import preparationRoutes from "./routes/preparationRoutes.js";
 import copilotRoutes from "./routes/copilotRoutes.js";
+import mentorRouter from "./routes/mentorRoutes.js";
+import codingRouter from "./routes/codingRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -57,6 +59,8 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api/profile", profileRouter);
   app.use("/api/resume", resumeRouter);
+  app.use("/api/resumes", resumeRouter); // Plural alias to resolve client-side 404 bugs
+  app.use("/api/mentors", mentorRouter); // Mentor ecosystem routes
   app.use("/api/applications", applicationRouter);
   app.use("/api/match", matchRouter);
   app.use("/api/tailor", tailoringRouter);
@@ -70,6 +74,7 @@ export function createApp() {
   app.use("/api/projects", projectRoutes);
   app.use("/api/preparation", preparationRoutes);
   app.use("/api/copilot", copilotRoutes);
+  app.use("/api/coding", codingRouter);
   app.use(notFound);
   app.use(errorHandler);
 

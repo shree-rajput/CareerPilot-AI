@@ -1,12 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
   FileText,
   LayoutDashboard,
   LogOut,
-  Mic,
-  Settings,
   Sparkles,
   Menu,
   X,
@@ -14,7 +12,12 @@ import {
   Target,
   Award,
   BookOpen,
-  FolderGit2
+  FolderGit2,
+  Search,
+  Bell,
+  Command,
+  Code2,
+  GraduationCap
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
@@ -28,16 +31,90 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Command Palette State
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const paletteInputRef = useRef(null);
+
+  // Notification Center State
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: "n1",
+      title: "Welcome to CareerPilot OS",
+      message: "Establish your profile and complete priority actions to raise your Readiness Score.",
+      read: false,
+      date: "Just now"
+    },
+    {
+      id: "n2",
+      title: "Demo Mentors Active",
+      message: "Demo mode is active. Five industry mock mentors are loaded and ready in the Matching Engine.",
+      read: false,
+      date: "5m ago"
+    }
+  ]);
+
+  // Handle Ctrl+K Command Palette Trigger
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Reset indices on query change
+  useEffect(() => {
+    setPaletteIndex(0);
+  }, [searchQuery]);
+
+  // Focus palette input on open
+  useEffect(() => {
+    if (commandPaletteOpen) {
+      setTimeout(() => paletteInputRef.current?.focus(), 50);
+    } else {
+      setSearchQuery("");
+    }
+  }, [commandPaletteOpen]);
 
   async function handleLogout() {
     await logout();
     navigate("/login", { replace: true });
   }
 
-  // Close mobile menu on route change
-  React.useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [location.pathname]);
+  // Filter features based on search query
+  const filteredFeatures = FEATURES.filter(item => 
+    item.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Keyboard navigation inside Palette
+  const handlePaletteKeyDown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setPaletteIndex((prev) => (prev + 1) % Math.max(filteredFeatures.length, 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setPaletteIndex((prev) => (prev - 1 + filteredFeatures.length) % Math.max(filteredFeatures.length, 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filteredFeatures[paletteIndex]) {
+        navigate(filteredFeatures[paletteIndex].to);
+        setCommandPaletteOpen(false);
+      }
+    } else if (e.key === "Escape") {
+      setCommandPaletteOpen(false);
+    }
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
 
   const SidebarContent = () => (
     <>
@@ -126,15 +203,74 @@ export function AppLayout() {
               <Menu size={20} />
             </button>
             <div className="hidden sm:block">
-              <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-0.5">Phase 1 Foundation</span>
-              <h1 className="text-lg font-bold text-text m-0 leading-tight">Welcome back, {user?.name || "Pilot"}</h1>
+              <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-0.5">Placement OS</span>
+              <h1 className="text-lg font-bold text-text m-0 leading-tight">Welcome back, {user?.name || "Candidate"}</h1>
             </div>
+
+            {/* Global Command Palette Trigger Button */}
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-secondary border border-border text-text-secondary hover:text-text text-xs font-semibold transition-all hover:bg-border/50 shadow-sm"
+            >
+              <Search size={14} />
+              <span className="hidden md:inline">Command Palette...</span>
+              <span className="bg-surface px-1.5 py-0.5 rounded border border-border text-[9px] font-mono font-bold tracking-wider text-text-secondary shadow-sm">Ctrl+K</span>
+            </button>
           </div>
-          <div className="flex items-center gap-3 bg-bg-secondary px-3 py-1.5 rounded-full border border-border shadow-sm cursor-pointer hover:bg-border transition-colors">
-            <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs">
-              {user?.name?.[0]?.toUpperCase() || "U"}
+
+          <div className="flex items-center gap-4">
+            {/* Notification Center Trigger */}
+            <div className="relative">
+              <button
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="relative p-2 rounded-full hover:bg-bg-secondary text-text-secondary hover:text-text transition-colors border border-transparent hover:border-border"
+              >
+                <Bell size={20} />
+                {notifications.some(n => !n.read) && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-danger animate-pulse"></span>
+                )}
+              </button>
+              
+              {notificationsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)}></div>
+                  <div className="absolute right-0 mt-2 w-80 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-bg-secondary">
+                      <span className="font-bold text-xs text-text">Notifications</span>
+                      <button
+                        onClick={markAllNotificationsRead}
+                        className="text-[10px] font-bold text-primary hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-text-secondary">No new alerts.</div>
+                      ) : (
+                        notifications.map(n => (
+                          <div key={n.id} className={`p-4 transition-colors hover:bg-bg-secondary ${n.read ? "opacity-75" : "bg-primary/5"}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <strong className="text-xs font-bold text-text leading-tight">{n.title}</strong>
+                              <span className="text-[9px] text-text-secondary">{n.date}</span>
+                            </div>
+                            <p className="text-[11px] text-text-secondary m-0 leading-normal">{n.message}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-            <span className="text-sm font-bold text-text hidden sm:inline-block truncate max-w-[150px]">{user?.email}</span>
+
+            {/* Profile Widget */}
+            <div className="flex items-center gap-3 bg-bg-secondary px-3 py-1.5 rounded-full border border-border shadow-sm">
+              <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs">
+                {user?.name?.[0]?.toUpperCase() || "U"}
+              </div>
+              <span className="text-sm font-bold text-text hidden sm:inline-block truncate max-w-[150px]">{user?.email}</span>
+            </div>
           </div>
         </header>
 
@@ -147,6 +283,76 @@ export function AppLayout() {
         {/* AI Copilot Floating Chat */}
         <CopilotChat />
       </main>
+
+      {/* Global Command Palette Modal Overlay */}
+      {commandPaletteOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4">
+          <div className="fixed inset-0 bg-text/40 backdrop-blur-sm transition-opacity" onClick={() => setCommandPaletteOpen(false)}></div>
+          
+          <div className="relative w-full max-w-xl bg-surface border border-border rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[400px] animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center border-b border-border px-4 py-3 gap-3">
+              <Search size={18} className="text-text-secondary" />
+              <input
+                ref={paletteInputRef}
+                type="text"
+                placeholder="Search command center features..."
+                className="flex-1 bg-transparent border-0 outline-none text-text text-sm placeholder-text-secondary font-medium w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handlePaletteKeyDown}
+              />
+              <button 
+                onClick={() => setCommandPaletteOpen(false)}
+                className="text-[10px] font-bold text-text-secondary border border-border px-1.5 py-0.5 rounded hover:bg-bg-secondary"
+              >
+                ESC
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto py-2">
+              {filteredFeatures.length === 0 ? (
+                <div className="p-8 text-center text-xs text-text-secondary font-medium">
+                  No matching features found.
+                </div>
+              ) : (
+                filteredFeatures.map((item, idx) => {
+                  const Icon = item.icon;
+                  const isSelected = idx === paletteIndex;
+                  return (
+                    <div
+                      key={item.to}
+                      onClick={() => {
+                        navigate(item.to);
+                        setCommandPaletteOpen(false);
+                      }}
+                      className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                        isSelected ? "bg-primary text-white" : "hover:bg-bg-secondary text-text-secondary"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon size={16} />
+                        <span className={`text-xs font-bold ${isSelected ? "text-white" : "text-text"}`}>
+                          {item.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isSelected && (
+                          <span className="text-[9px] uppercase tracking-widest font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">
+                            Select
+                          </span>
+                        )}
+                        <span className={`text-[10px] ${isSelected ? "text-white/60" : "text-text-secondary"}`}>
+                          {item.to}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

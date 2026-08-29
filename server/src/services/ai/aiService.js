@@ -59,23 +59,26 @@ export function buildFallbackInterviewEvaluation(params = {}, reason = "AI servi
   const communication = clampScore(75 - clarityPenalty);
 
   return {
-    technicalAccuracy: clampScore(conceptScore),
-    relevance: clampScore(relevance),
-    completeness: clampScore(completeness),
-    clarity,
-    structure,
-    communication,
-    feedback: {
-      strengths: words > 20
-        ? ["You provided enough content for a basic evaluation."]
-        : ["You attempted the question and created a starting point for improvement."],
-      weaknesses: [
-        "AI evaluation was unavailable, so this is a conservative rules-based review.",
-        expectedConcepts.length && conceptHits < expectedConcepts.length
-          ? `Your answer did not clearly mention: ${expectedConcepts.filter((concept) => !lowerTranscript.includes(String(concept).toLowerCase())).slice(0, 4).join(", ")}.`
-          : "Add more concrete implementation details and examples."
-      ].filter(Boolean)
-    },
+    relevance: words > 12 ? "Medium" : "Low",
+    correctness: conceptScore > 50 ? "Medium" : "Low",
+    depth: words > 30 ? "Medium" : "Low",
+    specificity: conceptHits > 0 ? "Medium" : "Low",
+    structure: structure > 50 ? "Medium" : "Low",
+    evidenceCollected: [
+      `Candidate spoke ${words} words.`,
+      `Candidate hit ${conceptHits} out of ${expectedConcepts.length} expected concepts.`
+    ],
+    strengths: words > 20
+      ? ["You provided enough content for a basic evaluation."]
+      : ["You attempted the question and created a starting point for improvement."],
+    weaknesses: [
+      "AI evaluation was unavailable, so this is a conservative rules-based review.",
+      expectedConcepts.length && conceptHits < expectedConcepts.length
+        ? `Your answer did not clearly mention: ${expectedConcepts.filter((concept) => !lowerTranscript.includes(String(concept).toLowerCase())).slice(0, 4).join(", ")}.`
+        : "Add more concrete implementation details and examples."
+    ].filter(Boolean),
+    missingConcepts: expectedConcepts.filter((concept) => !lowerTranscript.includes(String(concept).toLowerCase())),
+    confidence: "LOW",
     idealAnswer: {
       text: `A stronger answer should directly define the concept, explain how it works, give a concrete example from your actual experience, discuss trade-offs, and close with the result or learning.`,
       explanation: "This structure is useful because it stays specific, evidence-based, and easy for an interviewer to follow."
@@ -139,5 +142,17 @@ export async function generateCopilotSuggestion(params) {
 
 export async function analyzeCodeSubmission(params) {
   return executeAiTask("ANALYZE_CODE", params);
+}
+
+export async function extractCandidateContext(params) {
+  return executeAiTask("EXTRACT_CANDIDATE_CONTEXT", params);
+}
+
+export async function adaptiveNextAction(params) {
+  return executeAiTask("ADAPTIVE_NEXT_ACTION", params);
+}
+
+export async function generateCoachingReport(params) {
+  return executeAiTask("GENERATE_COACHING_REPORT", params);
 }
 

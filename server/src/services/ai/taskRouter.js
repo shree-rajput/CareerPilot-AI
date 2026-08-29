@@ -1,13 +1,13 @@
 import { MODEL_ROLES } from "./modelRouter.js";
 import { jdStructureSchema } from "./schemas/jdSchema.js";
-import { resumeStructureSchema } from "./schemas/resumeSchema.js";
+import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
-import { interviewQuestionSchema, interviewEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema } from "./schemas/interviewSchema.js";
-import { projectKitSchema, prepPlanSchema, copilotChatSchema } from "./schemas/careerSchema.js";
+import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema } from "./schemas/interviewSchema.js";
+import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema } from "./schemas/careerSchema.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
 import { TAILORING_SYSTEM, buildTailoringPrompt } from "./prompts/resumeTailoring.js";
-import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt } from "./prompts/interviewPrompts.js";
+import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt } from "./prompts/interviewPrompts.js";
 import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt } from "./prompts/careerPrompts.js";
 
 import {
@@ -35,8 +35,35 @@ export const AI_TASKS = {
     modelRole: MODEL_ROLES.COMPLEX_REASONING,
     systemPrompt: "You are an expert technical interviewer evaluating a candidate's answer. Return only valid JSON.",
     buildPrompt: evaluateAnswerPrompt,
-    schema: interviewEvaluationSchema,
+    schema: evidenceEvaluationSchema,
     buildContext: buildInterviewEvaluationContext,
+    jsonMode: true
+  },
+  EXTRACT_CANDIDATE_CONTEXT: {
+    featureName: "extract candidate context",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are an expert technical interviewer preparing for an interview. Return only valid JSON.",
+    buildPrompt: extractCandidateContextPrompt,
+    schema: candidateContextSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  ADAPTIVE_NEXT_ACTION: {
+    featureName: "adaptive next action",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are an expert technical interviewer leading an interview. Return only valid JSON.",
+    buildPrompt: adaptiveActionPrompt,
+    schema: adaptiveActionSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GENERATE_COACHING_REPORT: {
+    featureName: "generate coaching report",
+    modelRole: MODEL_ROLES.COMPLEX_REASONING,
+    systemPrompt: "You are an expert career coach writing a feedback report. Return only valid JSON.",
+    buildPrompt: generateCoachingReportPrompt,
+    schema: coachingReportSchema,
+    buildContext: (params) => params,
     jsonMode: true
   },
   GENERATE_INTERVIEW_QUESTION: {
@@ -136,6 +163,51 @@ export const AI_TASKS = {
     buildPrompt: (context) => buildCopilotChatPrompt(context),
     schema: copilotChatSchema,
     buildContext: buildCopilotChatContext,
+    jsonMode: true
+  },
+  GENERATE_MENTOR_EXPLANATION: {
+    featureName: "mentor explanation",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a career consultant at CareerPilot AI. Write a short (1-2 sentences), highly encouraging, professional explanation of why a candidate matches with a specific mentor. Address target roles, target companies, and skill gaps relative to the mentor's profile. Return JSON with the field 'explanation'. Example: {\"explanation\": \"Rahul is a perfect match because...\"}",
+    buildPrompt: (context) => `Candidate Gaps: ${context.candidateGaps.join(", ")}\nCandidate Target Companies: ${context.targetCompanies.join(", ")}\nCandidate Target Roles: ${context.targetRoles.join(", ")}\nMentor Company: ${context.mentorCompany}\nMentor Role: ${context.mentorRole}\nMentor Skills: ${context.mentorSkills.join(", ")}\nMentor Bio: ${context.mentorBio}`,
+    schema: mentorExplanationSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GENERATE_PRE_SESSION_BRIEF: {
+    featureName: "mentorship pre-session brief",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a CareerPilot AI talent coordinator. Compile a structured pre-session summary for the mentor. Outline candidate background, weak areas, and project titles, and suggest focal points for the session. Focus on actionable insights, omit empty sections, and format in clean Markdown.",
+    buildPrompt: (context) => `Candidate: ${context.candidateName}\nTarget Roles: ${context.targetRoles.join(", ")}\nTarget Companies: ${context.targetCompanies.join(", ")}\nTechnical Skills: ${context.technicalSkills.join(", ")}\nWeak Skills: ${context.weakSkills.join(", ")}\nProjects: ${context.projects.join(", ")}\nMock Interview Average Score: ${context.interviewScore}%\nMentor Session Topic: ${context.topic}\nMentor Session Description: ${context.description}`,
+    schema: null,
+    buildContext: (params) => params,
+    jsonMode: false
+  },
+  GENERATE_POST_SESSION_SUMMARY: {
+    featureName: "mentorship post-session summary",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a career development coach. Convert raw notes and feedback from a mentorship session into a professional summary (key takeaways) and a clean list of concrete, actionable task items for the candidate. Return valid JSON containing fields 'summary' (clean markdown string summarizing the session) and 'actionItems' (array of strings, each a clear TODO task). Ensure task descriptions are specific and actionable.",
+    buildPrompt: (context) => `Session Topic: ${context.topic}\nMentor Feedback: ${context.mentorFeedback}\nRaw Mentor Notes: ${context.rawNotes}`,
+    schema: mentorSummarySchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  ANALYZE_RESUME_AGAINST_JOB: {
+    featureName: "resume job analysis",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a professional recruiting coordinator. Perform a comprehensive ATS compatibility analysis and match analysis for the given resume against the job description. Return valid JSON only.",
+    buildPrompt: (context) => `Resume: ${JSON.stringify(context.resumeData)}\nJob Description: ${context.jdText}\nRequirements: ${context.jdRequirements}`,
+    schema: resumeAnalysisResultSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GET_INLINE_RESUME_SUGGESTION: {
+    featureName: "inline resume suggestion",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are an expert resume writer. Improve the given resume bullet or text based on the user instructions. Keep descriptions factual, clear, and professional. Return valid JSON containing the field 'suggestion'.",
+    buildPrompt: (context) => `Text to improve: "${context.text}"\nSection context: "${context.context}"\nUser instructions: "${context.instruction}"`,
+    schema: inlineSuggestionSchema,
+    buildContext: (params) => params,
     jsonMode: true
   }
 };

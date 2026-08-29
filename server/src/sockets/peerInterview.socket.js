@@ -1,3 +1,5 @@
+const roomStates = new Map();
+
 export function registerPeerInterviewSocket(io) {
   io.on("connection", (socket) => {
     console.log(`Socket connected: ${socket.id}`);
@@ -8,12 +10,10 @@ export function registerPeerInterviewSocket(io) {
           code: "ROOM_ID_REQUIRED",
           message: "Room ID is required",
         });
-
         return;
       }
 
       socket.join(`interview:${roomId}`);
-
       socket.data.roomId = roomId;
 
       socket.to(`interview:${roomId}`).emit("room:participant-joined", {
@@ -23,14 +23,22 @@ export function registerPeerInterviewSocket(io) {
       socket.emit("room:joined", {
         roomId,
       });
+
+      // Send latest code & language snapshot to joining participant
+      const state = roomStates.get(roomId);
+      if (state) {
+        if (state.code) {
+          socket.emit("code:change", { code: state.code });
+        }
+        if (state.language) {
+          socket.emit("language:change", { language: state.language });
+        }
+      }
     });
 
     socket.on("disconnect", () => {
       const roomId = socket.data.roomId;
-
-      if (!roomId) {
-        return;
-      }
+      if (!roomId) return;
 
       socket.to(`interview:${roomId}`).emit("room:participant-left", {
         socketId: socket.id,
@@ -42,6 +50,10 @@ export function registerPeerInterviewSocket(io) {
     socket.on("code:change", (data) => {
       const roomId = socket.data.roomId;
       if (roomId) {
+        const state = roomStates.get(roomId) || {};
+        state.code = data.code;
+        roomStates.set(roomId, state);
+
         socket.to(`interview:${roomId}`).emit("code:change", data);
       }
     });
@@ -49,6 +61,10 @@ export function registerPeerInterviewSocket(io) {
     socket.on("language:change", (data) => {
       const roomId = socket.data.roomId;
       if (roomId) {
+        const state = roomStates.get(roomId) || {};
+        state.language = data.language;
+        roomStates.set(roomId, state);
+
         socket.to(`interview:${roomId}`).emit("language:change", data);
       }
     });

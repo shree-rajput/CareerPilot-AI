@@ -1,267 +1,86 @@
 import mongoose from "mongoose";
 
-const starterCodeSchema = new mongoose.Schema(
+const testResultSchema = new mongoose.Schema(
   {
-    javascript: {
-      type: String,
-      default: "",
-    },
-
-    typescript: {
-      type: String,
-      default: "",
-    },
-
-    python: {
-      type: String,
-      default: "",
-    },
-
-    java: {
-      type: String,
-      default: "",
-    },
-
-    cpp: {
-      type: String,
-      default: "",
-    },
-
-    c: {
-      type: String,
-      default: "",
-    },
-
-    csharp: {
-      type: String,
-      default: "",
-    },
-
-    go: {
-      type: String,
-      default: "",
-    },
-
-    rust: {
-      type: String,
-      default: "",
-    },
-
-    kotlin: {
-      type: String,
-      default: "",
-    },
+    testCaseId: { type: mongoose.Schema.Types.ObjectId },
+    passed: { type: Boolean, required: true },
+    actualOutput: { type: mongoose.Schema.Types.Mixed },
+    expectedOutput: { type: mongoose.Schema.Types.Mixed },
+    executionTimeMs: { type: Number, default: 0 },
+    error: { type: String, default: "" }
   },
-  { _id: false },
+  { _id: false }
 );
 
-const testCaseSchema = new mongoose.Schema(
+const codingSubmissionSchema = new mongoose.Schema(
   {
-    input: {
-      type: mongoose.Schema.Types.Mixed,
-      required: true,
-    },
-
-    expectedOutput: {
-      type: mongoose.Schema.Types.Mixed,
-      required: true,
-    },
-
-    explanation: {
-      type: String,
-      default: "",
-    },
-
-    hidden: {
-      type: Boolean,
-      default: false,
-    },
-
-    weight: {
-      type: Number,
-      default: 1,
-      min: 0,
-    },
-  },
-  {
-    _id: true,
-  },
-);
-
-const codingQuestionSchema = new mongoose.Schema(
-  {
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    description: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    difficulty: {
-      type: String,
-      enum: ["easy", "medium", "hard"],
-      required: true,
-      index: true,
-    },
-
-    topics: {
-      type: [String],
-      default: [],
-      index: true,
-    },
-
-    supportedLanguages: {
-      type: [String],
-      enum: [
-        "javascript",
-        "typescript",
-        "python",
-        "java",
-        "cpp",
-        "c",
-        "csharp",
-        "go",
-        "rust",
-        "kotlin",
-      ],
-      required: true,
-      default: ["javascript"],
-    },
-
-    defaultLanguage: {
-      type: String,
-      enum: [
-        "javascript",
-        "typescript",
-        "python",
-        "java",
-        "cpp",
-        "c",
-        "csharp",
-        "go",
-        "rust",
-        "kotlin",
-      ],
-      default: "javascript",
-    },
-
-    starterCode: {
-      type: starterCodeSchema,
-      default: () => ({}),
-    },
-
-    testCases: {
-      type: [testCaseSchema],
-      default: [],
-    },
-
-    constraints: {
-      type: [String],
-      default: [],
-    },
-
-    hints: {
-      type: [String],
-      default: [],
-    },
-
-    expectedComplexity: {
-      time: {
-        type: String,
-        default: "",
-      },
-
-      space: {
-        type: String,
-        default: "",
-      },
-    },
-
-    evaluationCriteria: {
-      correctness: {
-        type: Number,
-        default: 40,
-        min: 0,
-        max: 100,
-      },
-
-      codeQuality: {
-        type: Number,
-        default: 20,
-        min: 0,
-        max: 100,
-      },
-
-      timeComplexity: {
-        type: Number,
-        default: 20,
-        min: 0,
-        max: 100,
-      },
-
-      spaceComplexity: {
-        type: Number,
-        default: 10,
-        min: 0,
-        max: 100,
-      },
-
-      explanation: {
-        type: Number,
-        default: 10,
-        min: 0,
-        max: 100,
-      },
-    },
-
-    tags: {
-      type: [String],
-      default: [],
-    },
-
-    companyTags: {
-      type: [String],
-      default: [],
-    },
-
-    source: {
-      type: String,
-      enum: ["system", "admin", "ai_generated", "user_created"],
-      default: "system",
-    },
-
-    createdBy: {
+    candidateId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
+      index: true
+    },
+    interviewSessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InterviewSession",
       default: null,
+      index: true
     },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-      index: true,
+    questionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CodingQuestion",
+      required: true,
+      index: true
     },
-    skillsUpdated: {
-      type: Boolean,
-      default: false,
+    language: {
+      type: String,
+      required: true
     },
+    code: {
+      type: String,
+      required: true
+    },
+    status: {
+      type: String,
+      enum: ["completed", "failed"],
+      required: true
+    },
+    passedTests: {
+      type: Number,
+      required: true
+    },
+    totalTests: {
+      type: Number,
+      required: true
+    },
+    testResults: {
+      type: [testResultSchema],
+      default: []
+    },
+    runtimeMs: {
+      type: Number,
+      default: 0
+    },
+    memoryKb: {
+      type: Number,
+      default: 0
+    },
+    codeQualityScore: {
+      type: Number,
+      default: null
+    },
+    submittedAt: {
+      type: Date,
+      default: Date.now
+    }
   },
   {
-    timestamps: true,
-  },
+    timestamps: true
+  }
 );
 
-codingQuestionSchema.index({
-  difficulty: 1,
-  topics: 1,
-  isActive: 1,
-});
+codingSubmissionSchema.index({ candidateId: 1, questionId: 1, createdAt: -1 });
 
-const StarterCode = mongoose.model("StarterCode", starterCodeSchema);
+const CodingSubmission = mongoose.model("CodingSubmission", codingSubmissionSchema);
 
-export default StarterCode;
+export default CodingSubmission;

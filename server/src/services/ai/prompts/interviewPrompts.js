@@ -40,7 +40,8 @@ The JSON object must use EXACTLY these field names:
   "followUpStrategy": "<how to adapt after this answer>",
   "generationSource": "ai",
   "fallbackReason": ""
-}`;
+}
+Note: If adaptive action is provided, align the question generation with it.`;
 };
 
 export const evaluateAnswerPrompt = (params) => {
@@ -72,22 +73,87 @@ You MUST respond with ONLY a valid JSON object — no markdown, no explanation, 
 The JSON object must use EXACTLY these field names:
 
 {
-  "technicalAccuracy": <number 0-100>,
-  "relevance": <number 0-100>,
-  "completeness": <number 0-100>,
-  "clarity": <number 0-100>,
-  "structure": <number 0-100>,
-  "communication": <number 0-100>,
-  "feedback": {
-    "strengths": ["<strength 1>", "..."],
-    "weaknesses": ["<weakness 1>", "..."]
-  },
+  "relevance": "<High | Medium | Low>",
+  "correctness": "<High | Medium | Low>",
+  "depth": "<High | Medium | Low>",
+  "specificity": "<High | Medium | Low>",
+  "structure": "<High | Medium | Low>",
+  "evidenceCollected": ["<quote or specific point 1>", "<quote or specific point 2>"],
+  "strengths": ["<strength 1>", "..."],
+  "weaknesses": ["<weakness 1>", "..."],
+  "missingConcepts": ["<concept 1>", "..."],
+  "confidence": "<HIGH | MEDIUM | LOW>",
   "idealAnswer": {
     "text": "<well-structured example answer>",
     "explanation": "<why this answer is strong>"
   },
   "analysisSource": "ai",
   "fallbackReason": ""
+}`;
+};
+
+export const extractCandidateContextPrompt = (params) => {
+  return `You are an expert technical interviewer preparing for a mock interview.
+Review the candidate's resume and the job description to extract the necessary context.
+
+Candidate Resume:
+${params.resumeText || "No resume provided"}
+
+Job Description / Target Role:
+${params.jobDescription || params.targetRole}
+
+Provide a summary of their background relative to the role, their relevant skills, and potential gaps to probe.
+
+You MUST respond with ONLY a valid JSON object matching this structure:
+{
+  "summary": "<2-3 sentence summary>",
+  "relevantSkills": ["<skill1>", "<skill2>"],
+  "potentialGaps": ["<gap1>", "<gap2>"]
+}`;
+};
+
+export const adaptiveActionPrompt = (params) => {
+  return `You are an expert technical interviewer adapting an ongoing interview.
+
+Previous Question: ${params.previousQuestionText}
+Candidate's Answer Transcript: "${params.transcript}"
+Recent Evaluation: ${JSON.stringify(params.evaluation)}
+
+Decide the next logical step. Do you need to follow up, move forward, increase difficulty, clarify, or wrap up?
+Provide the specific next question text as well.
+
+You MUST respond with ONLY a valid JSON object matching this structure:
+{
+  "action": "<FOLLOW_UP | MOVE_FORWARD | INCREASE_DIFFICULTY | CLARIFY | WRAP_UP>",
+  "reason": "<Internal reasoning>",
+  "nextQuestionText": "<The actual text of the next question or follow-up>",
+  "expectedConcepts": ["<concept1>", "<concept2>"]
+}`;
+};
+
+export const generateCoachingReportPrompt = (params) => {
+  return `You are an expert career coach writing a final feedback report for a candidate after a mock interview.
+
+Target Role: ${params.targetRole}
+Interview History:
+${JSON.stringify(params.questions.map(q => ({ question: q.questionText, transcript: q.transcript, evaluation: q.evaluation })), null, 2)}
+
+Create a personalized, constructive coaching report based on the evidence from the interview.
+
+You MUST respond with ONLY a valid JSON object matching this structure:
+{
+  "overallAssessment": "<Professional, high-level summary>",
+  "whatYouDidWell": ["<strength1>", "<strength2>"],
+  "whatWentWrong": ["<weakness1>", "<weakness2>"],
+  "whyItWentWrong": "<Root-cause analysis>",
+  "howToImprove": ["<step1>", "<step2>"],
+  "practicePlan": [
+    {
+      "day": 1,
+      "focus": "<topic>",
+      "action": "<exercise>"
+    }
+  ]
 }`;
 };
 
@@ -107,10 +173,11 @@ You MUST respond with ONLY a valid JSON object matching this structure:
 {
   "plan": [
     {
-      "questionText": "<the topic or exact question>",
-      "category": "<e.g. Introduction, Behavioral, System Design, Coding, Wrap-up>",
+      "section": "<e.g. Introduction, Behavioral, Technical Core>",
+      "skill": "<e.g. React, Scalability>",
       "difficulty": "<easy|medium|hard>",
-      "expectedConcepts": ["<concept1>", "<concept2>"]
+      "objective": "<what to discover>",
+      "evaluationCriteria": ["<criteria1>", "<criteria2>"]
     }
   ]
 }

@@ -45,3 +45,32 @@ export const resumeStructureSchema = z.object({
   achievements: z.array(z.string()).default([]),
   parserSource: z.string().default("ai")
 });
+
+export const resumeAnalysisResultSchema = z.object({
+  matchScore: z.number().min(0).max(100),
+  atsScore: z.number().min(0).max(100),
+  keywordCoverage: z.number().min(0).max(100),
+  missingSkills: z.array(z.string()),
+  foundSkills: z.array(z.string()),
+  healthIndicators: z.object({
+    ats: z.number(),
+    match: z.number(),
+    content: z.number(),
+    clarity: z.number(),
+    completeness: z.number()
+  }),
+  aiSuggestions: z.array(
+    z.object({
+      section: z.string(),
+      sourceText: z.string(),
+      suggestedText: z.string(),
+      reason: z.string(),
+      risk: z.enum(["low", "medium", "high"])
+    })
+  )
+});
+
+export const inlineSuggestionSchema = z.object({
+  suggestion: z.string()
+});
+

@@ -47,4 +47,6 @@ export const resumeApi = {
     const { data } = await http.post(`/resume/${id}/restore`);
     return data;
   },
+
+  downloadUrl: (id) => `/api/resume/${id}/download`,
 };

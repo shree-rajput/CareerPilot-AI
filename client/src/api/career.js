@@ -38,3 +38,11 @@ export const copilotApi = {
   ask: (query) => http.post("/copilot/ask", { query }).then((res) => res.data),
 };
 
+// --- Readiness & Next Best Actions API ---
+export const readinessApi = {
+  getReadiness: () => http.get("/profile/readiness").then((res) => res.data),
+  getActions: () => http.get("/profile/actions").then((res) => res.data),
+  dismissAction: (actionId) => http.post(`/profile/actions/${actionId}/dismiss`).then((res) => res.data),
+  snoozeAction: (actionId, hours) => http.post(`/profile/actions/${actionId}/snooze`, { hours }).then((res) => res.data),
+};
+
