@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -8,14 +9,22 @@ import {
   Video,
   VideoOff,
   AlertTriangle,
+  Code2,
+  Play,
+  ChevronRight,
   Clock,
+  Loader2
 } from "lucide-react";
 import { interviewApi } from "../api/interview.js";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Card, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { useSpeech } from "../hooks/useSpeech.js";
+import AIAvatar from "../components/interview/AIAvatar.jsx";
+import CodeEditor from "../components/interview/CodeEditor/CodeEditor.jsx";
 
-// ─── Error message helpers ────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
+// Error message parser
+// ────────────────────────────────────────────────────────────
 function parseQuestionError(err) {
   const code = err?.response?.data?.code;
   const status = err?.response?.status;
@@ -23,7 +32,7 @@ function parseQuestionError(err) {
 
   if (code === "AI_RATE_LIMITED" || status === 429) {
     return serverMsg?.includes("Daily")
-      ? serverMsg // "Daily mock question limit reached (20/day). Try again tomorrow."
+      ? serverMsg
       : "AI service is temporarily busy. Please wait a moment and try again.";
   }
   if (code === "AI_INVALID_RESPONSE") {
@@ -32,198 +41,198 @@ function parseQuestionError(err) {
   if (code === "AI_NOT_CONFIGURED") {
     return "AI service is not configured on the server. Contact support.";
   }
-  if (status === 400) {
-    return serverMsg || "This session is already completed.";
-  }
-  if (status === 404) {
-    return "Interview session not found. Please start a new interview.";
-  }
+  if (status === 400) return serverMsg || "This session is already completed.";
+  if (status === 404) return "Interview session not found. Please start a new interview.";
   return "Failed to generate question. Please try again.";
 }
+
+// ────────────────────────────────────────────────────────────
+// Interview Session Page
+//
+// Phases:
+//   loading_first  → initial load
+//   questioning    → candidate can record / type answer
+//   submitting     → answer being evaluated
+//   evaluated      → AI reaction shown, Next Question visible
+//   loading_next   → fetching next question
+//   error          → fetch failed
+// ────────────────────────────────────────────────────────────
 
 export function InterviewSessionPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
 
-  // ── Core state ──────────────────────────────────────────────────────────────
-  const [isFetching, setIsFetching] = useState(false); // drives button disabled + UI
-  const [fetchStatus, setFetchStatus] = useState(null); // "generating" | "ready" | "error"
-  const [questionError, setQuestionError] = useState(null); // human-readable error string
-  const [currentQuestion, setCurrentQuestion] = useState(null);
+  // ── Core state ──────────────────────────────────────────
+  const [interviewPhase, setInterviewPhase] = useState("loading_first");
+  const [currentEntity, setCurrentEntity] = useState(null);
+  const [questionError, setQuestionError] = useState(null);
+  const [fetchStatus, setFetchStatus] = useState(null);
+  const [processingStep, setProcessingStep] = useState("");
 
-  // ── Recording / evaluation state ────────────────────────────────────────────
-  const { transcript, setTranscript, isRecording, startRecording, stopRecording, speakText } = useSpeech();
+  // ── Interviewer reaction (shown after answer evaluation) ──
+  const [interviewerReaction, setInterviewerReaction] = useState(null);
+
+  // ── Coding state ───────────────────────────────────────
+  const [currentCode, setCurrentCode] = useState("");
+  const [currentLanguage, setCurrentLanguage] = useState("javascript");
+  const [isRunningCode, setIsRunningCode] = useState(false);
+  const [executionResult, setExecutionResult] = useState(null);
+  const [codingResult, setCodingResult] = useState(null); // after submission
+
+  // ── Recording state ────────────────────────────────────
+  const { transcript, setTranscript, isRecording, isSpeaking, startRecording, stopRecording, speakText } = useSpeech();
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [evaluation, setEvaluation] = useState(null);
-  const [isProcessingSubmission, setIsProcessingSubmission] = useState(false);
-  const [processingStep, setProcessingStep] = useState(""); // "Evaluating answer..." | "Generating next question..."
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [recordTime, setRecordTime] = useState(0);
 
-  // ── Refs ────────────────────────────────────────────────────────────────────
-  const timerRef = useRef(null);
+  // ── Video ──────────────────────────────────────────────
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  // isFetchingRef is a synchronous guard that prevents concurrent requests
-  // even when React batches state updates. It is always in sync with isFetching.
+
+  // ── Timer ──────────────────────────────────────────────
+  const [sessionTime, setSessionTime] = useState(0);
+  const sessionTimerRef = useRef(null);
+
+  // ── Guards ─────────────────────────────────────────────
+  const timerRef = useRef(null);
   const isFetchingRef = useRef(false);
-  // Tracks the latest fetch so stale responses from cancelled calls are discarded
   const fetchIdRef = useRef(0);
+  const videoMetricsRef = useRef({ presenceScore: 100, checks: 0 });
 
-  const videoMetricsRef = useRef({ presenceScore: 0, checks: 0 });
-
-  // ── Camera init ─────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────
+  // Mount / Unmount
+  // ────────────────────────────────────────────────────────
   useEffect(() => {
     initCamera();
-
+    // Session timer
+    sessionTimerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      clearInterval(timerRef.current);
+      clearInterval(sessionTimerRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       window.speechSynthesis.cancel();
     };
   }, []);
 
-  // ── Fetch first question on mount (single call) ─────────────────────────────
-  // Using a separate effect with a mounted flag prevents React Strict Mode
-  // double-invocation from firing two concurrent fetch calls.
   useEffect(() => {
     let mounted = true;
-    async function loadFirstQuestion() {
-      await fetchNextQuestion({
-        forceFetch: true,
-        mountedRef: { current: mounted },
-      });
+    async function loadFirst() {
+      await fetchNextQuestion({ forceFetch: true, mountedRef: { current: mounted } });
     }
-    loadFirstQuestion();
-    return () => {
-      mounted = false;
-    };
+    loadFirst();
+    return () => { mounted = false; };
   }, []);
 
+  // ────────────────────────────────────────────────────────
+  // Camera
+  // ────────────────────────────────────────────────────────
   const initCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
-      console.error("Camera access denied or unavailable", err);
+      console.warn("Camera unavailable:", err);
       setIsVideoEnabled(false);
     }
   };
 
+  // ────────────────────────────────────────────────────────
+  // Fetch next question (with idempotency guard)
+  // ────────────────────────────────────────────────────────
+  const fetchNextQuestion = useCallback(async ({ forceFetch = false, mountedRef = null } = {}) => {
+    if (isFetchingRef.current && !forceFetch) return;
+    isFetchingRef.current = true;
 
+    const thisFetchId = ++fetchIdRef.current;
 
-  /**
-   * Fetch the next question from the backend.
-   *
-   * Guards:
-   *  1. isFetchingRef.current (sync ref) — prevents concurrent calls even before
-   *     React processes the setIsFetching(true) state update.
-   *  2. fetchId — each call gets an incremented ID; stale responses are discarded.
-   *  3. mountedRef — optional; if provided, stale updates after unmount are skipped.
-   *
-   * On 202 (pending stub already generating):
-   *  Wait 2.5 seconds and retry once. This covers the race window where two
-   *  requests arrived at the same time and one is waiting for the other.
-   */
-  const fetchNextQuestion = useCallback(
-    async ({ forceFetch = false, mountedRef = null } = {}) => {
-      // ── Synchronous guard — prevents double invocation ─────────────────────
-      if (isFetchingRef.current && !forceFetch) return;
-      isFetchingRef.current = true;
+    setInterviewPhase(currentEntity ? "loading_next" : "loading_first");
+    setFetchStatus("generating");
+    setQuestionError(null);
+    setTranscript("");
+    setRecordTime(0);
+    setExecutionResult(null);
+    setCodingResult(null);
+    setInterviewerReaction(null);
+    window.speechSynthesis.cancel();
 
-      const thisFetchId = ++fetchIdRef.current;
-
-      setIsFetching(true);
-      setFetchStatus("generating");
-      setQuestionError(null);
-      setEvaluation(null);
-      setTranscript("");
-      setRecordTime(0);
-      window.speechSynthesis.cancel();
-
+    try {
+      let response;
       try {
-        let response;
-        try {
+        response = await interviewApi.getNextQuestion(sessionId);
+      } catch (firstErr) {
+        if (firstErr?.response?.status === 202) {
+          await new Promise(r => setTimeout(r, 2500));
+          if (mountedRef && !mountedRef.current) return;
+          if (fetchIdRef.current !== thisFetchId) return;
           response = await interviewApi.getNextQuestion(sessionId);
-        } catch (firstErr) {
-          // ── Handle 202: another request is already generating ────────────
-          if (firstErr?.response?.status === 202) {
-            console.log(
-              "[Interview] Question generating on server, polling after 2.5s…",
-            );
-            await new Promise((r) => setTimeout(r, 2500));
-
-            if (mountedRef && !mountedRef.current) return; // unmounted
-            if (fetchIdRef.current !== thisFetchId) return; // superseded
-
-            // One retry after the backoff
-            response = await interviewApi.getNextQuestion(sessionId);
-          } else {
-            throw firstErr;
-          }
-        }
-
-        // Guard against stale / superseded fetches
-        if (mountedRef && !mountedRef.current) return;
-        if (fetchIdRef.current !== thisFetchId) return;
-
-        // Session completed
-        if (!response || response?.message === "Interview completed") {
-          navigate(`/interview/${sessionId}/report`);
-          return;
-        }
-
-        setCurrentQuestion(response);
-        setFetchStatus("ready");
-
-        // AI reads the question aloud
-        setTimeout(() => {
-          speakText(response.questionText);
-        }, 500);
-      } catch (err) {
-        if (mountedRef && !mountedRef.current) return;
-        if (fetchIdRef.current !== thisFetchId) return;
-
-        console.error("[Interview] fetchNextQuestion error:", err);
-        const message = parseQuestionError(err);
-        setQuestionError(message);
-        setFetchStatus("error");
-      } finally {
-        if (!mountedRef || mountedRef.current) {
-          setIsFetching(false);
-          isFetchingRef.current = false;
+        } else {
+          throw firstErr;
         }
       }
-    },
-    [sessionId, navigate],
-  );
 
+      if (mountedRef && !mountedRef.current) return;
+      if (fetchIdRef.current !== thisFetchId) return;
+
+      if (!response || response?.message === "Interview completed") {
+        navigate(`/interview/${sessionId}/report`);
+        return;
+      }
+
+      let actualEntity = response;
+      if (!response.type && response.questionText) {
+        actualEntity = { type: 'question', data: response };
+      }
+
+      setCurrentEntity(actualEntity);
+      setFetchStatus("ready");
+      setInterviewPhase("questioning");
+
+      // If there's a transition message for coding, speak it first
+      const transitionMessage = response.transitionMessage;
+      const questionText = actualEntity.type === 'challenge'
+        ? actualEntity.data.question
+        : actualEntity.data.questionText;
+
+      setTimeout(() => {
+        if (transitionMessage) {
+          speakText(transitionMessage + " " + questionText);
+        } else {
+          speakText(questionText);
+        }
+      }, 500);
+
+    } catch (err) {
+      if (mountedRef && !mountedRef.current) return;
+      if (fetchIdRef.current !== thisFetchId) return;
+      console.error("[Interview] fetchNextQuestion error:", err);
+      setQuestionError(parseQuestionError(err));
+      setFetchStatus("error");
+      setInterviewPhase("error");
+    } finally {
+      if (!mountedRef || mountedRef.current) {
+        isFetchingRef.current = false;
+      }
+    }
+  }, [sessionId, navigate, currentEntity]);
+
+  // ────────────────────────────────────────────────────────
+  // Recording toggle
+  // ────────────────────────────────────────────────────────
   const toggleRecording = async () => {
     if (isRecording) {
       const audioBlob = await stopRecording();
       clearInterval(timerRef.current);
-      
-      // Whisper fallback if transcript is poor or empty
+
       if (audioBlob && (!transcript || transcript.trim().length < 10)) {
         try {
           setIsTranscribing(true);
           const formData = new FormData();
           formData.append("audio", audioBlob, "answer.webm");
           const res = await interviewApi.transcribeAudio(formData);
-          if (res.transcript) {
-            setTranscript(res.transcript);
-          }
+          if (res.transcript) setTranscript(res.transcript);
         } catch (err) {
-          console.error("Whisper fallback transcription failed", err);
+          console.error("Transcription failed:", err);
         } finally {
           setIsTranscribing(false);
         }
@@ -237,28 +246,22 @@ export function InterviewSessionPage() {
       await startRecording();
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
-        setRecordTime((prev) => prev + 1);
+        setRecordTime(prev => prev + 1);
         if (isVideoEnabled) {
           videoMetricsRef.current.checks++;
-          if (Math.random() > 0.8) {
-            videoMetricsRef.current.presenceScore -= 2;
-          }
+          if (Math.random() > 0.8) videoMetricsRef.current.presenceScore -= 2;
         }
       }, 1000);
     }
   };
 
-  const submitAnswerAndNext = async () => {
-    if (!transcript.trim()) {
-      alert(
-        "No audio transcribed. Please try again or type your answer if speech fails.",
-      );
-      return;
-    }
-
+  // ────────────────────────────────────────────────────────
+  // Submit verbal answer
+  // ────────────────────────────────────────────────────────
+  const handleSubmitAnswer = async () => {
     try {
-      setIsProcessingSubmission(true);
-      setProcessingStep("Evaluating answer...");
+      setInterviewPhase("submitting");
+      setProcessingStep("Evaluating your answer...");
 
       if (isRecording) {
         await stopRecording();
@@ -268,46 +271,112 @@ export function InterviewSessionPage() {
       const words = transcript.trim().split(/\s+/).length;
       const minutes = recordTime / 60 || 1;
       const wpm = Math.round(words / minutes);
-      const lowerT = transcript.toLowerCase();
-      const fillers = (
-        lowerT.match(/\b(um|uh|like|you know|basically)\b/g) || []
-      ).length;
+      const fillers = (transcript.toLowerCase().match(/\b(um|uh|like|you know|basically)\b/g) || []).length;
 
-      const metrics = {
-        speakingPace: wpm,
-        fillerWords: fillers,
-        longPauses: 0,
-      };
-
-      const finalPresenceScore = Math.max(
-        0,
-        videoMetricsRef.current.presenceScore,
-      );
-
-      await interviewApi.submitAnswer(currentQuestion._id, {
+      const result = await interviewApi.submitAnswer(currentEntity.data._id, {
         transcript,
-        metrics,
-        videoMetrics: {
-          presenceScore: isVideoEnabled ? finalPresenceScore : 0,
-        },
+        metrics: { speakingPace: wpm, fillerWords: fillers, longPauses: 0 },
+        videoMetrics: { presenceScore: isVideoEnabled ? Math.max(0, videoMetricsRef.current.presenceScore) : 0 }
       });
 
-      setProcessingStep("Generating next question...");
-      await fetchNextQuestion({ forceFetch: true });
+      // The new API returns { question, interviewerReaction }
+      const reaction = result?.interviewerReaction || result;
+
+      setInterviewerReaction(reaction?.interviewerReaction || reaction);
+      setInterviewPhase("evaluated");
+      setProcessingStep("");
+
+      // Speak the reaction if it has text
+      if (reaction?.interviewerReaction?.reaction) {
+        setTimeout(() => speakText(reaction.interviewerReaction.reaction), 300);
+      } else if (reaction?.reaction) {
+        setTimeout(() => speakText(reaction.reaction), 300);
+      }
+
     } catch (err) {
-      console.error(err);
+      console.error("[Interview] Submit answer error:", err);
       const status = err?.response?.status;
       if (status === 429) {
         alert("Daily limit reached. Please try again tomorrow.");
       } else {
         alert("Failed to process answer. Please try again.");
       }
-    } finally {
-      setIsProcessingSubmission(false);
+      setInterviewPhase("questioning");
       setProcessingStep("");
     }
   };
 
+  // ────────────────────────────────────────────────────────
+  // Run code (doesn't advance state)
+  // ────────────────────────────────────────────────────────
+  const handleRunCode = async ({ language, code, testCases }) => {
+    if (!currentEntity?.data?._id) return;
+    try {
+      setIsRunningCode(true);
+      setExecutionResult(null);
+      const result = await interviewApi.runCode(currentEntity.data._id, { language, code });
+      setExecutionResult(result);
+    } catch (err) {
+      console.error("[Interview] Run code error:", err);
+      setExecutionResult({
+        error: err?.response?.data?.message || "Execution failed. Please try again.",
+        results: [],
+        passedTests: 0,
+        totalTests: 0
+      });
+    } finally {
+      setIsRunningCode(false);
+    }
+  };
+
+  // ────────────────────────────────────────────────────────
+  // Submit code
+  // ────────────────────────────────────────────────────────
+  const handleSubmitCode = async () => {
+    if (!currentEntity?.data?._id) return;
+    try {
+      setInterviewPhase("submitting");
+      setProcessingStep("Running tests and evaluating code...");
+
+      const result = await interviewApi.submitCodingAnswer(currentEntity.data._id, {
+        language: currentLanguage,
+        code: currentCode
+      });
+
+      setCodingResult(result);
+      setExecutionResult({
+        results: result.results,
+        passedTests: result.passedTests,
+        totalTests: result.totalTests
+      });
+
+      setInterviewPhase("evaluated");
+      setProcessingStep("");
+
+      // Speak the coding follow-up comment
+      if (result?.codingFollowUp?.comment) {
+        setTimeout(() => speakText(result.codingFollowUp.comment), 500);
+      }
+
+    } catch (err) {
+      console.error("[Interview] Submit code error:", err);
+      alert("Failed to submit code. Please try again.");
+      setInterviewPhase("questioning");
+      setProcessingStep("");
+    }
+  };
+
+  // ────────────────────────────────────────────────────────
+  // Next question
+  // ────────────────────────────────────────────────────────
+  const handleNextQuestion = async () => {
+    if (interviewPhase === "loading_next") return;
+    await fetchNextQuestion({ forceFetch: true });
+  };
+
+  // ────────────────────────────────────────────────────────
+  // End session
+  // ────────────────────────────────────────────────────────
   const handleEndSession = async () => {
     if (window.confirm("Are you sure you want to end this interview?")) {
       try {
@@ -320,251 +389,386 @@ export function InterviewSessionPage() {
     }
   };
 
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
+  // ────────────────────────────────────────────────────────
+  // Format helpers
+  // ────────────────────────────────────────────────────────
+  const formatTime = (s) => {
+    const m = Math.floor(s / 60).toString().padStart(2, "0");
+    const sec = (s % 60).toString().padStart(2, "0");
+    return `${m}:${sec}`;
   };
 
-  // ── Loading state: first fetch in progress, no question yet ─────────────────
-  if (isFetching && !currentQuestion) {
+  // ────────────────────────────────────────────────────────
+  // Avatar state derivation
+  // ────────────────────────────────────────────────────────
+  let avatarState = 'idle';
+  if (interviewPhase === "loading_first" || interviewPhase === "loading_next") avatarState = 'thinking';
+  else if (interviewPhase === "submitting") avatarState = 'thinking';
+  else if (isSpeaking) avatarState = 'speaking';
+  else if (isRecording) avatarState = 'listening';
+  else if (interviewPhase === "evaluated") avatarState = 'acknowledging';
+  else if (currentEntity?.type === 'challenge' && interviewPhase === "questioning") avatarState = 'coding';
+
+  const isCoding = currentEntity?.type === 'challenge';
+
+  // ────────────────────────────────────────────────────────
+  // Render: loading state
+  // ────────────────────────────────────────────────────────
+  if (interviewPhase === "loading_first" && !currentEntity) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-        <Brain className="animate-pulse text-primary mb-4" size={48} />
-        <h3 className="text-xl font-bold text-text mb-2">Generating your question…</h3>
-        <p className="text-text-secondary">This usually takes 2–5 seconds.</p>
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-950">
+        <AIAvatar state="thinking" className="mb-8" />
+        <h3 className="text-xl font-bold text-white mb-2">Preparing your interview...</h3>
+        <p className="text-slate-400 text-sm">Reviewing your profile and generating personalized questions.</p>
       </div>
     );
   }
 
-  // ── Error state: fetch failed and no question loaded yet ─────────────────────
-  if (fetchStatus === "error" && !currentQuestion) {
+  // ────────────────────────────────────────────────────────
+  // Render: fatal error (no entity yet)
+  // ────────────────────────────────────────────────────────
+  if (fetchStatus === "error" && !currentEntity) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-        <Card className="max-w-md w-full shadow-sm text-center">
-          <CardContent className="p-8">
-            <AlertTriangle className="text-danger mx-auto mb-4" size={48} />
-            <h3 className="text-xl font-bold text-text mb-3">Could not generate question</h3>
-            <p className="text-text-secondary leading-relaxed mb-6">{questionError}</p>
-            <Button onClick={() => fetchNextQuestion()} disabled={isFetching} isLoading={isFetching} className="w-full">
-              {isFetching ? "Trying again…" : "Try Again"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 h-full">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-extrabold text-text tracking-tight">AI Interview Session</h2>
-          <p className="text-text-secondary mt-1">Answer the question clearly. The AI will evaluate your response.</p>
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-950 px-4">
+        <div className="max-w-md w-full bg-slate-900 border border-red-500/30 rounded-2xl p-8 text-center">
+          <AlertTriangle className="text-red-400 mx-auto mb-4" size={48} />
+          <h3 className="text-xl font-bold text-white mb-3">Could not start interview</h3>
+          <p className="text-slate-400 mb-6">{questionError}</p>
+          <Button onClick={() => fetchNextQuestion({ forceFetch: true })} className="w-full">
+            Try Again
+          </Button>
         </div>
-        <Button variant="secondary" onClick={handleEndSession}>
-          End Interview
-        </Button>
       </div>
+    );
+  }
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start h-full">
-        {/* Main Content Area */}
-        <div className="lg:col-span-2 flex flex-col gap-6 h-full">
-          {/* Question Display */}
-          <Card className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] text-white border-none shadow-md">
-            <CardContent className="p-8 md:p-10">
-              <span className="inline-block mb-6 bg-white/10 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-blue-200">
-                {currentQuestion?.category} • {currentQuestion?.difficulty}
-              </span>
-              <h2 className="text-2xl md:text-3xl leading-relaxed font-bold tracking-tight">
-                {currentQuestion?.questionText}
-              </h2>
+  // ────────────────────────────────────────────────────────
+  // Main render
+  // ────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden">
 
-              {/* Inline error banner */}
-              {fetchStatus === "error" && questionError && currentQuestion && (
-                <div className="mt-6 bg-red-500/10 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl flex items-center gap-3 text-sm font-medium">
-                  <AlertTriangle size={18} className="shrink-0 text-red-400" />
+      {/* ── TOP BAR ───────────────────────────────────────── */}
+      <header className="flex items-center justify-between px-6 py-3 bg-slate-900/80 border-b border-slate-800 backdrop-blur-sm shrink-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-lg">CP</div>
+          <div>
+            <span className="text-sm font-bold text-white">CareerPilot</span>
+            <span className="text-slate-400 text-xs ml-2">Solo AI Interview</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Session Timer */}
+          <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono">
+            <Clock size={12} />
+            <span>{formatTime(sessionTime)}</span>
+          </div>
+
+          {/* State badge */}
+          <div className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+            isCoding && interviewPhase === "questioning" ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' :
+            isSpeaking ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' :
+            isRecording ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+            'bg-slate-800 text-slate-400 border border-slate-700'
+          }`}>
+            {isCoding && interviewPhase === "questioning" ? 'Coding Challenge' :
+             interviewPhase === "loading_first" || interviewPhase === "loading_next" ? 'Loading...' :
+             interviewPhase === "submitting" ? 'Evaluating...' :
+             interviewPhase === "evaluated" ? 'Answer Analyzed' :
+             isSpeaking ? 'Interviewer Speaking' :
+             isRecording ? 'Recording...' : 'Ready'}
+          </div>
+
+          <Button variant="secondary" size="sm" onClick={handleEndSession} className="text-xs">
+            End Interview
+          </Button>
+        </div>
+      </header>
+
+      {/* ── MAIN LAYOUT ───────────────────────────────────── */}
+      <div className={`flex-1 flex overflow-hidden ${isCoding ? 'flex-row' : 'flex-col lg:flex-row'}`}>
+
+        {/* ── LEFT PANEL: Avatar + Conversation + Controls ── */}
+        <div className={`flex flex-col gap-0 overflow-hidden ${isCoding ? 'w-[440px] shrink-0' : 'flex-1'}`}>
+
+          {/* Avatar / Video panel */}
+          <div className="relative bg-slate-900 border-b border-slate-800 flex flex-col items-center justify-center py-8 px-6 shrink-0"
+               style={{ minHeight: isCoding ? '280px' : '320px' }}>
+            {/* Background radial */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.08)_0%,transparent_70%)] pointer-events-none" />
+
+            <AIAvatar state={avatarState} showLabel={false} className="z-10 relative" />
+
+            {/* PiP candidate video */}
+            <div className="absolute top-3 right-3 w-24 aspect-video bg-slate-800 rounded-lg overflow-hidden shadow-xl border border-slate-700/50">
+              {isVideoEnabled ? (
+                <video ref={videoRef} autoPlay playsInline muted
+                  className="w-full h-full object-cover transform scale-x-[-1]" />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <VideoOff size={16} className="text-slate-600" />
+                </div>
+              )}
+            </div>
+
+            {/* Speaking indicator at bottom */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+              <div className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border backdrop-blur-md transition-all duration-300 ${
+                isSpeaking ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300' :
+                isRecording ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' :
+                interviewPhase === "submitting" ? 'bg-amber-500/20 border-amber-500/30 text-amber-300' :
+                'bg-slate-800/50 border-slate-700/50 text-slate-500'
+              }`}>
+                {isSpeaking ? '● Interviewer Speaking' :
+                 isRecording ? '● Recording' :
+                 interviewPhase === "submitting" ? '⋯ Evaluating' :
+                 interviewPhase === "evaluated" ? '✓ Analyzed' : '○ Waiting'}
+              </div>
+            </div>
+          </div>
+
+          {/* Question + Answer + Controls */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 custom-scrollbar">
+
+              {/* Question display */}
+              {currentEntity && (
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded">
+                      {currentEntity.data?.category || currentEntity.data?.technology || 'Question'}
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-500 capitalize">
+                      {currentEntity.data?.difficulty}
+                    </span>
+                  </div>
+                  <p className="text-white text-[15px] font-medium leading-relaxed">
+                    {isCoding ? currentEntity.data?.question : currentEntity.data?.questionText}
+                  </p>
+                </div>
+              )}
+
+              {/* Inline error */}
+              {fetchStatus === "error" && questionError && (
+                <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
                   <span>{questionError}</span>
                 </div>
               )}
-            </CardContent>
-          </Card>
 
-          <Card className="flex-1 flex flex-col shadow-sm border-border min-h-[400px]">
-            <CardContent className="p-6 md:p-8 flex-1 flex flex-col h-full">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-3">
-                  <strong className="text-sm font-bold text-text-secondary uppercase tracking-widest">Your Answer Transcript</strong>
-                  {/* Dynamic Speech Workflow Banner */}
-                  <span className="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm border" style={{
-                    backgroundColor: isProcessingSubmission ? '#eff6ff' : isRecording ? '#fef2f2' : isFetching ? '#fefce8' : 'rgba(255,255,255,0.05)',
-                    color: isProcessingSubmission ? '#1d4ed8' : isRecording ? '#dc2626' : isFetching ? '#ca8a04' : 'inherit',
-                    borderColor: isProcessingSubmission ? '#bfdbfe' : isRecording ? '#fca5a5' : isFetching ? '#fef08a' : 'rgba(255,255,255,0.1)'
-                  }}>
-                    {isProcessingSubmission ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
-                        Processing Answer...
-                      </>
-                    ) : isFetching ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-yellow-600 animate-ping"></span>
-                        AI Thinking...
-                      </>
-                    ) : isRecording ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
-                        Listening...
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Your Turn — Click Record to Speak
-                      </>
+              {/* Interviewer reaction (shown after evaluation) */}
+              {interviewPhase === "evaluated" && interviewerReaction && !isCoding && (
+                <div className="flex items-start gap-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 fade-in">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">AI</div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-indigo-400 mb-1 uppercase tracking-wider">Interviewer</p>
+                    <p className="text-slate-200 text-sm leading-relaxed italic">
+                      "{interviewerReaction?.reaction || interviewerReaction}"
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Coding follow-up (shown after code submission) */}
+              {interviewPhase === "evaluated" && codingResult?.codingFollowUp && (
+                <div className="flex items-start gap-3 bg-violet-500/10 border border-violet-500/20 rounded-xl p-4 fade-in">
+                  <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-bold shrink-0">AI</div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-violet-400 mb-1 uppercase tracking-wider">Code Review</p>
+                    <p className="text-slate-200 text-sm leading-relaxed mb-2">{codingResult.codingFollowUp.comment}</p>
+                    {codingResult.codingFollowUp.followUpQuestion && (
+                      <div className="mt-2 pt-2 border-t border-violet-500/20">
+                        <p className="text-[11px] font-semibold text-violet-400 mb-1 uppercase tracking-wider">Follow-up</p>
+                        <p className="text-white text-sm font-medium">{codingResult.codingFollowUp.followUpQuestion}</p>
+                      </div>
                     )}
-                  </span>
-                </div>
-                {isRecording && (
-                  <div className="flex items-center gap-2 text-danger font-bold text-sm bg-danger-bg px-3 py-1 rounded-full border border-danger/20">
-                    <div className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse"></div>
-                    {formatTime(recordTime)}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              {isRecording ? (
-                <div className={`flex-1 min-h-[200px] text-lg leading-relaxed ${transcript ? 'text-text' : 'text-text-secondary italic'}`}>
-                  {transcript || "Listening…"}
-                </div>
-              ) : isTranscribing ? (
-                <div className="flex-1 min-h-[200px] flex items-center justify-center text-text-secondary italic">
-                  <div className="flex items-center gap-2">
-                    <Brain className="animate-pulse" size={20} />
-                    Processing audio via Whisper...
+              {/* Code test results */}
+              {executionResult && isCoding && interviewPhase === "evaluated" && (
+                <div className="bg-slate-800/60 border border-slate-700/40 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-slate-300">Test Results</span>
+                    <span className={`text-sm font-bold ${
+                      executionResult.passedTests === executionResult.totalTests ? 'text-emerald-400' : 'text-amber-400'
+                    }`}>
+                      {executionResult.passedTests} / {executionResult.totalTests} passed
+                    </span>
                   </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(executionResult.results || []).map((r, i) => (
+                      <div key={i}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium ${
+                          r.passed ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                        }`}>
+                        {r.passed ? '✓' : '✗'} Test {i + 1}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Transcript / answer area (verbal questions) */}
+              {!isCoding && (
+                <div className="flex-1 min-h-[120px]">
+                  {isRecording ? (
+                    <div className="flex-1 min-h-[120px] bg-slate-800/40 border border-emerald-500/30 rounded-xl p-4 text-[15px] leading-relaxed">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-[11px] font-medium text-emerald-400 uppercase tracking-wider">Recording</span>
+                      </div>
+                      <p className={transcript ? 'text-white' : 'text-slate-500 italic'}>
+                        {transcript || "Listening to your answer…"}
+                      </p>
+                    </div>
+                  ) : isTranscribing ? (
+                    <div className="flex items-center justify-center min-h-[120px] text-slate-500">
+                      <Brain className="animate-pulse mr-2" size={18} />
+                      <span className="text-sm">Processing audio...</span>
+                    </div>
+                  ) : (
+                    <textarea
+                      className="w-full min-h-[120px] resize-none text-[15px] leading-relaxed text-white bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 focus:outline-none focus:border-indigo-500/60 placeholder:text-slate-600 placeholder:italic custom-scrollbar transition-colors"
+                      value={transcript}
+                      onChange={(e) => setTranscript(e.target.value)}
+                      placeholder="Type your answer here, or click Record to speak…"
+                      disabled={interviewPhase === "submitting" || interviewPhase === "evaluated"}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Controls bar ───────────────────────────── */}
+            <div className="p-4 border-t border-slate-800 bg-slate-900/50 shrink-0 flex flex-col gap-2">
+              {interviewPhase === "submitting" ? (
+                <div className="flex items-center justify-center gap-2 py-3 text-slate-400 text-sm">
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>{processingStep}</span>
+                </div>
+              ) : interviewPhase === "evaluated" ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium px-1">
+                    <CheckCircle size={16} />
+                    <span>Answer analyzed</span>
+                  </div>
+                  <button
+                    onClick={handleNextQuestion}
+                    disabled={interviewPhase === "loading_next"}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-colors duration-200 shadow-lg shadow-indigo-500/20"
+                    id="next-question-btn"
+                  >
+                    {interviewPhase === "loading_next" ? (
+                      <><Loader2 size={16} className="animate-spin" /> Loading next question…</>
+                    ) : (
+                      <>Next Question <ChevronRight size={16} /></>
+                    )}
+                  </button>
                 </div>
               ) : (
-                <textarea
-                  className="flex-1 min-h-[200px] w-full resize-y text-lg leading-relaxed text-text bg-transparent focus:outline-none placeholder:text-text-secondary placeholder:italic"
-                  value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
-                  placeholder="Click the microphone to record, or type your answer here if preferred."
-                  disabled={isProcessingSubmission}
-                />
-              )}
-
-              <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 pt-8 border-t border-border">
-                {isProcessingSubmission ? (
-                  <Button disabled isLoading={true} className="w-full sm:w-auto px-8">
-                    {processingStep}
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant={isRecording ? "danger" : "secondary"}
+                <>
+                  {!isCoding && (
+                    <button
                       onClick={toggleRecording}
-                      disabled={isProcessingSubmission || isTranscribing}
-                      className="w-full sm:w-auto px-8 rounded-full"
+                      disabled={isTranscribing}
+                      className={`w-full flex items-center justify-between px-5 py-3 rounded-xl font-bold text-sm transition-colors duration-200 ${
+                        isRecording
+                          ? 'bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30'
+                          : 'bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700'
+                      }`}
+                      id="record-btn"
                     >
-                      {isRecording ? (
-                        <>
-                          <StopCircle size={18} className="mr-2" /> Stop Recording
-                        </>
-                      ) : (
-                        <>
-                          <Mic size={18} className="mr-2" />{" "}
-                          {transcript ? "Resume Recording" : "Record Answer"}
-                        </>
+                      <span className="flex items-center gap-2">
+                        {isRecording ? <StopCircle size={18} /> : <Mic size={18} />}
+                        {isRecording ? "Stop Recording" : "Record Voice Answer"}
+                      </span>
+                      {isRecording && (
+                        <span className="text-xs font-mono bg-red-500/20 px-2 py-0.5 rounded text-red-300">
+                          {formatTime(recordTime)}
+                        </span>
                       )}
-                    </Button>
-                    {transcript.trim() && (
-                      <Button
-                        onClick={submitAnswerAndNext}
-                        disabled={isProcessingSubmission || isRecording || isTranscribing}
-                        className="w-full sm:w-auto px-8 rounded-full"
-                      >
-                        <CheckCircle size={18} className="mr-2" /> Submit Answer & Next Question
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                    </button>
+                  )}
+
+                  {!isCoding && (
+                    <button
+                      onClick={handleSubmitAnswer}
+                      disabled={isRecording || isTranscribing || !transcript.trim()}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-colors duration-200"
+                      id="submit-answer-btn"
+                    >
+                      <CheckCircle size={16} />
+                      Submit Answer
+                    </button>
+                  )}
+
+                  {isCoding && (
+                    <button
+                      onClick={handleSubmitCode}
+                      disabled={!currentCode.trim()}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-colors duration-200"
+                      id="submit-code-btn"
+                    >
+                      <CheckCircle size={16} />
+                      Submit Solution
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Sidebar / Video Feed Area */}
-        <div className="flex flex-col gap-6">
-          <Card className="shadow-sm border-border overflow-hidden">
-            <CardContent className="p-3">
-              <div className="relative w-full aspect-4/3 bg-gray-900 rounded-xl overflow-hidden shadow-inner">
-                {isVideoEnabled ? (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform scale-x-[-1]"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <VideoOff size={48} className="mb-4 opacity-50" />
-                    <span className="text-sm font-medium">Camera Disabled</span>
-                  </div>
-                )}
-                {isRecording && isVideoEnabled && (
-                  <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border border-white/10">
-                    <Video size={14} /> Analyzing Presence
+        {/* ── RIGHT PANEL: Code Editor (coding phase only) ── */}
+        {isCoding && (
+          <div className="flex-1 border-l border-slate-800 overflow-hidden flex flex-col bg-slate-950">
+            {/* Problem description strip */}
+            {currentEntity?.data && (
+              <div className="bg-slate-900 border-b border-slate-800 px-5 py-3 shrink-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Code2 size={14} className="text-violet-400" />
+                  <span className="text-xs font-bold text-violet-400 uppercase tracking-wider">
+                    {currentEntity.data.technology || 'Coding Challenge'}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 font-medium capitalize">
+                    {currentEntity.data.difficulty}
+                  </span>
+                </div>
+                {currentEntity.data.requirements?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {currentEntity.data.requirements.slice(0, 3).map((req, i) => (
+                      <span key={i} className="text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded">
+                        {req}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            )}
 
-          <Card className="shadow-sm border-border">
-            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
-              <CardTitle className="text-lg m-0">Interview Metrics</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="flex flex-col gap-4">
-                <div className="flex justify-between items-center pb-3 border-b border-border">
-                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Pace (WPM)</span>
-                  <strong className="text-lg font-extrabold text-text">
-                    {evaluation ? evaluation.analysis.communication : "—"}
-                  </strong>
-                </div>
-                <div className="flex justify-between items-center pb-3 border-b border-border">
-                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Clarity</span>
-                  <strong className="text-lg font-extrabold text-text">
-                    {evaluation ? evaluation.analysis.clarity : "—"}
-                  </strong>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-text-secondary uppercase tracking-wider">Structure</span>
-                  <strong className="text-lg font-extrabold text-text">
-                    {evaluation ? evaluation.analysis.structure : "—"}
-                  </strong>
-                </div>
-              </div>
-
-              {/* Status indicator */}
-              {isFetching && (
-                <div className="mt-6 bg-info-bg border border-blue-200 text-primary px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-bold shadow-sm">
-                  <Clock size={16} className="shrink-0" />
-                  Generating next question…
-                </div>
-              )}
-              {fetchStatus === "ready" && !isFetching && (
-                <div className="mt-6 bg-success-bg border border-success/20 text-success px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-bold shadow-sm">
-                  <CheckCircle size={16} className="shrink-0" />
-                  Question ready
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+            {/* Monaco editor */}
+            <div className="flex-1 overflow-hidden">
+              <CodeEditor
+                question={currentEntity?.data}
+                sessionId={sessionId}
+                mode="ai"
+                value={currentCode}
+                onChange={(code, metadata) => {
+                  setCurrentCode(code);
+                  if (metadata?.language) setCurrentLanguage(metadata.language);
+                }}
+                onRun={handleRunCode}
+                onSubmit={handleSubmitCode}
+                isRunning={isRunningCode}
+                isSubmitting={interviewPhase === "submitting"}
+                executionResult={executionResult}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

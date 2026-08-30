@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Sparkles, MapPin, Link as LinkIcon, History, Edit3, Save, CheckCircle, Target, Briefcase } from "lucide-react";
+import { TriangleAlert, ArrowLeft, Sparkles, MapPin, Link as LinkIcon, History, Edit3, Save, CheckCircle, Target, Briefcase, Mail, MessageSquare, Loader2, Copy, Check, RefreshCcw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { applicationsApi } from "../api/applications";
 import { matchApi, tailoringApi } from "../api/features";
@@ -7,6 +7,7 @@ import { resumeApi } from "../api/resume";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
+import api from "../api/axios";
 
 const STATUSES = [
   { id: "saved", label: "Saved" },
@@ -31,9 +32,24 @@ export function ApplicationDetailPage() {
 
   const [notes, setNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
-  
+
   const [tailoringData, setTailoringData] = useState(null);
   const [loadingTailoring, setLoadingTailoring] = useState(false);
+
+  // Cover letter state
+  const [coverLetter, setCoverLetter] = useState("");
+  const [loadingCoverLetter, setLoadingCoverLetter] = useState(false);
+  const [coverLetterTone, setCoverLetterTone] = useState("professional");
+  const [coverLetterHighlight, setCoverLetterHighlight] = useState("");
+  const [copiedCL, setCopiedCL] = useState(false);
+
+  // Recruiter message state
+  const [recruiterMsg, setRecruiterMsg] = useState("");
+  const [loadingRecruiterMsg, setLoadingRecruiterMsg] = useState(false);
+  const [recruiterMsgType, setRecruiterMsgType] = useState("application");
+  const [copiedRM, setCopiedRM] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     loadData();
@@ -117,13 +133,48 @@ export function ApplicationDetailPage() {
     }
   }
 
+  async function generateCoverLetter() {
+    setLoadingCoverLetter(true);
+    try {
+      const res = await api.post(`/applications/${id}/cover-letter`, {
+        tone: coverLetterTone,
+        highlight: coverLetterHighlight
+      });
+      setCoverLetter(res.data?.data?.coverLetter || "");
+    } catch (err) {
+      alert(err?.response?.data?.message || "Cover letter generation failed.");
+    } finally {
+      setLoadingCoverLetter(false);
+    }
+  }
+
+  async function generateRecruiterMessage() {
+    setLoadingRecruiterMsg(true);
+    try {
+      const res = await api.post(`/applications/${id}/recruiter-message`, {
+        type: recruiterMsgType
+      });
+      setRecruiterMsg(res.data?.data?.message || "");
+    } catch (err) {
+      alert(err?.response?.data?.message || "Message generation failed.");
+    } finally {
+      setLoadingRecruiterMsg(false);
+    }
+  }
+
+  function copyText(text, setCopied) {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-64 text-text-secondary font-medium">
       <Spinner size="lg" className="mb-4" />
       Loading application details...
     </div>
   );
-  
+
   if (!app) return (
     <div className="bg-danger-bg text-danger p-6 rounded-xl border border-danger/20 font-medium max-w-xl mx-auto text-center mt-12">
       Application not found.
@@ -150,12 +201,12 @@ export function ApplicationDetailPage() {
             <div className="flex flex-wrap gap-4 text-text-secondary font-medium text-sm">
               {app.location && (
                 <span className="flex items-center gap-1.5 bg-bg-secondary px-3 py-1 rounded-md border border-border">
-                  <MapPin size={16} className="text-primary"/> {app.location}
+                  <MapPin size={16} className="text-primary" /> {app.location}
                 </span>
               )}
               {app.jobUrl && (
                 <a href={app.jobUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:text-primary-hover bg-info-bg px-3 py-1 rounded-md border border-blue-200 transition-colors">
-                  <LinkIcon size={16}/> Job Link
+                  <LinkIcon size={16} /> Job Link
                 </a>
               )}
             </div>
@@ -173,74 +224,186 @@ export function ApplicationDetailPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          
-          {/* Notes Section */}
-          <Card className="shadow-sm border-border">
-            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
-              <div className="bg-gray-100 p-1.5 rounded-md text-gray-600 border border-gray-200">
-                <Edit3 size={18} />
-              </div>
-              <CardTitle className="text-lg m-0">Notes & Next Steps</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Add interview notes, recruiter contacts, or next steps here..."
-                className="w-full p-4 border border-border rounded-xl min-h-[120px] text-sm text-text focus:border-primary focus:ring-4 focus:ring-primary/15 focus:outline-none transition-shadow bg-surface resize-y"
-              />
-              <div className="flex justify-end mt-4">
-                <Button onClick={saveNotes} isLoading={isSavingNotes}>
-                  {!isSavingNotes && <Save size={16} className="mr-2"/>} Save Notes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      {/* TABS NAVIGATION */}
+      <div className="flex overflow-x-auto border-b border-border mb-4 scrollbar-hide">
+        {[
+          { id: "overview", label: "Overview", icon: Target },
+          { id: "resume", label: "Resume Tailoring", icon: Sparkles },
+          { id: "match", label: "Match Engine", icon: CheckCircle },
+          { id: "timeline", label: "Timeline", icon: History },
+          { id: "notes", label: "Notes", icon: Edit3 },
+          { id: "outreach", label: "Cover Letter & Outreach", icon: Mail }
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-6 py-3 border-b-2 font-bold text-sm whitespace-nowrap transition-colors ${isActive ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text hover:border-border"}`}
+            >
+              <Icon size={16} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
-          {/* JD Section */}
-          <Card className="shadow-sm border-border">
-            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
-              <div className="bg-green-100 p-1.5 rounded-md text-green-700 border border-green-200">
-                <Target size={18} />
-              </div>
-              <CardTitle className="text-lg m-0">Job Requirements Extraction</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              {app.extractedJd ? (
-                <div className="flex flex-col gap-5">
-                  <div>
-                    <strong className="block text-sm font-bold text-text-secondary uppercase tracking-wider mb-3">Required Skills</strong>
-                    <div className="flex flex-wrap gap-2">
-                      {app.extractedJd.requiredSkills.map(s => (
-                        <span key={s} className="bg-surface border border-border text-text font-bold px-3 py-1.5 rounded-lg text-sm shadow-sm">{s}</span>
-                      ))}
-                    </div>
-                  </div>
-                  {app.extractedJd.tools?.length > 0 && (
+      <div className="flex flex-col gap-6">
+        
+        {/* OVERVIEW TAB */}
+        {activeTab === "overview" && (
+          <div className="flex flex-col gap-6">
+            <Card className="shadow-sm border-border">
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+                <div className="bg-green-100 p-1.5 rounded-md text-green-700 border border-green-200">
+                  <Target size={18} />
+                </div>
+                <CardTitle className="text-lg m-0">Job Requirements Extraction</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                {app.extractedJd ? (
+                  <div className="flex flex-col gap-5">
                     <div>
-                      <strong className="block text-sm font-bold text-text-secondary uppercase tracking-wider mb-3">Tools & Technologies</strong>
+                      <strong className="block text-sm font-bold text-text-secondary uppercase tracking-wider mb-3">Required Skills</strong>
                       <div className="flex flex-wrap gap-2">
-                        {app.extractedJd.tools.map(s => (
-                          <span key={s} className="bg-bg-secondary border border-border text-text-secondary font-bold px-3 py-1.5 rounded-lg text-sm">{s}</span>
+                        {app.extractedJd.requiredSkills.map(s => (
+                          <span key={s} className="bg-surface border border-border text-text font-bold px-3 py-1.5 rounded-lg text-sm shadow-sm">{s}</span>
                         ))}
                       </div>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-secondary text-text-secondary mb-3">
-                    <AlertTriangle size={24} />
+                    {app.extractedJd.tools?.length > 0 && (
+                      <div>
+                        <strong className="block text-sm font-bold text-text-secondary uppercase tracking-wider mb-3">Tools & Technologies</strong>
+                        <div className="flex flex-wrap gap-2">
+                          {app.extractedJd.tools.map(s => (
+                            <span key={s} className="bg-bg-secondary border border-border text-text-secondary font-bold px-3 py-1.5 rounded-lg text-sm">{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-text-secondary font-medium">AI extraction pending or failed.</p>
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-secondary text-text-secondary mb-3">
+                      <TriangleAlert size={24} />
+                    </div>
+                    <p className="text-text-secondary font-medium">AI extraction pending or failed.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Intelligent Assistant UI */}
+            <Card className="shadow-md border-primary/20 overflow-hidden relative">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+              <CardHeader className="bg-info-bg border-b border-blue-200 py-4 px-6 flex flex-row items-center gap-3">
+                <div className="bg-primary p-1.5 rounded-md text-white shadow-sm">
+                  <Sparkles size={18} />
                 </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Resume Tailoring Section */}
+                <CardTitle className="text-lg m-0 text-primary">Intelligent Application Assistant</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                {intelligenceError && (
+                  <div className="bg-danger-bg border border-danger/20 text-danger p-4 rounded-xl text-sm font-medium mb-4">
+                    {intelligenceError}
+                  </div>
+                )}
+
+                {intelligence ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="flex flex-col gap-6">
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-surface border border-border rounded-xl p-4 shadow-sm text-center">
+                          <span className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Suitability</span>
+                          <strong className="text-xl font-extrabold text-primary capitalize">{intelligence.suitability}</strong>
+                        </div>
+                        <div className="bg-surface border border-border rounded-xl p-4 shadow-sm text-center">
+                          <span className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Match</span>
+                          <strong className="text-xl font-extrabold text-primary">
+                            {intelligence.matchPercentage === null ? "Run match" : `${intelligence.matchPercentage}%`}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-bold text-text mb-2">Personalized Advice</h4>
+                        <p className="text-sm text-text-secondary leading-relaxed bg-bg-secondary p-4 rounded-xl border border-border">
+                          {intelligence.personalizedAdvice}
+                        </p>
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-bold text-text mb-3 flex items-center gap-2">
+                          Missing Keywords
+                          <span className="bg-danger-bg text-danger px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border border-danger/20">Critical</span>
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {intelligence.missingKeywords.slice(0, 8).map((keyword) => (
+                            <span key={keyword} className="bg-danger-bg border border-danger/20 text-danger px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
+                              {keyword}
+                            </span>
+                          ))}
+                          {intelligence.missingKeywords.length === 0 && (
+                            <span className="text-sm text-text-secondary italic">No missing keywords detected.</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-6">
+                      <div>
+                        <h4 className="text-sm font-bold text-text mb-3">Relevant Projects from Resume</h4>
+                        <div className="flex flex-col gap-3">
+                          {intelligence.relevantProjects.map((project) => (
+                            <div key={`${project.name}-${project.description}`} className="bg-surface border border-border rounded-xl p-4 shadow-sm hover:border-primary/30 transition-colors">
+                              <strong className="block text-sm font-bold text-text mb-1">{project.name}</strong>
+                              <p className="text-xs text-text-secondary leading-relaxed mb-3 line-clamp-2">{project.description || "No description available."}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {(project.technologies || []).map(t => (
+                                  <span key={t} className="bg-bg-secondary border border-border px-2 py-0.5 rounded text-[10px] uppercase font-bold text-text-secondary tracking-wider">
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {intelligence.relevantProjects.length === 0 && (
+                            <div className="bg-warning-bg border border-warning/20 p-4 rounded-xl">
+                              <p className="text-sm font-medium text-warning">No resume project clearly matches this JD yet. Do not fabricate one; improve your resume only with real evidence.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-bold text-text mb-3">Resume Content Suggestions</h4>
+                        <div className="flex flex-col gap-2">
+                          {intelligence.resumeImprovementSuggestions.slice(0, 4).map((item) => (
+                            <div key={item.skill} className="bg-bg-secondary border border-border rounded-lg p-3 text-sm">
+                              <strong className="text-primary block mb-1">{item.skill}</strong>
+                              <span className="text-text-secondary leading-relaxed">{item.suggestion}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  !intelligenceError && (
+                    <div className="flex justify-center items-center py-8 text-text-secondary text-sm font-medium">
+                      <Spinner size="md" className="mr-3" /> Loading application intelligence...
+                    </div>
+                  )
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* RESUME TAILORING TAB */}
+        {activeTab === "resume" && (
           <Card className="shadow-sm border-border border-l-4 border-l-primary">
             <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
               <div className="bg-info-bg p-1.5 rounded-md text-primary border border-blue-200">
@@ -256,7 +419,7 @@ export function ApplicationDetailPage() {
               ) : !tailoringData ? (
                 <div className="text-center py-4">
                   <Button onClick={fetchTailoring} isLoading={loadingTailoring} className="w-full sm:w-auto">
-                    {!loadingTailoring && <Sparkles size={16} className="mr-2"/>} Generate Recommendations
+                    {!loadingTailoring && <Sparkles size={16} className="mr-2" />} Generate Recommendations
                   </Button>
                 </div>
               ) : (
@@ -278,13 +441,11 @@ export function ApplicationDetailPage() {
               )}
             </CardContent>
           </Card>
+        )}
 
-        </div>
-
-        <div className="flex flex-col gap-6">
-          
-          {/* Semantic Match Section */}
-          <Card className="shadow-sm border-border overflow-visible z-10">
+        {/* MATCH TAB */}
+        {activeTab === "match" && (
+          <Card className="shadow-sm border-border overflow-visible z-10 max-w-2xl">
             <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
               <div className="bg-purple-100 p-1.5 rounded-md text-purple-600 border border-purple-200">
                 <Target size={18} />
@@ -306,25 +467,25 @@ export function ApplicationDetailPage() {
 
               {matchResult ? (
                 <div className="flex flex-col items-center">
-                  <div className="relative mb-6">
-                    <svg className="w-32 h-32 transform -rotate-90">
-                      <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-border" />
-                      <circle 
-                        cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" 
-                        strokeDasharray={2 * Math.PI * 56} 
-                        strokeDashoffset={2 * Math.PI * 56 * (1 - matchResult.overallScore / 100)} 
+                  <div className="relative mb-6 mt-4">
+                    <svg className="w-40 h-40 transform -rotate-90">
+                      <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-border" />
+                      <circle
+                        cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="10" fill="transparent"
+                        strokeDasharray={2 * Math.PI * 70}
+                        strokeDashoffset={2 * Math.PI * 70 * (1 - matchResult.overallScore / 100)}
                         className={matchResult.overallScore >= 75 ? "text-success" : matchResult.overallScore >= 50 ? "text-warning" : "text-danger"}
                         strokeLinecap="round"
                       />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className={`text-3xl font-extrabold ${matchResult.overallScore >= 75 ? "text-success" : matchResult.overallScore >= 50 ? "text-warning" : "text-danger"}`}>
+                      <span className={`text-4xl font-extrabold ${matchResult.overallScore >= 75 ? "text-success" : matchResult.overallScore >= 50 ? "text-warning" : "text-danger"}`}>
                         {matchResult.overallScore}%
                       </span>
                     </div>
                   </div>
-                  
-                  <div className="flex flex-col gap-3 w-full">
+
+                  <div className="flex flex-col gap-3 w-full mt-6">
                     <Button variant="secondary" onClick={handleRunMatch} disabled={runningMatch || !selectedResumeId} className="w-full">
                       {runningMatch ? "Analyzing..." : "Re-run Match"}
                     </Button>
@@ -334,8 +495,8 @@ export function ApplicationDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-2">
-                  <p className="text-sm text-text-secondary mb-4 leading-relaxed">
+                <div className="text-center py-6">
+                  <p className="text-sm text-text-secondary mb-6 leading-relaxed">
                     Compare your resume against the JD requirements using our semantic engine.
                   </p>
                   <Button
@@ -350,9 +511,11 @@ export function ApplicationDetailPage() {
               )}
             </CardContent>
           </Card>
+        )}
 
-          {/* Timeline Section */}
-          <Card className="shadow-sm border-border">
+        {/* TIMELINE TAB */}
+        {activeTab === "timeline" && (
+          <Card className="shadow-sm border-border max-w-2xl">
             <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
               <div className="bg-gray-100 p-1.5 rounded-md text-gray-600 border border-gray-200">
                 <History size={18} />
@@ -372,114 +535,139 @@ export function ApplicationDetailPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
-      
-      {/* Intelligent Assistant UI */}
-      <Card className="shadow-md border-primary/20 overflow-hidden relative">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
-        <CardHeader className="bg-info-bg border-b border-blue-200 py-4 px-6 flex flex-row items-center gap-3">
-          <div className="bg-primary p-1.5 rounded-md text-white shadow-sm">
-            <Sparkles size={18} />
-          </div>
-          <CardTitle className="text-lg m-0 text-primary">Intelligent Application Assistant</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          {intelligenceError && (
-            <div className="bg-danger-bg border border-danger/20 text-danger p-4 rounded-xl text-sm font-medium mb-4">
-              {intelligenceError}
-            </div>
-          )}
+        )}
 
-          {intelligence ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="flex flex-col gap-6">
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-surface border border-border rounded-xl p-4 shadow-sm text-center">
-                    <span className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Suitability</span>
-                    <strong className="text-xl font-extrabold text-primary capitalize">{intelligence.suitability}</strong>
-                  </div>
-                  <div className="bg-surface border border-border rounded-xl p-4 shadow-sm text-center">
-                    <span className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Match</span>
-                    <strong className="text-xl font-extrabold text-primary">
-                      {intelligence.matchPercentage === null ? "Run match" : `${intelligence.matchPercentage}%`}
-                    </strong>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-2">Personalized Advice</h4>
-                  <p className="text-sm text-text-secondary leading-relaxed bg-bg-secondary p-4 rounded-xl border border-border">
-                    {intelligence.personalizedAdvice}
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-3 flex items-center gap-2">
-                    Missing Keywords
-                    <span className="bg-danger-bg text-danger px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border border-danger/20">Critical</span>
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {intelligence.missingKeywords.slice(0, 8).map((keyword) => (
-                      <span key={keyword} className="bg-danger-bg border border-danger/20 text-danger px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
-                        {keyword}
-                      </span>
-                    ))}
-                    {intelligence.missingKeywords.length === 0 && (
-                      <span className="text-sm text-text-secondary italic">No missing keywords detected.</span>
-                    )}
-                  </div>
-                </div>
+        {/* NOTES TAB */}
+        {activeTab === "notes" && (
+          <Card className="shadow-sm border-border max-w-2xl">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+              <div className="bg-gray-100 p-1.5 rounded-md text-gray-600 border border-gray-200">
+                <Edit3 size={18} />
               </div>
+              <CardTitle className="text-lg m-0">Notes & Next Steps</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Add interview notes, recruiter contacts, or next steps here..."
+                className="w-full p-4 border border-border rounded-xl min-h-[200px] text-sm text-text focus:border-primary focus:ring-4 focus:ring-primary/15 focus:outline-none transition-shadow bg-surface resize-y"
+              />
+              <div className="flex justify-end mt-4">
+                <Button onClick={saveNotes} isLoading={isSavingNotes}>
+                  {!isSavingNotes && <Save size={16} className="mr-2" />} Save Notes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {/* COVER LETTER & OUTREACH TAB */}
+        {activeTab === "outreach" && (
+          <div className="flex flex-col gap-5">
+            {/* Cover Letter Generator */}
+            <Card className="shadow-sm border-border">
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+                <div className="bg-blue-100 p-1.5 rounded-md text-blue-600 border border-blue-200">
+                  <Mail size={18} />
+                </div>
+                <CardTitle className="text-lg m-0">Cover Letter Generator</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tone</label>
+                      <select value={coverLetterTone} onChange={e => setCoverLetterTone(e.target.value)}
+                        className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-bold text-text focus:outline-none focus:ring-2 focus:ring-primary/20">
+                        <option value="professional">Professional</option>
+                        <option value="enthusiastic">Enthusiastic</option>
+                        <option value="concise">Concise</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Highlight (optional)</label>
+                      <input type="text" placeholder="e.g. my system design project" value={coverLetterHighlight}
+                        onChange={e => setCoverLetterHighlight(e.target.value)}
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    </div>
+                  </div>
+                  <Button onClick={generateCoverLetter} isLoading={loadingCoverLetter} className="w-full sm:w-auto">
+                    {!loadingCoverLetter && <Sparkles size={16} className="mr-2" />} Generate Cover Letter
+                  </Button>
 
-              <div className="flex flex-col gap-6">
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-3">Relevant Projects from Resume</h4>
-                  <div className="flex flex-col gap-3">
-                    {intelligence.relevantProjects.map((project) => (
-                      <div key={`${project.name}-${project.description}`} className="bg-surface border border-border rounded-xl p-4 shadow-sm hover:border-primary/30 transition-colors">
-                        <strong className="block text-sm font-bold text-text mb-1">{project.name}</strong>
-                        <p className="text-xs text-text-secondary leading-relaxed mb-3 line-clamp-2">{project.description || "No description available."}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(project.technologies || []).map(t => (
-                            <span key={t} className="bg-bg-secondary border border-border px-2 py-0.5 rounded text-[10px] uppercase font-bold text-text-secondary tracking-wider">
-                              {t}
-                            </span>
-                          ))}
+                  {coverLetter && (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-text-secondary">Generated Cover Letter</span>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => copyText(coverLetter, setCopiedCL)}
+                            className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
+                            {copiedCL ? <Check size={12} /> : <Copy size={12} />} {copiedCL ? "Copied!" : "Copy"}
+                          </button>
+                          <button onClick={generateCoverLetter}
+                            className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800">
+                            <RefreshCcw size={12} /> Regenerate
+                          </button>
                         </div>
                       </div>
-                    ))}
-                    {intelligence.relevantProjects.length === 0 && (
-                      <div className="bg-warning-bg border border-warning/20 p-4 rounded-xl">
-                        <p className="text-sm font-medium text-warning">No resume project clearly matches this JD yet. Do not fabricate one; improve your resume only with real evidence.</p>
+                      <div className="bg-slate-50 border border-border rounded-xl p-4 text-sm text-text-secondary leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto">
+                        {coverLetter}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
+              </CardContent>
+            </Card>
 
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-3">Resume Content Suggestions</h4>
-                  <div className="flex flex-col gap-2">
-                    {intelligence.resumeImprovementSuggestions.slice(0, 4).map((item) => (
-                      <div key={item.skill} className="bg-bg-secondary border border-border rounded-lg p-3 text-sm">
-                        <strong className="text-primary block mb-1">{item.skill}</strong>
-                        <span className="text-text-secondary leading-relaxed">{item.suggestion}</span>
-                      </div>
-                    ))}
-                  </div>
+            {/* Recruiter Message Generator */}
+            <Card className="shadow-sm border-border">
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
+                <div className="bg-violet-100 p-1.5 rounded-md text-violet-600 border border-violet-200">
+                  <MessageSquare size={18} />
                 </div>
-              </div>
-            </div>
-          ) : (
-            !intelligenceError && (
-              <div className="flex justify-center items-center py-8 text-text-secondary text-sm font-medium">
-                <Spinner size="md" className="mr-3" /> Loading application intelligence...
-              </div>
-            )
-          )}
-        </CardContent>
-      </Card>
+                <CardTitle className="text-lg m-0">Recruiter Message</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Message Type</label>
+                    <div className="flex gap-2">
+                      {[{value:"application",label:"Introduction"},{value:"followup",label:"Follow-up"},{value:"thankyou",label:"Thank You"}].map(t => (
+                        <button key={t.value} onClick={() => setRecruiterMsgType(t.value)}
+                          className={`flex-1 text-xs font-bold py-2 px-3 rounded-lg border transition-all ${
+                            recruiterMsgType === t.value
+                              ? "bg-primary text-white border-primary"
+                              : "bg-white text-text-secondary border-border hover:border-primary/30"
+                          }`}>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <Button onClick={generateRecruiterMessage} isLoading={loadingRecruiterMsg} className="w-full sm:w-auto">
+                    {!loadingRecruiterMsg && <MessageSquare size={16} className="mr-2" />} Generate Message
+                  </Button>
+
+                  {recruiterMsg && (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-text-secondary">Generated Message</span>
+                        <button onClick={() => copyText(recruiterMsg, setCopiedRM)}
+                          className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
+                          {copiedRM ? <Check size={12} /> : <Copy size={12} />} {copiedRM ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                      <div className="bg-slate-50 border border-border rounded-xl p-4 text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                        {recruiterMsg}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

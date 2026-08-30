@@ -3,6 +3,19 @@ import { env } from "./env.js";
 
 export async function connectDatabase() {
   mongoose.set("strictQuery", true);
+  // Enforce zero-trust validation globally: all updates must pass schema validation (e.g. Enums)
+  mongoose.set("runValidators", true);
+
+  // Global plugin to prevent NaN from entering the database
+  mongoose.plugin(function (schema) {
+    for (const [path, schemaType] of Object.entries(schema.paths)) {
+      if (schemaType.instance === 'Number') {
+        schema.path(path).validate(function(value) {
+          return value == null || !Number.isNaN(value);
+        }, `Zero-Trust Data Validation Failed: Path \`${path}\` cannot be NaN.`);
+      }
+    }
+  });
 
   try {
     await mongoose.connect(env.mongodbUri, {

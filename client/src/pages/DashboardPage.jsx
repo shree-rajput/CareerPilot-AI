@@ -15,9 +15,13 @@ import {
   ArrowUpRight,
   TrendingUp,
   Clock,
-  Compass
+  Compass,
+  Briefcase,
+  MapPin,
+  Zap,
+  BarChart2
 } from "lucide-react";
-import { readinessApi } from "../api/career";
+import { readinessApi, jobApi } from "../api/career";
 import { analyticsApi } from "../api/features";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
@@ -32,18 +36,45 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedBreakdown, setExpandedBreakdown] = useState(false);
+  const [savedJobs, setSavedJobs] = useState([]);
+  const [skillGaps, setSkillGaps] = useState([]);
 
   const fetchDashboardData = async () => {
     try {
-      const [readinessRes, actionsRes, statsRes] = await Promise.all([
+      const [readinessRes, actionsRes, statsRes, jobsRes] = await Promise.all([
         readinessApi.getReadiness(),
         readinessApi.getActions(),
-        analyticsApi.getDashboard().catch(() => ({ stats: null }))
+        analyticsApi.getDashboard().catch(() => ({ stats: null })),
+        jobApi.getJobs({ savedOnly: true }).catch(() => ({ data: [] }))
       ]);
 
       if (readinessRes?.success) setReadinessData(readinessRes);
       if (actionsRes?.success) setActions(actionsRes.data);
       if (statsRes?.stats) setStats(statsRes.stats);
+
+      // Process saved jobs for skill gap analysis
+      const jobs = jobsRes?.data || [];
+      setSavedJobs(jobs.slice(0, 3));
+
+      // Build skill gap heatmap: count frequency of missing skills across all saved jobs
+      const skillFrequency = {};
+      jobs.forEach(job => {
+        const allSkills = [
+          ...(job.requiredSkills || []),
+          ...(job.preferredSkills || [])
+        ];
+        allSkills.forEach(s => {
+          if (s.skillName) {
+            skillFrequency[s.skillName] = (skillFrequency[s.skillName] || 0) + 1;
+          }
+        });
+      });
+      const sorted = Object.entries(skillFrequency)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([name, count]) => ({ name, count, pct: Math.round((count / Math.max(jobs.length, 1)) * 100) }));
+      setSkillGaps(sorted);
+
     } catch (err) {
       console.error(err);
       setError("Failed to load Career Command Center data.");
@@ -140,13 +171,7 @@ export function DashboardPage() {
             Continuous gap analysis is active. Work on recommended priority tasks below to target open placements.
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-surface border border-border px-4 py-2.5 rounded-xl shadow-sm">
-          <Flame className="text-warning h-5 w-5 animate-pulse" />
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none">Practice Streak</span>
-            <span className="text-sm font-extrabold text-text mt-1">3 Days active</span>
-          </div>
-        </div>
+
       </div>
 
       {/* Score and breakdown section */}
@@ -372,6 +397,73 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── NEW: Saved Jobs + Skill Gap ── */}
+      {(savedJobs.length > 0 || skillGaps.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+
+          {/* Top Saved Jobs */}
+          {savedJobs.length > 0 && (
+            <Card className="shadow-sm border-border">
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center justify-between">
+                <CardTitle className="text-base font-bold m-0 flex items-center gap-2">
+                  <Bookmark size={16} className="text-blue-500" /> Saved Jobs
+                </CardTitle>
+                <Link to="/jobs?savedOnly=true" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                  View all <ArrowUpRight size={11} />
+                </Link>
+              </CardHeader>
+              <CardContent className="p-4 flex flex-col gap-3">
+                {savedJobs.map(job => (
+                  <Link to={`/jobs/${job._id}`} key={job._id}
+                    className="flex items-center gap-3 p-3 bg-bg-secondary rounded-xl border border-border hover:border-primary/20 hover:bg-primary/5 transition-all group">
+                    <div className="w-8 h-8 rounded-lg bg-white border border-border flex items-center justify-center shrink-0">
+                      <Briefcase size={14} className="text-slate-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-text group-hover:text-primary truncate transition-colors">{job.title}</p>
+                      <p className="text-xs text-text-secondary font-medium">{job.company}
+                        {job.location && ` · ${job.location}`}
+                        {job.remoteStatus && ` · ${job.remoteStatus}`}
+                      </p>
+                    </div>
+                    <ChevronRight size={14} className="text-text-secondary shrink-0" />
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Skill Gap Heatmap */}
+          {skillGaps.length > 0 && (
+            <Card className="shadow-sm border-border">
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+                <CardTitle className="text-base font-bold m-0 flex items-center gap-2">
+                  <BarChart2 size={16} className="text-violet-500" /> Skill Gap Heatmap
+                </CardTitle>
+                <p className="text-[11px] text-text-secondary mt-0.5">Most wanted skills across your saved jobs</p>
+              </CardHeader>
+              <CardContent className="p-4 flex flex-col gap-2.5">
+                {skillGaps.map(({ name, count, pct }) => (
+                  <div key={name}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-semibold text-text">{name}</span>
+                      <span className="font-bold text-text-secondary">{count} job{count !== 1 ? "s" : ""}</span>
+                    </div>
+                    <div className="h-2 bg-bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${pct >= 80 ? "bg-rose-500" : pct >= 50 ? "bg-amber-500" : "bg-blue-400"}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[10px] text-text-secondary mt-2 italic">Skills in red appear across most of your saved jobs — prioritize these in your resume.</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }

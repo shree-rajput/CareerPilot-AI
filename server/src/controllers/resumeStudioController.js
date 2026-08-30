@@ -124,6 +124,76 @@ export const getInlineAiSuggestion = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/resumes/:id/improve-bullet
+ * Generate 3 AI-rewritten alternatives for a resume bullet.
+ * NEVER invents experience or skills — only rewrites what's provided.
+ */
+export const improveBullet = async (req, res, next) => {
+  try {
+    const { bullet, section, context } = req.body;
+
+    if (!bullet || !String(bullet).trim()) {
+      return res.status(400).json({ success: false, message: "Bullet text is required." });
+    }
+
+    const { executeAiTask } = await import("../services/ai/orchestrator.js");
+
+    const systemPrompt = `You are an expert resume writer specializing in strong, ATS-friendly bullet points.
+
+RULES (strictly enforced):
+- NEVER invent technologies, companies, metrics, or achievements not present in the original.
+- ONLY rewrite, clarify, strengthen, or expand what is explicitly stated.
+- Use strong action verbs (Built, Developed, Designed, Led, Reduced, Increased, etc.).
+- Add specific technical details only if they appear in the original text.
+- Each option should be meaningfully different in phrasing, not just word substitution.
+- Return exactly 3 alternatives.
+
+Return valid JSON:
+{
+  "options": [
+    { "text": "improved bullet option A", "rationale": "why this works" },
+    { "text": "improved bullet option B", "rationale": "why this works" },
+    { "text": "improved bullet option C", "rationale": "why this works" }
+  ]
+}`;
+
+    const prompt = `Section: ${section || "Experience"}
+${context ? `Context: ${context}` : ""}
+Original bullet: "${bullet}"
+
+Generate 3 progressively stronger rewrites.`;
+
+    const result = await executeAiTask("COPILOT_CHAT", {
+      systemOverride: systemPrompt,
+      message: prompt,
+      history: []
+    });
+
+    // Parse the result — COPILOT_CHAT returns { reply: "..." }
+    let options = [];
+    try {
+      const parsed = typeof result?.reply === "string"
+        ? JSON.parse(result.reply)
+        : result;
+      options = parsed?.options || [];
+    } catch (_) {
+      // Fallback: wrap reply as single option
+      options = [{ text: result?.reply || bullet, rationale: "AI rewrite" }];
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        original: bullet,
+        options
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 function calculateBasicATS(structuredData) {
     if (!structuredData) return 0;
     let score = 50; // base score

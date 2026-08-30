@@ -7,7 +7,9 @@ import {
   completeSession,
   getSessionReport,
   listSessions,
-  transcribeAudio
+  transcribeAudio,
+  submitCodingAnswer,
+  runCode
 } from "../controllers/interviewController.js";
 import multer from "multer";
 
@@ -22,5 +24,8 @@ router.get("/", listSessions);
 router.get("/:sessionId/report", getSessionReport);
 router.post("/:sessionId/question", getNextQuestion);
 router.post("/question/:questionId/answer", submitAnswer);
+router.post("/question/:questionId/run", runCode);
+router.post("/question/:questionId/coding-answer", submitCodingAnswer);
 router.post("/:sessionId/complete", completeSession);
 router.post("/transcribe", upload.single("audio"), transcribeAudio);
+

@@ -50,7 +50,8 @@ export async function callWithRetry({ systemPrompt, userPrompt, modelRole, jsonM
 
     try {
       return validateFn(correctionOutput);
-    } catch {
+    } catch (finalErr) {
+      console.error(`[RetryStrategy] Final validation failed for ${featureName}:`, finalErr.message);
       throw new AppError(
         `AI returned an invalid response for ${featureName} after correction attempt.`,
         502,

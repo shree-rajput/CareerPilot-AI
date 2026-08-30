@@ -15,6 +15,7 @@ import {
   uploadBufferToCloudinary,
   deleteFromCloudinary,
 } from "../config/cloudinary.js";
+import { extractEvidenceFromResume } from "../services/resume/evidenceService.js";
 
 /**
  * POST /api/resume/upload
@@ -418,6 +419,19 @@ export const uploadResume = asyncHandler(async (req, res) => {
 
     parentVersionId: parentVersionId || null,
   });
+
+  // ============================================================
+  // 13.5 EXTRACT EVIDENCE
+  // ============================================================
+  
+  if (structuredData) {
+    try {
+      await extractEvidenceFromResume(req.user._id, structuredData, resume.name);
+    } catch (err) {
+      console.error("Failed to extract evidence from resume:", err);
+      warnings.push("Resume was parsed, but there was an error extracting career evidence to your profile.");
+    }
+  }
 
   // ============================================================
   // 14. RESPONSE

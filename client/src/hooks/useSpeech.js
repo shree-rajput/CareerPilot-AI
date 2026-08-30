@@ -6,6 +6,7 @@ export function useSpeech() {
   const audioChunksRef = useRef([]);
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const isRecordingRef = useRef(false);
 
   useEffect(() => {
@@ -153,8 +154,9 @@ export function useSpeech() {
       utterance.rate = 0.92;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      utterance.onend = () => synth.cancel();
-      utterance.onerror = (event) => console.error("Speech synthesis error:", event);
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => { setIsSpeaking(false); synth.cancel(); };
+      utterance.onerror = (event) => { setIsSpeaking(false); console.error("Speech synthesis error:", event); };
 
       synth.speak(utterance);
     };
@@ -170,6 +172,7 @@ export function useSpeech() {
     transcript,
     setTranscript,
     isRecording,
+    isSpeaking,
     startRecording,
     stopRecording,
     resetTranscript,

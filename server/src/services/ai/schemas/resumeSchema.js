@@ -30,6 +30,15 @@ const certificationItemSchema = z.object({
   date: z.string().default("")
 });
 
+const skillEntitySchema = z.object({
+  canonicalName: z.string().describe("The normalized, universally accepted name of the skill (e.g., 'React' instead of 'ReactJS' or 'react framework')"),
+  originalMention: z.string().describe("The exact string found in the resume"),
+  category: z.enum([
+    "language", "framework", "library", "database", "tool", "cloud", 
+    "concept", "domain", "soft_skill", "certification", "other"
+  ]).default("other").describe("The broad category of the skill/technology")
+});
+
 export const resumeStructureSchema = z.object({
   name: z.string().default(""),
   email: z.string().default(""),
@@ -37,7 +46,7 @@ export const resumeStructureSchema = z.object({
   location: z.string().default(""),
   links: z.array(z.string()).default([]),
   summary: z.string().default(""),
-  skills: z.array(z.string()).default([]),
+  skills: z.array(skillEntitySchema).default([]),
   education: z.array(educationItemSchema).default([]),
   experience: z.array(experienceItemSchema).default([]),
   projects: z.array(projectItemSchema).default([]),

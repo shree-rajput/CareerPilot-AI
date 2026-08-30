@@ -24,7 +24,13 @@ export const profileUpdateSchema = z.object({
       graduationYear: z.number().int().min(1950).max(2100).optional()
     })
     .optional(),
-  targetRoles: nonEmptyStringArray.optional(),
+  targetRoles: z.array(
+    z.object({
+      title: z.string().trim().min(1).max(80),
+      techStack: z.array(z.string().trim()).default([]),
+      isPrimary: z.boolean().default(false)
+    })
+  ).max(50).default([]).optional(),
   preferredLocations: nonEmptyStringArray.optional(),
   experienceLevel: z.enum(["student", "fresher", "intern", "junior"]).optional(),
   technicalSkills: nonEmptyStringArray.optional(),

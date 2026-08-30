@@ -7,7 +7,12 @@ export const jobApi = {
   createJob: (data) => http.post("/jobs", data).then((res) => res.data),
   updateJob: (id, data) => http.patch(`/jobs/${id}`, data).then((res) => res.data),
   deactivateJob: (id) => http.delete(`/jobs/${id}`).then((res) => res.data),
+  // New AI-powered endpoints
+  saveJob: (id) => http.post(`/jobs/${id}/save`).then((res) => res.data),
+  matchJob: (id) => http.post(`/jobs/${id}/match`).then((res) => res.data),
+  shouldApply: (id) => http.post(`/jobs/${id}/should-apply`).then((res) => res.data),
 };
+
 
 // --- Skills API ---
 export const skillApi = {

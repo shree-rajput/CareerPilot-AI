@@ -12,4 +12,9 @@ router.get("/:id", jobController.getJobById);
 router.patch("/:id", jobController.updateJob);
 router.delete("/:id", jobController.deactivateJob);
 
+// New AI-powered endpoints
+router.post("/:id/save", jobController.saveJob);
+router.post("/:id/match", jobController.matchJob);
+router.post("/:id/should-apply", jobController.shouldApply);
+
 export default router;

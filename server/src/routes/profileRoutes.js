@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   updateProfile,
+  confirmExtractedProfile,
   getReadiness,
   getActions,
   dismissUserAction,
@@ -16,6 +17,7 @@ export const profileRouter = Router();
 profileRouter.use(requireAuth);
 
 profileRouter.patch("/", validate(profileUpdateSchema), updateProfile);
+profileRouter.post("/confirm-extracted", confirmExtractedProfile);
 profileRouter.get("/readiness", getReadiness);
 profileRouter.get("/actions", getActions);
 profileRouter.post("/actions/:actionId/dismiss", dismissUserAction);

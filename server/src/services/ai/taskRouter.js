@@ -2,12 +2,12 @@ import { MODEL_ROLES } from "./modelRouter.js";
 import { jdStructureSchema } from "./schemas/jdSchema.js";
 import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
-import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema } from "./schemas/interviewSchema.js";
+import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema } from "./schemas/interviewSchema.js";
 import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema } from "./schemas/careerSchema.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
 import { TAILORING_SYSTEM, buildTailoringPrompt } from "./prompts/resumeTailoring.js";
-import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt } from "./prompts/interviewPrompts.js";
+import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt, generateInterviewChallengePrompt, interviewerReactionPrompt, codingFollowUpPrompt } from "./prompts/interviewPrompts.js";
 import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt } from "./prompts/careerPrompts.js";
 
 import {
@@ -72,7 +72,34 @@ export const AI_TASKS = {
     systemPrompt: "You are an expert technical interviewer conducting a mock interview. Return only valid JSON.",
     buildPrompt: generateQuestionPrompt,
     schema: interviewQuestionSchema,
-    buildContext: buildInterviewQuestionContext,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GENERATE_INTERVIEW_CHALLENGE: {
+    featureName: "interview coding challenge generation",
+    modelRole: MODEL_ROLES.COMPLEX_REASONING,
+    systemPrompt: "You are an expert technical interviewer creating a dynamic coding challenge for a candidate. Return only valid JSON.",
+    buildPrompt: generateInterviewChallengePrompt,
+    schema: interviewChallengeSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GENERATE_INTERVIEWER_REACTION: {
+    featureName: "interviewer reaction generation",
+    modelRole: MODEL_ROLES.FAST_EXTRACTION,
+    systemPrompt: "You are a professional technical interviewer reacting naturally to a candidate's answer. Return only valid JSON.",
+    buildPrompt: interviewerReactionPrompt,
+    schema: interviewerReactionSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GENERATE_CODING_FOLLOWUP: {
+    featureName: "coding follow-up generation",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a professional technical interviewer reviewing submitted code and generating a follow-up question. Return only valid JSON.",
+    buildPrompt: codingFollowUpPrompt,
+    schema: codingFollowUpSchema,
+    buildContext: (params) => params,
     jsonMode: true
   },
   STRUCTURE_RESUME: {

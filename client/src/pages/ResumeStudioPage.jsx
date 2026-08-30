@@ -3,10 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { resumeApi } from "../api/resume";
 import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
-import { AlertTriangle, Sparkles, Layout, Save, CheckCircle, Clock, GitCompare, ArrowUpDown } from "lucide-react";
+import { AlertTriangle, Sparkles, Layout, Save, CheckCircle, Clock, GitCompare, ArrowUpDown, BarChart2, ExternalLink } from "lucide-react";
 import ResumeEditor from "../components/resume/ResumeEditor";
 import ResumePreview from "../components/resume/ResumePreview";
 import ResumeIntelligence from "../components/resume/ResumeIntelligence";
+import { KeywordIntelligence } from "../components/resume/KeywordIntelligence";
+import { ProfileConfirmationModal } from "../components/resume/ProfileConfirmationModal";
 import api from "../api/axios";
 function debounce(func, wait) {
   let timeout;
@@ -39,6 +41,8 @@ export function ResumeStudioPage() {
   const [diffData, setDiffData] = useState(null);
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [diffError, setDiffError] = useState("");
+
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   useEffect(() => {
     loadResume();
@@ -159,9 +163,19 @@ export function ResumeStudioPage() {
               </span>
             </div>
           </div>
-          <Button variant="primary" size="xs" onClick={handleSaveVersion} disabled={saving} className="flex items-center gap-1">
-            <Save size={14} /> Commit Version
-          </Button>
+          <div className="flex items-center gap-2">
+            {resume.cloudinaryUrl && (
+              <Button variant="outline" size="xs" onClick={() => window.open(resume.cloudinaryUrl, "_blank")} className="flex items-center gap-1">
+                <ExternalLink size={14} /> View Original
+              </Button>
+            )}
+            <Button variant="outline" size="xs" onClick={() => setShowProfileModal(true)}>
+              Sync Profile
+            </Button>
+            <Button variant="primary" size="xs" onClick={handleSaveVersion} disabled={saving} className="flex items-center gap-1">
+              <Save size={14} /> Commit Version
+            </Button>
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -189,6 +203,14 @@ export function ResumeStudioPage() {
             <Sparkles size={14} /> Intelligence
           </Button>
           <Button 
+            variant={rightPanel === "ats" ? "primary" : "outline"} 
+            size="xs" 
+            className="flex-1 flex items-center justify-center gap-1"
+            onClick={() => setRightPanel("ats")}
+          >
+            <BarChart2 size={14} /> ATS & Keywords
+          </Button>
+          <Button 
             variant={rightPanel === "diff" ? "primary" : "outline"} 
             size="xs" 
             className="flex-1 flex items-center justify-center gap-1"
@@ -207,6 +229,14 @@ export function ResumeStudioPage() {
 
           {rightPanel === "intelligence" && (
             <ResumeIntelligence resumeId={id} structuredData={structuredData} />
+          )}
+
+          {rightPanel === "ats" && (
+            <KeywordIntelligence
+              resumeId={id}
+              structuredData={structuredData}
+              jobId={resume?.jobId || null}
+            />
           )}
 
           {rightPanel === "diff" && (
@@ -305,6 +335,18 @@ export function ResumeStudioPage() {
           )}
         </div>
       </div>
+
+      {showProfileModal && structuredData && (
+        <ProfileConfirmationModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          structuredData={structuredData}
+          onConfirmSuccess={() => {
+            alert("Profile synced successfully!");
+            setShowProfileModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

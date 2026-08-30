@@ -12,6 +12,16 @@ const interviewQuestionSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    // Normalized SHA-256 fingerprint for exact duplicate detection
+    fingerprint: { type: String, default: "", index: true },
+    // Structured metadata for concept tracking and diversity
+    questionType: {
+      type: String,
+      enum: ["THEORETICAL", "PRACTICAL", "SCENARIO", "PROJECT", "DEBUGGING", "BEHAVIORAL", "FOLLOW_UP", "TRADEOFF", "DESIGN", "INTRODUCTION"],
+      default: "THEORETICAL"
+    },
+    technology: { type: String, default: "" },  // e.g. "React", "Node.js"
+    concept: { type: String, default: "" },       // e.g. "reconciliation", "closures"
     category: {
       type: String,
       required: true

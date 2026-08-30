@@ -10,5 +10,7 @@ router.post("/", projectController.createProject);
 router.get("/", projectController.getProjects);
 router.get("/:id", projectController.getProjectById);
 router.post("/:id/interview-kit", projectController.generateInterviewKit);
+router.post("/:id/ask-codebase", projectController.askCodebase);
+router.post("/:id/reality-check", projectController.realityCheck);
 
 export default router;

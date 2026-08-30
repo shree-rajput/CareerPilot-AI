@@ -6,15 +6,41 @@ export function notFound(req, _res, next) {
 }
 
 export function errorHandler(error, _req, res, _next) {
-  const statusCode = error.statusCode || 500;
+  let statusCode = error.statusCode || 500;
+  let message = error.message || "Something went wrong";
+  let code = error.code || "SERVER_ERROR";
+  let details = undefined;
+
+  // Handle Zod Validation Errors
+  if (error.name === "ZodError") {
+    statusCode = 400;
+    message = "Validation Error";
+    code = "VALIDATION_ERROR";
+    details = error.errors.map(e => ({ path: e.path.join('.'), message: e.message }));
+  }
+  
+  // Handle Mongoose Validation Errors
+  if (error.name === "ValidationError") {
+    statusCode = 400;
+    message = "Database Validation Error";
+    code = "VALIDATION_ERROR";
+    details = Object.values(error.errors).map(e => ({ path: e.path, message: e.message }));
+  }
+  
+  if (error.name === "CastError") {
+    statusCode = 400;
+    message = `Invalid value for ${error.path}`;
+    code = "CAST_ERROR";
+  }
 
   if (statusCode >= 500) {
     console.error(error);
   }
 
   res.status(statusCode).json({
-    message: error.message || "Something went wrong",
-    code: error.code || "SERVER_ERROR",
+    message,
+    code,
+    details,
     stack: env.nodeEnv === "development" ? error.stack : undefined
   });
 }

@@ -100,7 +100,10 @@ export async function generateInterviewQuestion(params) {
   try {
     return await executeAiTask("GENERATE_INTERVIEW_QUESTION", params);
   } catch (error) {
-    console.error("[AI] Interview question fallback:", error.message);
+    console.error("Failed to generate interview question:", error.stack || error);
+    try {
+      import('fs').then(fs => fs.writeFileSync('last_ai_error.log', error.stack || error.message));
+    } catch (e) {}
     return buildFallbackInterviewQuestion(params, error.code || error.message);
   }
 }
@@ -156,3 +159,59 @@ export async function generateCoachingReport(params) {
   return executeAiTask("GENERATE_COACHING_REPORT", params);
 }
 
+export async function generateInterviewChallenge(params) {
+  try {
+    return await executeAiTask("GENERATE_INTERVIEW_CHALLENGE", params);
+  } catch (error) {
+    console.error("[AI] Interview challenge generation fallback:", error.message);
+    throw new Error("Failed to generate coding challenge");
+  }
+}
+
+export async function evaluateCodingChallenge(params) {
+  return executeAiTask("ANALYZE_CODE", params);
+}
+
+/**
+ * Generates a short conversational reaction from the interviewer to the candidate's previous answer.
+ * This powers the "human-like" layer: acknowledgement + natural transition into the next question.
+ */
+export async function generateInterviewerReaction(params) {
+  try {
+    return await executeAiTask("GENERATE_INTERVIEWER_REACTION", params);
+  } catch (error) {
+    console.error("[AI] Interviewer reaction fallback:", error.message);
+    const { correctness, depth } = params.evaluation || {};
+    if (correctness === 'High' && depth === 'High') {
+      return { reaction: "Good explanation. Let's build on that.", tone: "affirming" };
+    } else if (correctness === 'Low') {
+      return { reaction: "I think there's a small gap there — let me approach it from a different angle.", tone: "probing" };
+    } else {
+      return { reaction: "Okay. Let's go a bit deeper on that.", tone: "neutral" };
+    }
+  }
+}
+
+/**
+ * After code submission, generates a conversational follow-up comment from the interviewer.
+ * References specific aspects of the submitted code and transitions back to verbal Q&A.
+ */
+export async function generateCodingFollowUp(params) {
+  try {
+    return await executeAiTask("GENERATE_CODING_FOLLOWUP", params);
+  } catch (error) {
+    console.error("[AI] Coding follow-up fallback:", error.message);
+    const passed = params.passedTests || 0;
+    const total = params.totalTests || 0;
+    if (passed === total && total > 0) {
+      return {
+        comment: "Your solution passed all the test cases. Good work on that. I noticed you used a particular approach — what would happen if the input size scaled significantly?",
+        followUpQuestion: "If this function had to handle millions of inputs, how would you optimize it?"
+      };
+    }
+    return {
+      comment: `Your solution passed ${passed} of ${total} test cases. Let's talk about the approach you took.`,
+      followUpQuestion: "Can you walk me through your reasoning for the algorithm you chose?"
+    };
+  }
+}

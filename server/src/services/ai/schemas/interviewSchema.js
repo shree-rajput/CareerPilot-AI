@@ -10,6 +10,23 @@ export const interviewQuestionSchema = z.object({
   fallbackReason: z.string().default("")
 });
 
+export const interviewChallengeSchema = z.object({
+  question: z.string().describe("The actual coding question description and requirements."),
+  technology: z.string().describe("The primary technology or framework (e.g. 'React', 'Node.js', or just 'Algorithms')."),
+  language: z.string().describe("The primary language expected (e.g. 'javascript', 'python')."),
+  difficulty: z.enum(["easy", "medium", "hard"]).describe("Difficulty level."),
+  starterCode: z.record(z.string()).describe("A dictionary mapping language string (e.g., 'javascript') to the starting code string."),
+  requirements: z.array(z.string()).describe("List of functional requirements."),
+  constraints: z.array(z.string()).describe("List of technical constraints (e.g., O(n) time complexity)."),
+  evaluationCriteria: z.array(z.string()).describe("What to look for when reviewing the code."),
+  testCases: z.array(z.object({
+    input: z.any().describe("The input arguments, formatted so they can be parsed or evaluated."),
+    expectedOutput: z.any().describe("The expected return value or output."),
+    explanation: z.string().describe("Why this test case is here."),
+    hidden: z.boolean().describe("True if this test case should be hidden from the user before submission.")
+  })).describe("A list of test cases to validate the solution.")
+});
+
 export const interviewPlanSchema = z.object({
   plan: z.array(z.object({
     section: z.string().describe("E.g., Introduction, Resume Deep Dive, Technical Core, System Design"),
@@ -84,3 +101,14 @@ export const codeReviewSchema = z.object({
   potentialIssues: z.array(z.string()).describe("Bugs or missing edge cases"),
   optimizationOpportunities: z.array(z.string()).describe("Ways to improve")
 });
+
+export const interviewerReactionSchema = z.object({
+  reaction: z.string().min(1).describe("Short 1-3 sentence natural interviewer reaction to the candidate's last answer."),
+  tone: z.enum(["affirming", "neutral", "probing", "redirecting"]).describe("The emotional tone of the reaction.")
+});
+
+export const codingFollowUpSchema = z.object({
+  comment: z.string().min(1).describe("2-3 sentence natural code review comment from the interviewer."),
+  followUpQuestion: z.string().min(1).describe("A specific verbal question about the code submitted, probing deeper understanding.")
+});
+

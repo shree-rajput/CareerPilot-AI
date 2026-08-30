@@ -1,33 +1,4 @@
-const COMMON_SKILLS = [
-  "JavaScript",
-  "TypeScript",
-  "React",
-  "Redux",
-  "Node.js",
-  "Express",
-  "MongoDB",
-  "SQL",
-  "MySQL",
-  "PostgreSQL",
-  "Java",
-  "Python",
-  "C++",
-  "HTML",
-  "CSS",
-  "TailwindCSS",
-  "Git",
-  "GitHub",
-  "Docker",
-  "AWS",
-  "REST API",
-  "JWT",
-  "Authentication",
-  "Cloudinary",
-  "Firebase",
-  "Next.js",
-  "Vite",
-  "Mongoose"
-];
+import { processExtractedSkills } from "../career/taxonomyService.js";
 
 function unique(values) {
   return [...new Set(values.filter(Boolean).map((value) => value.trim()))];
@@ -50,14 +21,24 @@ function splitBullets(sectionText) {
 }
 
 function extractSkills(text) {
-  const lower = text.toLowerCase();
-  const explicitSkills = COMMON_SKILLS.filter((skill) => lower.includes(skill.toLowerCase()));
-  const skillsSection = extractSection(text, ["skills", "technical skills"]);
-  const sectionSkills = skillsSection
-    ? skillsSection.split(/[,|•\n]/).map((skill) => skill.trim()).filter((skill) => skill.length <= 40)
-    : [];
+  const skillsSection = extractSection(text, ["skills", "technical skills", "technologies"]);
+  
+  // Try to find skills from the skills section specifically
+  let rawSkills = [];
+  if (skillsSection) {
+    // Split by commas, bullets, newlines
+    rawSkills = skillsSection.split(/[,|•\n]/).map(s => s.trim()).filter(s => s.length > 1 && s.length <= 40);
+  } else {
+    // If no explicit skills section, we could attempt to parse the whole text,
+    // but without AI it's risky and leads to false positives. We will do a basic word tokenization
+    // and let the taxonomy filter handle it.
+    rawSkills = text.split(/[\s,./|()[\]{}"':;]+/).map(s => s.trim()).filter(s => s.length > 1 && s.length <= 40);
+  }
 
-  return unique([...explicitSkills, ...sectionSkills]);
+  const processed = processExtractedSkills(rawSkills);
+  // local parser will just return strings for backward compatibility, or structured if we want.
+  // The AI parser will return objects. For now, let's return canonical names.
+  return processed.map(p => p.canonicalName);
 }
 
 function extractLinks(text) {

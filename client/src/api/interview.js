@@ -15,6 +15,16 @@ export const interviewApi = {
   },
   submitAnswer: async (questionId, data) => {
     const res = await http.post(`/interview/question/${questionId}/answer`, data);
+    // Returns { question, interviewerReaction }
+    return res.data.data;
+  },
+  runCode: async (questionId, data) => {
+    const res = await http.post(`/interview/question/${questionId}/run`, data);
+    return res.data.data;
+  },
+  submitCodingAnswer: async (questionId, data) => {
+    const res = await http.post(`/interview/question/${questionId}/coding-answer`, data);
+    // Returns { passedTests, totalTests, results, aiReview, codingFollowUp }
     return res.data.data;
   },
   completeSession: async (sessionId) => {
@@ -26,7 +36,6 @@ export const interviewApi = {
     return res.data.data;
   },
   transcribeAudio: async (formData) => {
-    // formData must contain the audio file
     const res = await http.post(`/interview/transcribe`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -35,3 +44,4 @@ export const interviewApi = {
     return res.data;
   }
 };
+

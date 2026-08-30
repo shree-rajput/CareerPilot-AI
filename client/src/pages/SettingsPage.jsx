@@ -280,14 +280,22 @@ export function SettingsPage() {
                 onChange={updateField} 
                 value={form.placementDeadline} 
               />
-              <div className="md:col-span-2">
-                <Input 
-                  label="All Technical Skills (comma separated)" 
-                  name="technicalSkills" 
-                  onChange={updateField} 
-                  value={form.technicalSkills} 
-                  placeholder="e.g. JavaScript, Python, AWS, Docker"
-                />
+              <div className="md:col-span-2 flex flex-col gap-2">
+                <label className="text-sm font-bold text-gray-700">Technical Skills (AI Extracted)</label>
+                {form.technicalSkills ? (
+                  <div className="flex flex-wrap gap-2 p-3 bg-bg-secondary rounded-lg border border-border">
+                    {csvToArray(form.technicalSkills).map((skill, idx) => (
+                      <span key={idx} className="bg-surface border border-border px-2.5 py-1 rounded-md text-xs font-semibold text-text">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-text-secondary italic">No skills extracted yet. Upload a resume to populate your profile.</div>
+                )}
+                <p className="text-xs text-text-secondary">
+                  Your technical skills are automatically extracted from your resumes, projects, and interview performance.
+                </p>
               </div>
             </div>
           </CardContent>

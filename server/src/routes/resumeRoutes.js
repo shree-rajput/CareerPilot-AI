@@ -14,7 +14,8 @@ import {
   saveDraft,
   saveAsVersion,
   analyzeAgainstJob,
-  getInlineAiSuggestion
+  getInlineAiSuggestion,
+  improveBullet
 } from "../controllers/resumeStudioController.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -43,3 +44,4 @@ resumeRouter.post("/:id/draft", saveDraft);
 resumeRouter.post("/:id/version", saveAsVersion);
 resumeRouter.post("/:id/analyze-job", analyzeAgainstJob);
 resumeRouter.post("/:id/ai-suggest", getInlineAiSuggestion);
+resumeRouter.post("/:id/improve-bullet", improveBullet);

@@ -69,12 +69,46 @@ const interviewSessionSchema = new mongoose.Schema(
       enum: ["setup", "in_progress", "completed", "aborted"],
       default: "setup"
     },
+    interviewState: {
+      type: String,
+      enum: [
+        "CREATED", "CONFIGURED", "INTRODUCTION", "THEORY", 
+        "PROJECT_DISCUSSION", "CODING", "CODING_REVIEW", 
+        "FOLLOW_UP", "BEHAVIORAL", "FINAL_EVALUATION", 
+        "REPORT_GENERATION", "COMPLETED"
+      ],
+      default: "CREATED"
+    },
     // Compact context extracted from Resume, JD, and Role
     candidateContext: {
       summary: { type: String, default: "" },
       relevantSkills: { type: [String], default: [] },
       potentialGaps: { type: [String], default: [] }
     },
+    // Snapshot of candidate's resume projects for resume-driven questioning
+    resumeSnapshot: {
+      projects: [{
+        name: { type: String },
+        technologies: { type: [String], default: [] },
+        description: { type: String, default: "" },
+        architecture: { type: String, default: "" }
+      }],
+      education: {
+        institution: { type: String, default: "" },
+        degree: { type: String, default: "" },
+        branch: { type: String, default: "" }
+      }
+    },
+    // Unique seed per attempt — drives question diversity across retries
+    interviewSeed: { type: String, default: "" },
+    // Tracks which tech concepts have already been tested
+    conceptsTested: [{
+      concept: { type: String },
+      technology: { type: String },
+      questionType: { type: String },
+      lastCorrectness: { type: String, enum: ["High", "Medium", "Low"], default: "Medium" },
+      count: { type: Number, default: 1 }
+    }],
     // Pre-generated interview outline
     interviewPlan: [{
       section: String,
@@ -85,7 +119,7 @@ const interviewSessionSchema = new mongoose.Schema(
     }],
     // Running state of the interview (evidence collection)
     intelligenceState: {
-      knowns: { type: Map, of: String, default: {} }, // e.g., "Node.js": "Strong evidence"
+      knowns: { type: Map, of: String, default: {} },
       unknowns: { type: [String], default: [] },
       weaknesses: { type: [String], default: [] },
       strengths: { type: [String], default: [] }

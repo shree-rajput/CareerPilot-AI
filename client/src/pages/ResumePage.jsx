@@ -22,24 +22,6 @@ export function ResumePage() {
   const [selectedResumeId, setSelectedResumeId] = useState(null);
   const [resumeDetail, setResumeDetail] = useState(null);
   const [resumeVersions, setResumeVersions] = useState([]);
-  const [loadingVersions, setLoadingVersions] = useState(false);
-
-  // Job description states
-  const [role, setRole] = useState("");
-  const [company, setCompany] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
-  const [savingJob, setSavingJob] = useState(false);
-  const [isJobSaved, setIsJobSaved] = useState(false);
-  const [savedJob, setSavedJob] = useState(null);
-  const [validationError, setValidationError] = useState("");
-
-  // Analysis states
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisStatus, setAnalysisStatus] = useState("");
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [tailoringResult, setTailoringResult] = useState(null);
-  const [isCachedResult, setIsCachedResult] = useState(false);
-
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -170,88 +152,6 @@ export function ResumePage() {
       setLoading(false);
     }
   }
-
-  async function handleSaveJob() {
-    if (!role.trim() || !company.trim() || !jobDescription.trim()) {
-      setValidationError("Job Title, Company, and Job Description are required.");
-      return;
-    }
-
-    if (jobDescription.trim().length < 50) {
-      setValidationError("Please paste the full job description (at least 50 characters).");
-      return;
-    }
-
-    try {
-      setSavingJob(true);
-      setValidationError("");
-      setError("");
-      setNotice("");
-      
-      setAnalysisStatus("Extracting job requirements...");
-      const result = await applicationsApi.create({
-        role: role.trim(),
-        company: company.trim(),
-        jobDescription: jobDescription.trim(),
-      });
-
-      setSavedJob(result.application);
-      setIsJobSaved(true);
-      setNotice("Job saved and requirements extracted successfully.");
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to save job details.");
-      setIsJobSaved(false);
-    } finally {
-      setSavingJob(false);
-      setAnalysisStatus("");
-    }
-  }
-
-  async function handleAnalyze() {
-    if (!selectedResumeId) {
-      setError("Please select a resume version first.");
-      return;
-    }
-    if (!isJobSaved || !savedJob?._id) {
-      setError("Please save the job details before analyzing.");
-      return;
-    }
-
-    try {
-      setAnalyzing(true);
-      setError("");
-      setNotice("");
-      setAnalysisResult(null);
-      setTailoringResult(null);
-
-      setAnalysisStatus("Analyzing resume against job description...");
-      const matchData = await matchApi.runMatch(savedJob._id, selectedResumeId);
-      setAnalysisResult(matchData.matchResult);
-      setIsCachedResult(Boolean(matchData.cached));
-
-      setAnalysisStatus("Generating tailoring recommendations...");
-      try {
-        const tailoringData = await tailoringApi.getRecommendations(savedJob._id, selectedResumeId);
-        setTailoringResult(tailoringData.data || tailoringData);
-      } catch (tailorErr) {
-        console.error("Tailoring recommendations failed:", tailorErr);
-      }
-
-      setNotice("Match analysis and tailoring recommendations ready.");
-    } catch (err) {
-      console.error("Match analysis failed:", err);
-      setError(err.response?.data?.message || "Resume match analysis failed.");
-    } finally {
-      setAnalyzing(false);
-      setAnalysisStatus("");
-    }
-  }
-
-  const handleJobFieldChange = (setter) => (val) => {
-    setter(val);
-    setIsJobSaved(false);
-    setSavedJob(null);
-  };
 
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 items-start animate-in fade-in slide-in-from-bottom-4 duration-500">
