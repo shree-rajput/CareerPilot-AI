@@ -10,14 +10,29 @@ import { AppError } from "../../utils/errors.js";
  * 3. If output fails validation (JSON or schema), we perform a specific targeted correction attempt.
  *    Instead of blindly re-prompting the entire context, we pass the bad JSON and ask it to fix it.
  */
-export async function callWithRetry({ systemPrompt, userPrompt, modelRole, jsonMode = true, validateFn, featureName }) {
+export async function callWithRetry({ 
+  systemPrompt, 
+  userPrompt, 
+  modelRole, 
+  jsonMode = true, 
+  maxTokens = 1024,
+  validateFn, 
+  featureName 
+}) {
   // ── Attempt 1: Full Prompt ──────────────────────────────────────────────────
   let rawOutput;
   try {
-    rawOutput = await groqChat([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ], { jsonMode, modelRole }); // Pass modelRole down to groqProvider (we'll update groqProvider soon)
+    let initialMessages = [];
+    if (Array.isArray(userPrompt)) {
+      initialMessages = [{ role: "system", content: systemPrompt }, ...userPrompt];
+    } else {
+      initialMessages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ];
+    }
+
+    rawOutput = await groqChat(initialMessages, { jsonMode, modelRole, maxTokens });
   } catch (err) {
     throw err; // Propagate provider errors immediately
   }
@@ -35,15 +50,30 @@ export async function callWithRetry({ systemPrompt, userPrompt, modelRole, jsonM
     
     let correctionOutput;
     try {
-      correctionOutput = await groqChat([
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-        { role: "assistant", content: rawOutput },
-        {
-          role: "user",
-          content: `Your previous response failed validation: ${err.message}. Please return ONLY a valid JSON object matching the required schema. Do not include markdown fences or explanations.`
-        }
-      ], { jsonMode, modelRole });
+      let correctionMessages = [];
+      if (Array.isArray(userPrompt)) {
+        correctionMessages = [
+          { role: "system", content: systemPrompt },
+          ...userPrompt,
+          { role: "assistant", content: rawOutput },
+          {
+            role: "user",
+            content: `Your previous response failed validation: ${err.message}. Please return ONLY a valid JSON object matching the required schema. Do not include markdown fences or explanations.`
+          }
+        ];
+      } else {
+        correctionMessages = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+          { role: "assistant", content: rawOutput },
+          {
+            role: "user",
+            content: `Your previous response failed validation: ${err.message}. Please return ONLY a valid JSON object matching the required schema. Do not include markdown fences or explanations.`
+          }
+        ];
+      }
+
+      correctionOutput = await groqChat(correctionMessages, { jsonMode, modelRole });
     } catch (correctionErr) {
       throw correctionErr;
     }

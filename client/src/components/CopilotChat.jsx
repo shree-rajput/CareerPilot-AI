@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot, User, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Loader2, ExternalLink } from 'lucide-react';
 import { copilotApi } from '../api/career';
 import { Button } from './ui/Button';
 
@@ -10,6 +10,7 @@ export function CopilotChat() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [activeId, setActiveId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -32,8 +33,19 @@ export function CopilotChat() {
     setIsLoading(true);
 
     try {
-      const response = await copilotApi.ask(userQuery);
-      setMessages(prev => [...prev, { role: 'assistant', content: response.answer || response.message || response.reply }]);
+      let currentId = activeId;
+      if (!currentId) {
+        const conv = await copilotApi.createConversation("Quick Chat");
+        currentId = conv._id;
+        setActiveId(currentId);
+      }
+
+      const response = await copilotApi.sendMessage(currentId, userQuery);
+      setMessages(prev => {
+        // Find if we already added a user message, replace the assistant response.
+        // Actually, just append the assistant response.
+        return [...prev, { role: 'assistant', content: response.reply }];
+      });
     } catch (error) {
       console.error("Copilot error:", error);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error while processing your request.' }]);
@@ -68,12 +80,25 @@ export function CopilotChat() {
               <p className="text-xs text-text-secondary font-medium">Your personal placement coach</p>
             </div>
           </div>
-          <button 
-            onClick={() => setIsOpen(false)}
-            className="p-2 text-text-secondary hover:bg-border rounded-full transition-colors"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => {
+                setIsOpen(false);
+                window.open('/copilot', '_blank', 'noopener,noreferrer');
+              }}
+              className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
+              title="Open in new tab"
+            >
+              <ExternalLink size={18} />
+            </button>
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="p-2 text-text-secondary hover:bg-border rounded-full transition-colors"
+              title="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Messages */}

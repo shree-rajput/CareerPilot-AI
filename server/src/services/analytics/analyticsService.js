@@ -8,6 +8,7 @@ import { MatchResult } from "../../models/MatchResult.js";
 import { Resume } from "../../models/Resume.js";
 import { User } from "../../models/User.js";
 import { Rejection } from "../../models/Rejection.js";
+import { normalizeScore } from "../../utils/math.js";
 
 const POSITIVE_STATUSES = ["oa", "interview", "offer"];
 const ADVANCED_STATUSES = ["interview", "offer"];
@@ -132,7 +133,7 @@ export async function getDashboardStats(userId) {
   return {
     // Core Placement Command Center Data
     readiness: {
-      score: readinessScore,
+      score: normalizeScore(readinessScore),
       breakdown
     },
     pipeline,

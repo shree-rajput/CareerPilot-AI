@@ -27,6 +27,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { MentorshipPage } from "./pages/MentorshipPage";
 import { MentorDashboardPage } from "./pages/MentorDashboardPage";
 import { CodingPracticePage } from "./pages/CodingPracticePage";
+import { CopilotPage } from "./pages/CopilotPage";
 
 export function App() {
   return (
@@ -37,6 +38,11 @@ export function App() {
         <Route path="/signup" element={<AuthPage mode="signup" />} />
 
         <Route element={<ProtectedRoute />}>
+          {/* Standalone Route for Copilot */}
+          <Route path="/copilot" element={<CopilotPage />} />
+          <Route path="/copilot/shared/:token" element={<CopilotPage />} />
+          
+          {/* Main Application Routes */}
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
 

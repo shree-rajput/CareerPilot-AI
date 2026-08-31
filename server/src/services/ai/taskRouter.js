@@ -3,12 +3,12 @@ import { jdStructureSchema } from "./schemas/jdSchema.js";
 import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
 import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema } from "./schemas/interviewSchema.js";
-import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema } from "./schemas/careerSchema.js";
+import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema } from "./schemas/careerSchema.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
 import { TAILORING_SYSTEM, buildTailoringPrompt } from "./prompts/resumeTailoring.js";
 import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt, generateInterviewChallengePrompt, interviewerReactionPrompt, codingFollowUpPrompt } from "./prompts/interviewPrompts.js";
-import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt } from "./prompts/careerPrompts.js";
+import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt, PROJECT_REALITY_CHECK_SYSTEM, buildRealityCheckPrompt } from "./prompts/careerPrompts.js";
 
 import {
   buildInterviewEvaluationContext,
@@ -185,7 +185,7 @@ export const AI_TASKS = {
   },
   COPILOT_CHAT: {
     featureName: "copilot chat",
-    modelRole: MODEL_ROLES.FAST_EXTRACTION,
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
     systemPrompt: COPILOT_CHAT_SYSTEM,
     buildPrompt: (context) => buildCopilotChatPrompt(context),
     schema: copilotChatSchema,
@@ -234,6 +234,15 @@ export const AI_TASKS = {
     systemPrompt: "You are an expert resume writer. Improve the given resume bullet or text based on the user instructions. Keep descriptions factual, clear, and professional. Return valid JSON containing the field 'suggestion'.",
     buildPrompt: (context) => `Text to improve: "${context.text}"\nSection context: "${context.context}"\nUser instructions: "${context.instruction}"`,
     schema: inlineSuggestionSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  PROJECT_REALITY_CHECK: {
+    featureName: "project reality check",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: PROJECT_REALITY_CHECK_SYSTEM,
+    buildPrompt: (context) => buildRealityCheckPrompt(context),
+    schema: projectRealityCheckSchema,
     buildContext: (params) => params,
     jsonMode: true
   }

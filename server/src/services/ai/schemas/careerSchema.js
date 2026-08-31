@@ -35,3 +35,11 @@ export const mentorSummarySchema = z.object({
   summary: z.string(),
   actionItems: z.array(z.string())
 });
+
+export const projectRealityCheckSchema = z.object({
+  status: z.enum(["Fully Verified", "Partially Verified", "Unverified"]),
+  verifiedClaims: z.array(z.string()),
+  unverifiedClaims: z.array(z.string()),
+  confidenceScore: z.number().min(0).max(100),
+  explanation: z.string()
+});

@@ -11,6 +11,14 @@ export function safeNumber(value, fallback = 0) {
 }
 
 /**
+ * Normalizes any value to a strict 0-100 range, safely falling back if invalid.
+ */
+export function normalizeScore(value, fallback = 0) {
+  const safeNum = safeNumber(value, fallback);
+  return Math.max(0, Math.min(100, safeNum));
+}
+
+/**
  * Clamps a score between a minimum and maximum value,
  * preserving NOT_ASSESSED if the score represents it.
  */

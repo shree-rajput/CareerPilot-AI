@@ -22,10 +22,9 @@ export const generateQuestionPrompt = (params) => {
 
   // Format candidate context (projects, skills)
   let candidateProfile = `Target Role: ${params.targetRole}\nTechnology Stack: ${params.technologyStack.join(", ")}`;
-  if (params.candidateContext) {
-    candidateProfile += `\nRelevant Skills: ${params.candidateContext.relevantSkills?.join(", ") || "None listed"}`;
-    if (params.resumeSnapshot?.projects?.length > 0) {
-      candidateProfile += `\nCandidate Projects:\n${params.resumeSnapshot.projects.map(p => 
+  if (params.candidateProfile) {
+    if (params.candidateProfile.projects?.length > 0) {
+      candidateProfile += `\nCandidate Projects:\n${params.candidateProfile.projects.map(p => 
         `- ${p.name}: ${p.description} (Tech: ${p.technologies?.join(", ")})`
       ).join("\n")}`;
     }

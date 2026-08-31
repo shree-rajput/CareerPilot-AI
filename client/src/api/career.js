@@ -40,7 +40,14 @@ export const preparationApi = {
 
 // --- Copilot API ---
 export const copilotApi = {
-  ask: (query) => http.post("/copilot/ask", { query }).then((res) => res.data),
+  getConversations: () => http.get("/copilot/conversations").then((res) => res.data),
+  getConversation: (id) => http.get(`/copilot/conversations/${id}`).then((res) => res.data),
+  createConversation: (title) => http.post("/copilot/conversations", { title }).then((res) => res.data),
+  renameConversation: (id, title) => http.patch(`/copilot/conversations/${id}`, { title }).then((res) => res.data),
+  deleteConversation: (id) => http.delete(`/copilot/conversations/${id}`).then((res) => res.data),
+  sendMessage: (id, query) => http.post(`/copilot/conversations/${id}/messages`, { query }).then((res) => res.data),
+  shareConversation: (id) => http.post(`/copilot/conversations/${id}/share`).then((res) => res.data),
+  getSharedConversation: (token) => http.get(`/copilot/shared/${token}`).then((res) => res.data),
 };
 
 // --- Readiness & Next Best Actions API ---

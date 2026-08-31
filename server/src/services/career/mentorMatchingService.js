@@ -135,7 +135,8 @@ export async function matchMentorsForCandidate(userId) {
   const top10 = scoredMentors.slice(0, 10);
 
   // Generate AI explanations for top 3 mentors in parallel
-  const explanationPromises = top10.slice(0, 3).map(async (item) => {
+  // Generate AI explanations for top 3 mentors sequentially to avoid rate limits
+  for (const item of top10.slice(0, 3)) {
     try {
       const response = await executeAiTask("GENERATE_MENTOR_EXPLANATION", {
         candidateGaps: candidateGaps.slice(0, 5),
@@ -162,10 +163,7 @@ export async function matchMentorsForCandidate(userId) {
         : "";
       item.aiExplanation = `${item.name} is a strong match as a ${item.mentorProfile.role}${companyPart}${skillsPart}.`;
     }
-    return item;
-  });
-
-  await Promise.all(explanationPromises);
+  }
 
   // Default explanations for the rest
   for (let i = 3; i < top10.length; i++) {

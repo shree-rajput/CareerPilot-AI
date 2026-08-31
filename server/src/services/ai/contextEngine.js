@@ -1,5 +1,5 @@
 import { User } from "../../models/User.js";
-
+import { Project } from "../../models/Project.js";
 import { InterviewSession } from "../../models/InterviewSession.js";
 import { InterviewQuestion } from "../../models/InterviewQuestion.js";
 
@@ -45,9 +45,10 @@ export async function buildInterviewEvaluationContext({ userId, sessionId, quest
 }
 
 export async function buildInterviewQuestionContext({ userId, sessionId }) {
-  const [user, session] = await Promise.all([
+  const [user, session, projects] = await Promise.all([
     User.findById(userId).lean(),
-    InterviewSession.findById(sessionId).lean()
+    InterviewSession.findById(sessionId).lean(),
+    Project.find({ userId }).select("name technologies architecture description role").lean()
   ]);
 
   if (!session) throw new Error("Missing session for interview question context");
@@ -59,7 +60,8 @@ export async function buildInterviewQuestionContext({ userId, sessionId }) {
   return {
     candidateProfile: {
       targetRoles: user?.targetRoles || [],
-      primaryTechStack: user?.primaryTechStack || []
+      primaryTechStack: user?.primaryTechStack || [],
+      projects: projects || []
     },
     targetRole: session.targetRole,
     technologyStack: session.technologyStack || [],

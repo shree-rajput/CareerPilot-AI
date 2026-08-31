@@ -32,12 +32,12 @@ export async function generateRealityCheck(projectId, userId, resumeClaims) {
     throw new AppError("Project not found.", 404);
   }
 
-  // A new AI task dedicated to Reality Check validation
-  // Mocked for Phase 4 implementation until specific task is added to router
-  return {
-    status: "Partially Verified",
-    verifiedClaims: project.technologies,
-    unverifiedClaims: resumeClaims.filter(c => !project.technologies.includes(c)),
-    confidenceScore: 75
-  };
+  const response = await executeAiTask("PROJECT_REALITY_CHECK", {
+    projectName: project.name,
+    projectTechnologies: project.technologies.join(", "),
+    projectArchitecture: project.architecture || "Not specified",
+    resumeClaims: resumeClaims
+  });
+
+  return response;
 }

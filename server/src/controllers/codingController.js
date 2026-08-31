@@ -3,6 +3,8 @@ import CodingSubmission from "../models/CodingSubmission.js";
 import { executeCode } from "../services/codeExecution/executionService.js";
 import { executeAiTask } from "../services/ai/orchestrator.js";
 import { updateUserReadinessScore } from "../services/career/readinessService.js";
+import { UserSkill } from "../models/UserSkill.js";
+import { normalizeSkill } from "../services/career/taxonomyService.js";
 import { createError } from "../utils/error.js";
 
 /**
@@ -130,6 +132,49 @@ export const submitPracticeCode = async (req, res, next) => {
 
     // Trigger readiness score updates
     await updateUserReadinessScore(req.user.id, `Completed SDE coding practice: ${question.title}`);
+
+    // Update skill evidence in career profile
+    if (question.tags && Array.isArray(question.tags)) {
+      // Also consider the language used as a skill to update
+      const skillsToUpdate = [...question.tags, language];
+      for (const rawTag of skillsToUpdate) {
+        const normalized = normalizeSkill(rawTag);
+        if (normalized && normalized.isKnown) {
+          const existingSkill = await UserSkill.findOne({ userId: req.user.id, canonicalName: normalized.canonicalName });
+          
+          // Generate evidence string
+          const correctnessWeight = allPassed ? 2 : (executionResult.passedTests / totalTests);
+          const newEvidence = {
+            description: `Coding Practice "${question.title}" in ${language}. Passed ${executionResult.passedTests}/${totalTests} tests.`,
+            source: "coding_challenge",
+            date: new Date(),
+            weight: correctnessWeight
+          };
+
+          if (existingSkill) {
+            existingSkill.evidence.push(newEvidence);
+            // Boost confidence for fully passed, slightly increase for partial, maybe decay for 0
+            if (allPassed) {
+              existingSkill.confidence = Math.min(100, existingSkill.confidence + 10);
+            } else if (executionResult.passedTests > 0) {
+              existingSkill.confidence = Math.min(100, existingSkill.confidence + 2);
+            }
+            await existingSkill.save();
+          } else if (allPassed) {
+             // Optional: automatically add it if they passed, but generally we rely on extraction
+             const newSkill = new UserSkill({
+               userId: req.user.id,
+               originalName: rawTag,
+               canonicalName: normalized.canonicalName,
+               category: normalized.category,
+               confidence: 50,
+               evidence: [newEvidence]
+             });
+             await newSkill.save();
+          }
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,

@@ -95,9 +95,13 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
     const request = {
       model,
       messages,
-      temperature,
-      max_tokens: maxTokens
+      temperature
     };
+    
+    if (maxTokens) {
+      // only pass if explicitly desired and valid, but mostly we let the model decide
+      // request.max_tokens = maxTokens; 
+    }
 
     if (jsonMode) {
       request.response_format = { type: "json_object" };

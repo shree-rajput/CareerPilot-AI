@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { readinessApi, jobApi } from "../api/career";
 import { analyticsApi } from "../api/features";
+import { normalizeScore } from "../utils/scoreUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
 import { Link, useNavigate } from "react-router-dom";
@@ -136,7 +137,8 @@ export function DashboardPage() {
   // SVG Gauge parameters
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (readinessScore / 100) * circumference;
+  const safeReadinessScore = normalizeScore(readinessScore);
+  const strokeDashoffset = circumference - (safeReadinessScore / 100) * circumference;
 
   // Breakdown mapping with custom colors and weighted values
   const breakdownLabels = [
@@ -208,7 +210,7 @@ export function DashboardPage() {
               />
             </svg>
             <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-4xl font-black text-text leading-none">{readinessScore}%</span>
+              <span className="text-4xl font-black text-text leading-none">{safeReadinessScore}%</span>
               <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary mt-1">Ready</span>
             </div>
           </div>
@@ -239,7 +241,7 @@ export function DashboardPage() {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {breakdownLabels.map((metric) => {
-                const score = breakdownObj[metric.key] || 0;
+                const score = normalizeScore(breakdownObj[metric.key]);
                 return (
                   <div key={metric.key} className="flex flex-col">
                     <div className="flex justify-between items-center text-xs font-semibold text-text mb-1">
@@ -349,7 +351,7 @@ export function DashboardPage() {
                   <div key={idx} className="flex flex-col relative group">
                     <span className="absolute -left-[21px] top-1.5 h-3.5 w-3.5 rounded-full border-[3px] border-surface bg-primary group-hover:scale-110 transition-all shadow-sm"></span>
                     <div className="flex items-center justify-between gap-4">
-                      <strong className="text-xs font-bold text-text">Readiness score updated to {entry.score}%</strong>
+                      <strong className="text-xs font-bold text-text">Readiness score updated to {normalizeScore(entry.score)}%</strong>
                       <span className="text-[10px] text-text-secondary font-bold flex items-center gap-1 shrink-0">
                         <Clock size={10} />
                         {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}

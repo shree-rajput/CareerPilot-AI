@@ -6,7 +6,7 @@ import { Project } from "../../models/Project.js";
 import { Application } from "../../models/Application.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import MentorshipSession from "../../models/MentorshipSession.js";
-import { NOT_ASSESSED, safeNumber, clampScore, safeAverage, assertFiniteScore } from "../../utils/math.js";
+import { NOT_ASSESSED, safeNumber, clampScore, safeAverage, assertFiniteScore, normalizeScore } from "../../utils/math.js";
 
 /**
  * Calculates and updates a user's career readiness score and breakdown.
@@ -189,41 +189,39 @@ export async function updateUserReadinessScore(userId, changeReason = "System Up
   addWeight(communicationScore, 0.05);
   addWeight(strategyScore, 0.05);
 
-  let finalScore = NOT_ASSESSED;
+  let finalScore = 0;
   if (totalWeight > 0) {
-    finalScore = clampScore(Math.round(earnedScore / totalWeight));
+    finalScore = normalizeScore(Math.round(earnedScore / totalWeight));
   }
   
-  finalScore = assertFiniteScore(finalScore, NOT_ASSESSED);
+  finalScore = normalizeScore(finalScore);
 
   const breakdown = {
-    resume: assertFiniteScore(resumeScore),
-    technical: assertFiniteScore(technicalScore),
-    interview: assertFiniteScore(interviewScore),
-    projects: assertFiniteScore(projectsScore),
-    applications: assertFiniteScore(applicationScore),
-    preparation: assertFiniteScore(prepScore),
-    profile: assertFiniteScore(profileScore),
-    communication: assertFiniteScore(communicationScore),
-    careerStrategy: assertFiniteScore(strategyScore)
+    resume: normalizeScore(resumeScore),
+    technical: normalizeScore(technicalScore),
+    interview: normalizeScore(interviewScore),
+    projects: normalizeScore(projectsScore),
+    applications: normalizeScore(applicationScore),
+    preparation: normalizeScore(prepScore),
+    profile: normalizeScore(profileScore),
+    communication: normalizeScore(communicationScore),
+    careerStrategy: normalizeScore(strategyScore)
   };
 
   // Normalize existing corrupted readinessHistory entries
   if (user.readinessHistory && user.readinessHistory.length > 0) {
     user.readinessHistory.forEach(entry => {
-      if (entry.score === null || entry.score === undefined || isNaN(entry.score)) {
-        entry.score = NOT_ASSESSED;
-      }
+      entry.score = normalizeScore(entry.score);
     });
   }
 
   // Check if history needs an update
-  const previousScore = assertFiniteScore(user.readinessScore, NOT_ASSESSED);
+  const previousScore = normalizeScore(user.readinessScore);
   if (previousScore !== finalScore || user.readinessHistory.length === 0) {
     user.readinessHistory.push({
       score: finalScore,
       date: new Date(),
-      changeReason: `${changeReason} (Was: ${previousScore === NOT_ASSESSED ? "Not Assessed" : previousScore})`
+      changeReason: `${changeReason} (Was: ${previousScore})`
     });
   }
 

@@ -1,6 +1,6 @@
 import { AI_TASKS } from "./taskRouter.js";
 import { callWithRetry } from "./retryStrategy.js";
-import { validateOutput } from "./outputValidator.js";
+import { validateOutput, extractJson } from "./outputValidator.js";
 import { validateEvidence } from "./evidenceValidator.js";
 import { aiLogger } from "./observability.js";
 
@@ -29,7 +29,8 @@ export async function executeAiTask(taskName, params) {
     // 3. Define Validation Pipeline
     const validateFn = (rawOutput) => {
       // 3a. JSON extraction and Schema validation
-      let data = validateOutput(rawOutput, taskConfig.schema);
+      const parsed = extractJson(rawOutput) || rawOutput; // fallback to raw if not extractable (e.g. if LLM returned clean json object already)
+      let data = validateOutput(parsed, taskConfig.schema);
 
       // 3b. Evidence validation (if applicable)
       // If the schema returns an array of evidence items, or has an evidence field, validate it.
@@ -49,6 +50,7 @@ export async function executeAiTask(taskName, params) {
       userPrompt,
       modelRole: taskConfig.modelRole,
       jsonMode: taskConfig.jsonMode,
+      maxTokens: taskConfig.maxTokens || 1024,
       validateFn,
       featureName: taskConfig.featureName
     });
