@@ -6,6 +6,8 @@ import { Project } from "../../models/Project.js";
 import { Application } from "../../models/Application.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import MentorshipSession from "../../models/MentorshipSession.js";
+import { UserSkill } from "../../models/UserSkill.js";
+import { normalizeSkill } from "./taxonomyService.js";
 import { updateUserReadinessScore } from "./readinessService.js";
 
 /**
@@ -46,11 +48,12 @@ export async function getNextBestActions(userId) {
       type: "resume",
       pointsPotential: 15
     });
-  } else if (latestResume.healthIndicators && latestResume.healthIndicators.ats < 70) {
+  } else if (latestResume.healthIndicators && (latestResume.healthIndicators.ats || 0) < 70) {
+    const atsScore = latestResume.healthIndicators.ats || 0;
     rawActions.push({
       id: "optimize_resume",
       title: "Optimize Your Resume ATS Score",
-      description: `Your current ATS compatibility score is ${latestResume.healthIndicators.ats}%. Fix identified layout and keyword issues.`,
+      description: `Your current ATS compatibility score is ${atsScore}%. Fix identified layout and keyword issues.`,
       priority: "HIGH",
       ctaText: "Review Recommendations",
       ctaUrl: "/resume",
@@ -111,6 +114,18 @@ export async function getNextBestActions(userId) {
         ctaUrl: "/prepare",
         type: "interview",
         pointsPotential: 10
+      });
+
+      // AI -> Human Mentor Escalation
+      rawActions.push({
+        id: "escalate_to_mentor",
+        title: "AI → Human Mentor Escalation Recommended",
+        description: `Your recent interview performance (${Math.round(avgScore)}%) indicates difficulties with live explanations or architectural concepts. Book a 1:1 session with an expert software engineering mentor.`,
+        priority: "HIGH",
+        ctaText: "Talk to a Mentor",
+        ctaUrl: "/mentorship",
+        type: "mentorship",
+        pointsPotential: 15
       });
     }
   }
@@ -220,6 +235,30 @@ export async function getNextBestActions(userId) {
         type: "preparation",
         pointsPotential: 5
       });
+    }
+  }
+
+  // 9. Skill Gaps against Target Role
+  const primaryRole = user.targetRoles?.find(r => r.isPrimary) || user.targetRoles?.[0];
+  if (primaryRole && primaryRole.techStack && primaryRole.techStack.length > 0) {
+    for (const stackItem of primaryRole.techStack) {
+      const normalized = normalizeSkill(stackItem);
+      if (normalized && normalized.isKnown) {
+        const skill = await UserSkill.findOne({ userId, canonicalName: normalized.canonicalName });
+        if (!skill || skill.confidence < 60) {
+          rawActions.push({
+            id: `skill_gap_${normalized.canonicalName}`,
+            title: `Close Skill Gap: ${normalized.canonicalName}`,
+            description: `Your target role requires ${normalized.canonicalName}. Complete coding challenges or register projects using this skill to boost confidence.`,
+            priority: "HIGH",
+            ctaText: "Practice Skill",
+            ctaUrl: "/coding",
+            type: "skill_gap",
+            pointsPotential: 25
+          });
+          break; // Suggest closing one critical skill gap at a time
+        }
+      }
     }
   }
 

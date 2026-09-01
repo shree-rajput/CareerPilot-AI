@@ -109,6 +109,12 @@ export const requestMentorSession = async (req, res, next) => {
       return next(createError(400, "Missing required booking details"));
     }
 
+    // Mentor Readiness Evaluator: Candidate must meet a minimum readiness threshold
+    const user = await User.findById(req.user.id);
+    if (!user || user.readinessScore < 50) {
+      return next(createError(403, "Mentor Readiness not met. Complete 'Next Best Actions' on your dashboard to reach at least 50% readiness before booking a session."));
+    }
+
     const session = await requestSession({
       studentId: req.user.id,
       mentorId,

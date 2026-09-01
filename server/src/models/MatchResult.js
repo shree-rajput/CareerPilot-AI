@@ -46,16 +46,38 @@ const matchResultSchema = new mongoose.Schema(
       responsibilities: { type: Number, default: 0 },
       preferredSkills: { type: Number, default: 0 }
     },
-    // Evidence
+    // Fit breakdown matching section 3 requirements
+    fitBreakdown: {
+      technicalFit: { type: Number, default: 0 },
+      experienceFit: { type: Number, default: 0 },
+      skillFit: { type: Number, default: 0 },
+      projectFit: { type: Number, default: 0 },
+      educationFit: { type: Number, default: 0 }
+    },
+    // Evidence & Categorized Gaps
     matchedSkills: { type: [String], default: [] },
     partialSkills: { type: [String], default: [] },
     missingSkills: { type: [String], default: [] },
+    criticalGaps: { type: [String], default: [] },
+    importantGaps: { type: [String], default: [] },
+    niceToHaveGaps: { type: [String], default: [] },
+    actionPlan: {
+      type: [
+        {
+          gap: { type: String, required: true },
+          severity: { type: String, enum: ["critical", "important", "nice_to_have"], required: true },
+          action: { type: String, required: true }
+        }
+      ],
+      default: []
+    },
     evidence: { type: [evidenceItemSchema], default: [] },
     // AI writes the explanation — it does NOT calculate the score
     explanation: { type: String, default: "" }
   },
   { timestamps: true }
 );
+
 
 matchResultSchema.index({ resumeHash: 1, jdHash: 1 });
 

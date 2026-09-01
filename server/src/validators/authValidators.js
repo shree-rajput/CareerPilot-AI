@@ -31,14 +31,50 @@ export const profileUpdateSchema = z.object({
       isPrimary: z.boolean().default(false)
     })
   ).max(50).default([]).optional(),
+  targetCompanies: nonEmptyStringArray.optional(),
   preferredLocations: nonEmptyStringArray.optional(),
+  remotePreference: z.enum(["remote", "hybrid", "onsite", "any"]).optional(),
+  salaryExpectation: z.string().trim().max(100).optional(),
+  placementDeadline: z.string().nullable().optional().transform(val => val ? new Date(val) : undefined),
   experienceLevel: z.enum(["student", "fresher", "intern", "junior"]).optional(),
   technicalSkills: nonEmptyStringArray.optional(),
   primaryTechStack: nonEmptyStringArray.optional(),
   interviewPreferences: z
     .object({
       defaultDifficulty: z.enum(["easy", "medium", "hard"]).optional(),
-      defaultInterviewType: z.enum(["technical", "hr", "project", "mixed"]).optional()
+      defaultInterviewType: z.enum(["technical", "hr", "project", "mixed"]).optional(),
+      durationMinutes: z.number().optional(),
+      techVsBehavioralRatio: z.enum(["technical_heavy", "balanced", "behavioral_heavy"]).optional(),
+      preferredQuestionCategories: z.array(z.string()).optional(),
+      adaptiveQuestioning: z.boolean().optional(),
+      followUpQuestions: z.boolean().optional(),
+      strictnessOfEvaluation: z.enum(["gentle", "standard", "strict"]).optional(),
+      feedbackDepth: z.enum(["concise", "standard", "detailed"]).optional()
+    })
+    .optional(),
+  aiPreferences: z
+    .object({
+      responseStyle: z.enum(["concise", "detailed"]).optional(),
+      coachingStyle: z.enum(["encouraging", "rigorous", "socratic", "direct"]).optional(),
+      hintBehavior: z.enum(["always", "on_request", "never"]).optional(),
+      personalizedRecommendations: z.boolean().optional()
+    })
+    .optional(),
+  preparationPreferences: z
+    .object({
+      dailyTargetMinutes: z.number().min(10).max(300).optional(),
+      preferredLearningAreas: z.array(z.string()).optional(),
+      difficultyPreference: z.enum(["easy", "medium", "hard", "adaptive"]).optional(),
+      priorityTopics: z.array(z.string()).optional()
+    })
+    .optional(),
+  notificationPreferences: z
+    .object({
+      applicationReminders: z.boolean().optional(),
+      interviewReminders: z.boolean().optional(),
+      preparationReminders: z.boolean().optional(),
+      weeklySummaries: z.boolean().optional(),
+      alerts: z.boolean().optional()
     })
     .optional()
 });

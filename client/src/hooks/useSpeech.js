@@ -154,9 +154,12 @@ export function useSpeech() {
       utterance.rate = 0.92;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => { setIsSpeaking(false); synth.cancel(); };
-      utterance.onerror = (event) => { setIsSpeaking(false); console.error("Speech synthesis error:", event); };
+      utterance.onerror = (event) => {
+        setIsSpeaking(false);
+        if (event.error !== 'interrupted' && event.error !== 'canceled') {
+          console.warn("Speech synthesis error:", event.error || event);
+        }
+      };
 
       synth.speak(utterance);
     };

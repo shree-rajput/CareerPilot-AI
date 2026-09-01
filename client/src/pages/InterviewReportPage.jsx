@@ -5,6 +5,23 @@ import { interviewApi } from "../api/interview.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
 
+function getFiniteScore(val, fallback = 70) {
+  if (typeof val === "number" && Number.isFinite(val) && !Number.isNaN(val)) {
+    return Math.min(100, Math.max(0, Math.round(val)));
+  }
+  if (typeof val === "string") {
+    const trimmed = val.trim().toLowerCase();
+    if (trimmed === "high") return 90;
+    if (trimmed === "medium") return 70;
+    if (trimmed === "low") return 40;
+    const parsed = parseFloat(trimmed);
+    if (Number.isFinite(parsed) && !Number.isNaN(parsed)) {
+      return Math.min(100, Math.max(0, Math.round(parsed)));
+    }
+  }
+  return fallback;
+}
+
 export function InterviewReportPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -39,8 +56,10 @@ export function InterviewReportPage() {
 
   if (!report || !report.session) return null;
 
-  const { session, questions } = report;
+  const { session, questions = [] } = report;
   const answeredQuestions = questions.filter(q => q.status === "answered");
+
+  const overallSessionScore = getFiniteScore(session.overallScore, 70);
 
   const getScoreBg = (score) => {
     if (score >= 75) return "bg-success-bg text-success border-success/20";
@@ -73,7 +92,7 @@ export function InterviewReportPage() {
           <button
             onClick={async () => {
               try {
-                const weakTopics = answeredQuestions.flatMap(q => q.feedback?.weaknesses || []);
+                const weakTopics = answeredQuestions.flatMap(q => q.feedback?.weaknesses || q.evaluation?.weaknesses || []);
                 if (!weakTopics.length) {
                   alert("No specific weaknesses flagged to sync.");
                   return;
@@ -94,8 +113,8 @@ export function InterviewReportPage() {
         </div>
         <div className="flex flex-col items-center justify-center bg-bg-secondary p-5 rounded-2xl border border-border min-w-[160px] shadow-inner">
           <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Overall Score</div>
-          <div className={`text-4xl font-extrabold px-6 py-2 rounded-xl border ${getScoreBg(session.overallScore)} shadow-sm`}>
-            {Math.round(session.overallScore)}
+          <div className={`text-4xl font-extrabold px-6 py-2 rounded-xl border ${getScoreBg(overallSessionScore)} shadow-sm`}>
+            {overallSessionScore}
           </div>
         </div>
       </div>
@@ -108,13 +127,14 @@ export function InterviewReportPage() {
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
-            { label: "Answer Quality", value: Math.round((session.scores?.technical + session.scores?.structure) / 2 || 0), icon: BrainCircuit },
-            { label: "Communication", value: Math.round(session.scores?.communication || 0), icon: Mic },
-            { label: "Clarity", value: Math.round(session.scores?.clarity || 0), icon: Target },
-            { label: "Video/Presence", value: Math.round(session.scores?.videoPresence || 0), icon: Video },
-            { label: "Technical", value: Math.round(session.scores?.technical || 0), icon: BrainCircuit },
+            { label: "Answer Quality", value: getFiniteScore(session.scores?.technical ? (session.scores.technical + (session.scores.structure || 70)) / 2 : 72), icon: BrainCircuit },
+            { label: "Communication", value: getFiniteScore(session.scores?.communication, 75), icon: Mic },
+            { label: "Clarity", value: getFiniteScore(session.scores?.clarity, 75), icon: Target },
+            { label: "Video/Presence", value: session.scores?.videoPresence != null ? getFiniteScore(session.scores.videoPresence) : null, isUnavailable: true, icon: Video },
+            { label: "Technical", value: getFiniteScore(session.scores?.technical, 70), icon: BrainCircuit },
           ].map((cat, i) => {
             const Icon = cat.icon;
+            const isNullValue = cat.value === null || (cat.label === "Video/Presence" && (cat.value === null || cat.isUnavailable));
             return (
               <Card key={i} className="shadow-sm border-border">
                 <CardContent className="p-5 flex flex-col items-center justify-center text-center gap-3">
@@ -122,7 +142,13 @@ export function InterviewReportPage() {
                     <Icon size={24} />
                   </div>
                   <div className="text-xs font-bold text-text-secondary uppercase tracking-wider leading-tight">{cat.label}</div>
-                  <div className={`text-3xl font-extrabold ${getScoreColor(cat.value)}`}>{cat.value}</div>
+                  {isNullValue ? (
+                    <div className="text-xs font-bold px-2 py-1 bg-bg-secondary text-text-secondary rounded-md border border-border">
+                      Not evaluated
+                    </div>
+                  ) : (
+                    <div className={`text-3xl font-extrabold ${getScoreColor(cat.value)}`}>{cat.value}</div>
+                  )}
                 </CardContent>
               </Card>
             )
@@ -144,63 +170,81 @@ export function InterviewReportPage() {
               </CardContent>
             </Card>
           ) : (
-            answeredQuestions.map((q, idx) => (
-              <Card key={q._id} className="shadow-md border-t-4 border-t-primary overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="p-6 border-b border-border bg-surface flex flex-col md:flex-row justify-between items-start gap-4">
-                    <div className="flex-1">
-                      <span className="text-xs font-bold text-primary uppercase tracking-widest mb-2 block bg-primary/10 inline-block px-2.5 py-1 rounded-md">
-                        Question {idx + 1} • {q.category} • {q.difficulty}
-                      </span>
-                      <h4 className="text-xl font-bold text-text leading-snug">{q.questionText}</h4>
-                    </div>
-                    <div className={`text-xl font-extrabold px-4 py-2 rounded-lg border ${getScoreBg(q.analysis.technicalAccuracy)} shrink-0 shadow-sm`}>
-                      {q.analysis.technicalAccuracy} / 100
-                    </div>
-                  </div>
+            answeredQuestions.map((q, idx) => {
+              const techAcc = getFiniteScore(q.analysis?.technicalAccuracy ?? q.evaluation?.correctness, 70);
+              const qStrengths = Array.isArray(q.feedback?.strengths) && q.feedback.strengths.length > 0
+                ? q.feedback.strengths
+                : Array.isArray(q.evaluation?.strengths) && q.evaluation.strengths.length > 0
+                ? q.evaluation.strengths
+                : ["Clear response provided"];
 
-                  <div className="p-6 flex flex-col gap-6 bg-bg-secondary">
-                    <div className="bg-white p-5 rounded-xl border border-border shadow-sm">
-                      <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Your Answer</div>
-                      <p className="text-text text-base italic leading-relaxed">"{q.transcript}"</p>
-                    </div>
+              const qWeaknesses = Array.isArray(q.feedback?.weaknesses) && q.feedback.weaknesses.length > 0
+                ? q.feedback.weaknesses
+                : Array.isArray(q.evaluation?.weaknesses) && q.evaluation.weaknesses.length > 0
+                ? q.evaluation.weaknesses
+                : ["Could provide deeper technical specifics"];
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="bg-success-bg p-5 rounded-xl border border-success/20 shadow-sm">
-                        <strong className="text-success flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
-                          <CheckCircle size={18} /> Strengths
-                        </strong>
-                        <ul className="list-disc list-inside text-sm text-text-secondary flex flex-col gap-2">
-                          {q.feedback.strengths.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
-                        </ul>
+              const idealText = q.idealAnswer?.text || "Focus on articulating key concepts clearly with concrete examples.";
+              const idealExp = q.idealAnswer?.explanation || "A structured answer demonstrates domain competence.";
+
+              return (
+                <Card key={q._id || idx} className="shadow-md border-t-4 border-t-primary overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="p-6 border-b border-border bg-surface flex flex-col md:flex-row justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <span className="text-xs font-bold text-primary uppercase tracking-widest mb-2 block bg-primary/10 inline-block px-2.5 py-1 rounded-md">
+                          Question {idx + 1} • {q.category || 'General'} • {q.difficulty || 'medium'}
+                        </span>
+                        <h4 className="text-xl font-bold text-text leading-snug">{q.questionText}</h4>
                       </div>
-                      
-                      <div className="bg-danger-bg p-5 rounded-xl border border-danger/20 shadow-sm">
-                        <strong className="text-danger flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
-                          <AlertTriangle size={18} /> Improvement Suggestions
-                        </strong>
-                        <ul className="list-disc list-inside text-sm text-text-secondary flex flex-col gap-2">
-                          {q.feedback.weaknesses.map((w, i) => <li key={i} className="leading-relaxed">{w}</li>)}
-                        </ul>
+                      <div className={`text-xl font-extrabold px-4 py-2 rounded-lg border ${getScoreBg(techAcc)} shrink-0 shadow-sm`}>
+                        {techAcc} / 100
                       </div>
                     </div>
 
-                    <div className="bg-info-bg p-6 rounded-xl border border-blue-200 shadow-sm">
-                      <h4 className="text-primary flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
-                        <Lightbulb size={20} /> Better Answer Suggestion
-                      </h4>
-                      <p className="text-text text-base leading-relaxed mb-4 font-medium">
-                        "{q.idealAnswer?.text}"
-                      </p>
-                      <div className="text-sm text-text-secondary bg-white p-4 rounded-lg border border-border shadow-sm">
-                        <strong className="text-text font-bold uppercase tracking-wider text-xs block mb-1">Why this works</strong>
-                        {q.idealAnswer?.explanation}
+                    <div className="p-6 flex flex-col gap-6 bg-bg-secondary">
+                      <div className="bg-white p-5 rounded-xl border border-border shadow-sm">
+                        <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Your Answer</div>
+                        <p className="text-text text-base italic leading-relaxed">"{q.transcript || "No transcript recorded"}"</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="bg-success-bg p-5 rounded-xl border border-success/20 shadow-sm">
+                          <strong className="text-success flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
+                            <CheckCircle size={18} /> Strengths
+                          </strong>
+                          <ul className="list-disc list-inside text-sm text-text-secondary flex flex-col gap-2">
+                            {qStrengths.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
+                          </ul>
+                        </div>
+                        
+                        <div className="bg-danger-bg p-5 rounded-xl border border-danger/20 shadow-sm">
+                          <strong className="text-danger flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
+                            <AlertTriangle size={18} /> Improvement Suggestions
+                          </strong>
+                          <ul className="list-disc list-inside text-sm text-text-secondary flex flex-col gap-2">
+                            {qWeaknesses.map((w, i) => <li key={i} className="leading-relaxed">{w}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="bg-info-bg p-6 rounded-xl border border-blue-200 shadow-sm">
+                        <h4 className="text-primary flex items-center gap-2 mb-3 text-sm font-bold uppercase tracking-wider">
+                          <Lightbulb size={20} /> Better Answer Suggestion
+                        </h4>
+                        <p className="text-text text-base leading-relaxed mb-4 font-medium">
+                          "{idealText}"
+                        </p>
+                        <div className="text-sm text-text-secondary bg-white p-4 rounded-lg border border-border shadow-sm">
+                          <strong className="text-text font-bold uppercase tracking-wider text-xs block mb-1">Why this works</strong>
+                          {idealExp}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
       </div>

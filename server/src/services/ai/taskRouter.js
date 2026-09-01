@@ -3,12 +3,13 @@ import { jdStructureSchema } from "./schemas/jdSchema.js";
 import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
 import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema } from "./schemas/interviewSchema.js";
-import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema } from "./schemas/careerSchema.js";
+import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema, coverLetterSchema, recruiterMessageSchema } from "./schemas/careerSchema.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
 import { TAILORING_SYSTEM, buildTailoringPrompt } from "./prompts/resumeTailoring.js";
 import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt, generateInterviewChallengePrompt, interviewerReactionPrompt, codingFollowUpPrompt } from "./prompts/interviewPrompts.js";
-import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt, PROJECT_REALITY_CHECK_SYSTEM, buildRealityCheckPrompt } from "./prompts/careerPrompts.js";
+import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt, PROJECT_REALITY_CHECK_SYSTEM, buildRealityCheckPrompt, GENERATE_COVER_LETTER_SYSTEM, buildCoverLetterPrompt, GENERATE_RECRUITER_MESSAGE_SYSTEM, buildRecruiterMessagePrompt } from "./prompts/careerPrompts.js";
+
 
 import {
   buildInterviewEvaluationContext,
@@ -195,7 +196,7 @@ export const AI_TASKS = {
   GENERATE_MENTOR_EXPLANATION: {
     featureName: "mentor explanation",
     modelRole: MODEL_ROLES.GENERAL_REASONING,
-    systemPrompt: "You are a career consultant at CareerPilot AI. Write a short (1-2 sentences), highly encouraging, professional explanation of why a candidate matches with a specific mentor. Address target roles, target companies, and skill gaps relative to the mentor's profile. Return JSON with the field 'explanation'. Example: {\"explanation\": \"Rahul is a perfect match because...\"}",
+    systemPrompt: "You are a career consultant at CareerCopilot. Write a short (1-2 sentences), highly encouraging, professional explanation of why a candidate matches with a specific mentor. Address target roles, target companies, and skill gaps relative to the mentor's profile. Return JSON with the field 'explanation'. Example: {\"explanation\": \"Rahul is a perfect match because...\"}",
     buildPrompt: (context) => `Candidate Gaps: ${context.candidateGaps.join(", ")}\nCandidate Target Companies: ${context.targetCompanies.join(", ")}\nCandidate Target Roles: ${context.targetRoles.join(", ")}\nMentor Company: ${context.mentorCompany}\nMentor Role: ${context.mentorRole}\nMentor Skills: ${context.mentorSkills.join(", ")}\nMentor Bio: ${context.mentorBio}`,
     schema: mentorExplanationSchema,
     buildContext: (params) => params,
@@ -204,7 +205,7 @@ export const AI_TASKS = {
   GENERATE_PRE_SESSION_BRIEF: {
     featureName: "mentorship pre-session brief",
     modelRole: MODEL_ROLES.GENERAL_REASONING,
-    systemPrompt: "You are a CareerPilot AI talent coordinator. Compile a structured pre-session summary for the mentor. Outline candidate background, weak areas, and project titles, and suggest focal points for the session. Focus on actionable insights, omit empty sections, and format in clean Markdown.",
+    systemPrompt: "You are a CareerCopilot talent coordinator. Compile a structured pre-session summary for the mentor. Outline candidate background, weak areas, and project titles, and suggest focal points for the session. Focus on actionable insights, omit empty sections, and format in clean Markdown.",
     buildPrompt: (context) => `Candidate: ${context.candidateName}\nTarget Roles: ${context.targetRoles.join(", ")}\nTarget Companies: ${context.targetCompanies.join(", ")}\nTechnical Skills: ${context.technicalSkills.join(", ")}\nWeak Skills: ${context.weakSkills.join(", ")}\nProjects: ${context.projects.join(", ")}\nMock Interview Average Score: ${context.interviewScore}%\nMentor Session Topic: ${context.topic}\nMentor Session Description: ${context.description}`,
     schema: null,
     buildContext: (params) => params,
@@ -245,5 +246,24 @@ export const AI_TASKS = {
     schema: projectRealityCheckSchema,
     buildContext: (params) => params,
     jsonMode: true
+  },
+  GENERATE_COVER_LETTER: {
+    featureName: "cover letter generation",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: GENERATE_COVER_LETTER_SYSTEM,
+    buildPrompt: (context) => buildCoverLetterPrompt(context),
+    schema: coverLetterSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  GENERATE_RECRUITER_MESSAGE: {
+    featureName: "recruiter message generation",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: GENERATE_RECRUITER_MESSAGE_SYSTEM,
+    buildPrompt: (context) => buildRecruiterMessagePrompt(context),
+    schema: recruiterMessageSchema,
+    buildContext: (params) => params,
+    jsonMode: true
   }
 };
+

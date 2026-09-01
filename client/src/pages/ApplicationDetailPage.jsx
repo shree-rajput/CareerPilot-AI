@@ -47,7 +47,8 @@ export function ApplicationDetailPage() {
   const [recruiterMsg, setRecruiterMsg] = useState("");
   const [loadingRecruiterMsg, setLoadingRecruiterMsg] = useState(false);
   const [recruiterMsgType, setRecruiterMsgType] = useState("application");
-  const [copiedRM, setCopiedRM] = useState(false);
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
+  const [versionSavedSuccess, setVersionSavedSuccess] = useState("");
 
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -132,6 +133,26 @@ export function ApplicationDetailPage() {
       setLoadingTailoring(false);
     }
   }
+
+  async function handleSaveTailoredVersion() {
+    if (!selectedResumeId) return alert("Select a resume first.");
+    setIsSavingVersion(true);
+    setVersionSavedSuccess("");
+    try {
+      const res = await api.post("/tailor/save-version", {
+        resumeId: selectedResumeId,
+        applicationId: id,
+        acceptedChanges: Array.isArray(tailoringData) ? tailoringData : []
+      });
+      setVersionSavedSuccess(res.data?.message || "New tailored resume version saved!");
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to save tailored version.");
+    } finally {
+      setIsSavingVersion(false);
+    }
+  }
+
 
   async function generateCoverLetter() {
     setLoadingCoverLetter(true);
@@ -405,32 +426,74 @@ export function ApplicationDetailPage() {
         {/* RESUME TAILORING TAB */}
         {activeTab === "resume" && (
           <Card className="shadow-sm border-border border-l-4 border-l-primary">
-            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center gap-3">
-              <div className="bg-info-bg p-1.5 rounded-md text-primary border border-blue-200">
-                <Sparkles size={18} />
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-info-bg p-1.5 rounded-md text-primary border border-blue-200">
+                  <Sparkles size={18} />
+                </div>
+                <CardTitle className="text-lg m-0">Resume Tailoring & Versioning</CardTitle>
               </div>
-              <CardTitle className="text-lg m-0">Resume Tailoring Recommendations</CardTitle>
+              {Array.isArray(tailoringData) && tailoringData.length > 0 && (
+                <Button onClick={handleSaveTailoredVersion} isLoading={isSavingVersion} size="sm">
+                  Save as New Resume Version
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="p-6">
+              {versionSavedSuccess && (
+                <div className="bg-success-bg border border-success/20 text-success p-4 rounded-xl text-sm font-medium mb-4 flex items-center justify-between">
+                  <span>{versionSavedSuccess}</span>
+                  <span className="text-xs font-bold underline cursor-pointer" onClick={() => setVersionSavedSuccess("")}>Dismiss</span>
+                </div>
+              )}
+
               {!matchResult ? (
                 <div className="bg-surface border border-border p-5 rounded-xl text-center">
                   <p className="text-text-secondary font-medium mb-4">Run the match engine first to generate specific tailoring recommendations for this job description.</p>
                 </div>
               ) : !tailoringData ? (
-                <div className="text-center py-4">
+                <div className="text-center py-6">
+                  <p className="text-sm text-text-secondary mb-4">Analyze your resume against this JD to get section-by-section improvements without inventing fake data.</p>
                   <Button onClick={fetchTailoring} isLoading={loadingTailoring} className="w-full sm:w-auto">
-                    {!loadingTailoring && <Sparkles size={16} className="mr-2" />} Generate Recommendations
+                    {!loadingTailoring && <Sparkles size={16} className="mr-2" />} Generate Tailoring Suggestions
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-5">
+                  <div className="flex items-center justify-between bg-info-bg border border-blue-200 p-4 rounded-xl">
+                    <p className="text-xs font-bold text-primary">
+                      Review suggestions below. Save as a new version to create a tailored resume for {app.role} ({app.company}) without modifying your original resume.
+                    </p>
+                    <Button onClick={handleSaveTailoredVersion} isLoading={isSavingVersion} size="sm" className="shrink-0 ml-4">
+                      Create Tailored Version
+                    </Button>
+                  </div>
+
                   {Array.isArray(tailoringData) ? tailoringData.map((rec, i) => (
-                    <div key={i} className="bg-surface border border-border p-4 rounded-xl shadow-sm hover:border-primary/30 transition-colors">
-                      <strong className="block text-base font-bold text-text mb-2 flex items-start gap-2">
-                        <CheckCircle size={18} className="text-primary mt-0.5 shrink-0" />
-                        {rec.suggestion || rec.title || "Suggestion"}
-                      </strong>
-                      <p className="text-text-secondary text-sm leading-relaxed pl-6">{rec.rationale || rec.description || JSON.stringify(rec)}</p>
+                    <div key={i} className="bg-surface border border-border p-5 rounded-xl shadow-sm flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-1 rounded">
+                          {rec.section || "General"} — {rec.type || "Improvement"}
+                        </span>
+                      </div>
+
+                      {rec.original && (
+                        <div className="bg-danger-bg/40 border border-danger/20 p-3 rounded-lg text-xs font-mono text-danger">
+                          <strong className="block text-[10px] uppercase font-bold text-danger mb-1">Current Resume Text:</strong>
+                          "{rec.original}"
+                        </div>
+                      )}
+
+                      <div className="bg-success-bg/40 border border-success/20 p-3 rounded-lg text-xs font-mono text-success">
+                        <strong className="block text-[10px] uppercase font-bold text-success mb-1">Recommended Rephrasing:</strong>
+                        "{rec.suggestion || rec.title || JSON.stringify(rec)}"
+                      </div>
+
+                      {rec.reason && (
+                        <p className="text-xs text-text-secondary leading-relaxed bg-bg-secondary p-3 rounded-lg border border-border">
+                          <strong className="text-text font-bold">Why: </strong>{rec.reason}
+                        </p>
+                      )}
                     </div>
                   )) : (
                     <p className="whitespace-pre-wrap text-text-secondary text-sm p-4 bg-surface rounded-xl border border-border">
@@ -442,6 +505,7 @@ export function ApplicationDetailPage() {
             </CardContent>
           </Card>
         )}
+
 
         {/* MATCH TAB */}
         {activeTab === "match" && (

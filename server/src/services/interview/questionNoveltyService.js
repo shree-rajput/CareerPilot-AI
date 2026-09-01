@@ -123,3 +123,60 @@ export function isNovelQuestion(candidateText, previousTexts, threshold = 0.6) {
     similarTo: mostSimilarText
   };
 }
+
+export const QUESTION_CATEGORIES = [
+  "FUNDAMENTALS",
+  "PRACTICAL_IMPLEMENTATION",
+  "DEBUGGING",
+  "ARCHITECTURE",
+  "TRADEOFFS",
+  "SCENARIO_BASED",
+  "SYSTEM_DESIGN",
+  "PROJECT_DEEP_DIVE",
+  "BEHAVIORAL",
+  "PROBLEM_SOLVING",
+  "FOLLOW_UP",
+  "EDGE_CASES",
+  "PERFORMANCE",
+  "SECURITY",
+  "SCALABILITY"
+];
+
+/**
+ * Suggests the next diverse category to test based on categories already asked in session.
+ * Ensures the interview rotates across concepts rather than repeating identical question types.
+ */
+export function getNextDiverseCategory(askedCategories = [], interviewType = "mixed") {
+  const askedSet = new Set((askedCategories || []).map(c => String(c).toUpperCase()));
+
+  if (interviewType === "hr") {
+    const hrOrder = ["BEHAVIORAL", "SCENARIO_BASED", "PROBLEM_SOLVING", "PROJECT_DEEP_DIVE", "FOLLOW_UP"];
+    for (const cat of hrOrder) {
+      if (!askedSet.has(cat)) return cat;
+    }
+    return "BEHAVIORAL";
+  }
+
+  // Technical / Mixed order rotation
+  const techOrder = [
+    "FUNDAMENTALS",
+    "PRACTICAL_IMPLEMENTATION",
+    "PROJECT_DEEP_DIVE",
+    "DEBUGGING",
+    "TRADEOFFS",
+    "ARCHITECTURE",
+    "PERFORMANCE",
+    "EDGE_CASES",
+    "SECURITY",
+    "SCALABILITY",
+    "BEHAVIORAL"
+  ];
+
+  for (const cat of techOrder) {
+    if (!askedSet.has(cat)) return cat;
+  }
+
+  // If all tested, pick least used or next in list
+  return QUESTION_CATEGORIES[(askedCategories || []).length % QUESTION_CATEGORIES.length];
+}
+

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import interviewerImg from '../../assets/ai_interviewer.png';
+import interviewerImg from '../../assets/ai_interviewer2.jpg';
 
 /**
  * AIAvatar — Professional Human-Style Interviewer Avatar
@@ -125,14 +125,13 @@ export default function AIAvatar({ state = 'idle', className = '', showLabel = t
     <div className={`relative flex flex-col items-center gap-3 select-none ${className}`}>
       {/* Glow backdrop */}
       <div
-        className={`absolute inset-[-50px] rounded-full blur-2xl transition-all duration-700 pointer-events-none ${
-          state === 'speaking' ? 'bg-indigo-500/10' :
+        className={`absolute inset-[-50px] rounded-full blur-2xl transition-all duration-700 pointer-events-none ${state === 'speaking' ? 'bg-indigo-500/10' :
           state === 'listening' ? 'bg-emerald-500/10' :
-          state === 'thinking' ? 'bg-amber-500/8' :
-          state === 'coding' ? 'bg-violet-500/8' :
-          state === 'completed' ? 'bg-emerald-500/12' :
-          'bg-indigo-500/5'
-        }`}
+            state === 'thinking' ? 'bg-amber-500/8' :
+              state === 'coding' ? 'bg-violet-500/8' :
+                state === 'completed' ? 'bg-emerald-500/12' :
+                  'bg-indigo-500/5'
+          }`}
       />
 
       {/* Avatar container */}
@@ -177,7 +176,7 @@ export default function AIAvatar({ state = 'idle', className = '', showLabel = t
       {/* Name badge */}
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-white tracking-wide">Alex Chen</span>
+          <span className="text-sm font-bold text-white tracking-wide">Aliha Chen</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 font-semibold uppercase tracking-wider">AI</span>
         </div>
         <span className="text-[11px] text-slate-400 font-medium">Senior Technical Interviewer</span>

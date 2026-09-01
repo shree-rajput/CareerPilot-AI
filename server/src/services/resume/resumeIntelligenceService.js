@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Resume } from "../../models/Resume.js";
 import { Job } from "../../models/Job.js";
 import { executeAiTask } from "../ai/orchestrator.js";
@@ -5,9 +6,10 @@ import { updateUserReadinessScore } from "../career/readinessService.js";
 
 /**
  * Analyzes a resume against a job description.
+ * Safe against invalid ObjectIds and raw text inputs.
  * 
  * @param {string} resumeId - Resume ID
- * @param {string} jobId - Job ID
+ * @param {string} jobId - Job ID or Job search text
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Analysis result
  */
@@ -17,15 +19,29 @@ export async function analyzeResumeAgainstJob(resumeId, jobId, userId) {
     throw new Error("Resume not found.");
   }
 
-  const job = await Job.findById(jobId);
-  if (!job) {
-    throw new Error("Job not found.");
+  let job = null;
+  if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
+    job = await Job.findById(jobId);
   }
+
+  if (!job && jobId) {
+    job = await Job.findOne({
+      $or: [
+        { title: new RegExp(jobId, "i") },
+        { company: new RegExp(jobId, "i") }
+      ]
+    });
+  }
+
+  const jdText = job ? (job.description || job.title) : String(jobId || "Software Engineer");
+  const jdRequirements = job 
+    ? (job.requiredSkills || []).map(s => typeof s === 'string' ? s : s.skillName).join("\n")
+    : String(jobId || "");
 
   const result = await executeAiTask("ANALYZE_RESUME_AGAINST_JOB", {
     resumeData: resume.structuredData,
-    jdText: job.description || "",
-    jdRequirements: (job.requirements || []).join("\n")
+    jdText,
+    jdRequirements
   });
 
   // Update resume with results

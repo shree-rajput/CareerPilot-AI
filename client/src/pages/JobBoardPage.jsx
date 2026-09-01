@@ -265,6 +265,10 @@ function AddJobForm({ onClose, onSuccess }) {
 
   async function submit(e) {
     e.preventDefault();
+    if (!form.title?.trim() || !form.company?.trim() || !form.description?.trim()) {
+      setError("Please provide Job Title, Company Name, and Job Description.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {

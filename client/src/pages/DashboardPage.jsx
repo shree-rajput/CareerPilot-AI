@@ -439,31 +439,46 @@ export function DashboardPage() {
           {/* Skill Gap Heatmap */}
           {skillGaps.length > 0 && (
             <Card className="shadow-sm border-border">
-              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
-                <CardTitle className="text-base font-bold m-0 flex items-center gap-2">
-                  <BarChart2 size={16} className="text-violet-500" /> Skill Gap Heatmap
-                </CardTitle>
-                <p className="text-[11px] text-text-secondary mt-0.5">Most wanted skills across your saved jobs</p>
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-bold m-0 flex items-center gap-2">
+                    <BarChart2 size={16} className="text-violet-500" /> Target Job Skill Gaps
+                  </CardTitle>
+                  <p className="text-[11px] text-text-secondary mt-0.5">Most wanted skills across your saved target jobs</p>
+                </div>
+                <Link to="/preparation" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                  Action Center <ArrowUpRight size={11} />
+                </Link>
               </CardHeader>
-              <CardContent className="p-4 flex flex-col gap-2.5">
+              <CardContent className="p-4 flex flex-col gap-3">
                 {skillGaps.map(({ name, count, pct }) => (
-                  <div key={name}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-text">{name}</span>
-                      <span className="font-bold text-text-secondary">{count} job{count !== 1 ? "s" : ""}</span>
+                  <div key={name} className="bg-bg-secondary/40 p-2.5 rounded-xl border border-border/40 hover:border-primary/20 transition-all flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-bold text-text truncate">{name}</span>
+                        <span className="font-extrabold text-text-secondary">{count} target job{count !== 1 ? "s" : ""}</span>
+                      </div>
+                      <div className="h-2 bg-border/40 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${pct >= 80 ? "bg-rose-500" : pct >= 50 ? "bg-amber-500" : "bg-blue-400"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${pct >= 80 ? "bg-rose-500" : pct >= 50 ? "bg-amber-500" : "bg-blue-400"}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => navigate("/preparation")} 
+                      className="shrink-0 text-xs py-1 h-7"
+                    >
+                      Resolve
+                    </Button>
                   </div>
                 ))}
-                <p className="text-[10px] text-text-secondary mt-2 italic">Skills in red appear across most of your saved jobs — prioritize these in your resume.</p>
               </CardContent>
             </Card>
           )}
+
         </div>
       )}
     </div>

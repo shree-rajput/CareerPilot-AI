@@ -32,11 +32,17 @@ export const projectApi = {
 
 // --- Preparation API ---
 export const preparationApi = {
+  getDashboard: () => http.get("/preparation/dashboard").then((res) => res.data),
+  updateSkillStatus: (skillName, status) => http.patch(`/preparation/skills/${encodeURIComponent(skillName)}/status`, { status }).then((res) => res.data),
+  toggleActionPlanStep: (skillName, stepNumber, completed) => http.patch(`/preparation/skills/${encodeURIComponent(skillName)}/step`, { stepNumber, completed }).then((res) => res.data),
+  getSkillAssessment: (skillName) => http.get(`/preparation/skills/${encodeURIComponent(skillName)}/assessment`).then((res) => res.data),
+  submitSkillVerification: (skillName, answers) => http.post(`/preparation/skills/${encodeURIComponent(skillName)}/verify`, { answers }).then((res) => res.data),
   getActivePlan: () => http.get("/preparation/active").then((res) => res.data),
   generateDailyPlan: (data) => http.post("/preparation", data).then((res) => res.data),
   archivePlan: (id) => http.patch(`/preparation/${id}/archive`).then((res) => res.data),
   updateActionItemStatus: (id, itemId, status) => http.patch(`/preparation/${id}/items/${itemId}/status`, { status }).then((res) => res.data),
 };
+
 
 // --- Copilot API ---
 export const copilotApi = {

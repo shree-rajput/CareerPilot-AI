@@ -124,6 +124,16 @@ const interviewSessionSchema = new mongoose.Schema(
       weaknesses: { type: [String], default: [] },
       strengths: { type: [String], default: [] }
     },
+    // Numerical report scores for dashboard & report page
+    overallScore: { type: Number, default: 0 },
+    scores: {
+      technical: { type: Number, default: 0 },
+      communication: { type: Number, default: 0 },
+      clarity: { type: Number, default: 0 },
+      videoPresence: { type: Number, default: 0 },
+      structure: { type: Number, default: 0 },
+      problemSolving: { type: Number, default: 0 }
+    },
     // Final actionable coaching report
     finalReport: {
       overallAssessment: { type: String, default: "" },

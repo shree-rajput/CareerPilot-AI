@@ -55,7 +55,15 @@ export const evidenceEvaluationSchema = z.object({
   correctness: z.enum(["High", "Medium", "Low"]).describe("Was the technical or factual information correct?"),
   depth: z.enum(["High", "Medium", "Low"]).describe("Did the candidate go into sufficient detail, or stay surface-level?"),
   specificity: z.enum(["High", "Medium", "Low"]).describe("Did they use concrete examples and metrics?"),
-  structure: z.enum(["High", "Medium", "Low"]).describe("Was the answer logically structured (e.g., STAR method)?"),
+  communication: z.object({
+    score: z.number().min(0).max(100).default(75).describe("Overall evidence-based communication score (0-100)"),
+    clarity: z.number().min(0).max(100).default(75).describe("How understandable and direct the response was"),
+    relevance: z.number().min(0).max(100).default(75).describe("How directly the response addressed the question"),
+    structure: z.number().min(0).max(100).default(70).describe("Logical sequencing of ideas"),
+    conciseness: z.number().min(0).max(100).default(75).describe("Efficiency of communication without rambling"),
+    fillerUsage: z.number().min(0).max(100).default(80).describe("Score reflecting low filler word penalty"),
+    evidence: z.array(z.string()).default([]).describe("Specific evidence points regarding communication style")
+  }).optional(),
   evidenceCollected: z.array(z.string()).describe("Specific strong points or phrases the candidate said that prove competence."),
   strengths: z.array(z.string()).describe("What the candidate did well in this answer."),
   weaknesses: z.array(z.string()).describe("Areas where the answer was weak or lacking."),

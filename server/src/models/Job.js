@@ -5,6 +5,24 @@ const requiredSkillSchema = new mongoose.Schema({
   importance: { type: String, enum: ["HIGH", "MEDIUM", "LOW"], default: "MEDIUM" }
 }, { _id: false });
 
+const castSkillList = (val) => {
+  if (!Array.isArray(val)) return [];
+  return val.map(item => {
+    if (typeof item === "string") {
+      return { skillName: item.trim(), importance: "MEDIUM" };
+    }
+    if (item && typeof item === "object") {
+      const name = item.skillName || item.name || item.canonicalName || "";
+      if (!name) return null;
+      return {
+        skillName: String(name).trim(),
+        importance: item.importance || "MEDIUM"
+      };
+    }
+    return null;
+  }).filter(Boolean);
+};
+
 const jobSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -44,9 +62,21 @@ const jobSchema = new mongoose.Schema(
     }],
     
     // Extracted Intelligence
-    requiredSkills: { type: [requiredSkillSchema], default: [] },
-    preferredSkills: { type: [requiredSkillSchema], default: [] },
-    softSkills: { type: [requiredSkillSchema], default: [] },
+    requiredSkills: { 
+      type: [requiredSkillSchema], 
+      default: [],
+      set: castSkillList 
+    },
+    preferredSkills: { 
+      type: [requiredSkillSchema], 
+      default: [],
+      set: castSkillList 
+    },
+    softSkills: { 
+      type: [requiredSkillSchema], 
+      default: [],
+      set: castSkillList 
+    },
     
     isActive: { type: Boolean, default: true }
   },

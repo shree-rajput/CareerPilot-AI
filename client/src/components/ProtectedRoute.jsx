@@ -6,7 +6,7 @@ export function ProtectedRoute() {
   const { isAuthenticated, isBootstrapping } = useAuth();
 
   if (isBootstrapping) {
-    return <div className="screen-loader">Loading CareerPilot...</div>;
+    return <div className="screen-loader">Loading CareerCopilot...</div>;
   }
 
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;

@@ -495,11 +495,11 @@ export default function PeerInterviewRoomPage() {
       {/* Header Bar */}
       <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6 shrink-0 shadow-sm z-20">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-primary text-white font-bold text-xs shadow-md">
-            CP
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-md bg-transparent">
+            <img src="/favicon.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-sm font-bold tracking-wide text-text flex items-center gap-2">
-            CareerPilot AI <span className="text-border">/</span> <span className="text-text-secondary font-medium">Peer Interview</span>
+            CareerCopilot <span className="text-border">/</span> <span className="text-text-secondary font-medium">Peer Interview</span>
           </h1>
         </div>
 

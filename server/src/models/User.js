@@ -21,7 +21,102 @@ const interviewPreferencesSchema = new mongoose.Schema(
       type: String,
       enum: ["technical", "hr", "project", "mixed"],
       default: "mixed"
+    },
+    durationMinutes: {
+      type: Number,
+      enum: [15, 30, 45, 60],
+      default: 30
+    },
+    techVsBehavioralRatio: {
+      type: String,
+      enum: ["technical_heavy", "balanced", "behavioral_heavy"],
+      default: "balanced"
+    },
+    preferredQuestionCategories: {
+      type: [String],
+      default: []
+    },
+    adaptiveQuestioning: {
+      type: Boolean,
+      default: true
+    },
+    followUpQuestions: {
+      type: Boolean,
+      default: true
+    },
+    strictnessOfEvaluation: {
+      type: String,
+      enum: ["gentle", "standard", "strict"],
+      default: "standard"
+    },
+    feedbackDepth: {
+      type: String,
+      enum: ["concise", "standard", "detailed"],
+      default: "detailed"
     }
+  },
+  { _id: false }
+);
+
+const aiPreferencesSchema = new mongoose.Schema(
+  {
+    responseStyle: {
+      type: String,
+      enum: ["concise", "detailed"],
+      default: "detailed"
+    },
+    coachingStyle: {
+      type: String,
+      enum: ["encouraging", "rigorous", "socratic", "direct"],
+      default: "rigorous"
+    },
+    hintBehavior: {
+      type: String,
+      enum: ["always", "on_request", "never"],
+      default: "on_request"
+    },
+    personalizedRecommendations: {
+      type: Boolean,
+      default: true
+    }
+  },
+  { _id: false }
+);
+
+const preparationPreferencesSchema = new mongoose.Schema(
+  {
+    dailyTargetMinutes: {
+      type: Number,
+      default: 45,
+      min: 10,
+      max: 300
+    },
+    preferredLearningAreas: {
+      type: [String],
+      default: []
+    },
+    difficultyPreference: {
+      type: String,
+      enum: ["easy", "medium", "hard", "adaptive"],
+      default: "adaptive"
+    },
+    priorityTopics: {
+      type: [String],
+      default: []
+    }
+  },
+  { _id: false }
+);
+
+const notificationPreferencesSchema = new mongoose.Schema(
+  {
+    applicationReminders: { type: Boolean, default: true },
+    interviewReminders: { type: Boolean, default: true },
+    preparationReminders: { type: Boolean, default: true },
+    mentorUpdates: { type: Boolean, default: true },
+    weeklySummaries: { type: Boolean, default: true },
+    alerts: { type: Boolean, default: true },
+    emailEnabled: { type: Boolean, default: true }
   },
   { _id: false }
 );
@@ -74,19 +169,31 @@ const userSchema = new mongoose.Schema(
       type: interviewPreferencesSchema,
       default: () => ({})
     },
+    aiPreferences: {
+      type: aiPreferencesSchema,
+      default: () => ({})
+    },
+    preparationPreferences: {
+      type: preparationPreferencesSchema,
+      default: () => ({})
+    },
+    notificationPreferences: {
+      type: notificationPreferencesSchema,
+      default: () => ({})
+    },
 
     // Final Phase Extended Fields: Readiness, Onboarding, and Mentorship
-    readinessScore: { type: Number, default: -1 },
+    readinessScore: { type: Number, default: 0, min: 0, max: 100 },
     readinessBreakdown: {
-      resume: { type: Number, default: -1 },
-      technical: { type: Number, default: -1 },
-      interview: { type: Number, default: -1 },
-      projects: { type: Number, default: -1 },
-      applications: { type: Number, default: -1 },
-      preparation: { type: Number, default: -1 },
-      profile: { type: Number, default: 0 },
-      communication: { type: Number, default: -1 },
-      careerStrategy: { type: Number, default: -1 }
+      resume: { type: Number, default: 0, min: 0, max: 100 },
+      technical: { type: Number, default: 0, min: 0, max: 100 },
+      interview: { type: Number, default: 0, min: 0, max: 100 },
+      projects: { type: Number, default: 0, min: 0, max: 100 },
+      applications: { type: Number, default: 0, min: 0, max: 100 },
+      preparation: { type: Number, default: 0, min: 0, max: 100 },
+      profile: { type: Number, default: 0, min: 0, max: 100 },
+      communication: { type: Number, default: 0, min: 0, max: 100 },
+      careerStrategy: { type: Number, default: 0, min: 0, max: 100 }
     },
     readinessHistory: {
       type: [{
@@ -107,7 +214,7 @@ const userSchema = new mongoose.Schema(
     completedActions: { type: [String], default: [] },
     mentorStatus: {
       type: String,
-      enum: ["none", "pending", "approved", "suspended"],
+      enum: ["none", "pending", "under_review", "approved", "verified", "rejected", "suspended"],
       default: "none"
     },
     mentorProfile: {
@@ -120,7 +227,14 @@ const userSchema = new mongoose.Schema(
       bio: { type: String, trim: true, default: "" },
       rating: { type: Number, default: 4.8 },
       reviewsCount: { type: Number, default: 0 },
-      topics: { type: [String], default: [] }
+      topics: { type: [String], default: [] },
+      languages: { type: [String], default: ["English"] },
+      sessionTypes: { type: [String], default: ["1:1 Video Session", "Resume Review", "Mock Interview"] },
+      completedSessions: { type: Number, default: 0 },
+      linkedinUrl: { type: String, trim: true, default: "" },
+      githubUrl: { type: String, trim: true, default: "" },
+      verificationDocuments: { type: [String], default: [] }, // Private
+      earnings: { type: Number, default: 0 }
     }
   },
   { timestamps: true }

@@ -19,17 +19,42 @@ export const runPython = async ({
   try {
     const wrappedCode = `import sys
 import json
+import inspect
 
 input_data = json.loads(${JSON.stringify(JSON.stringify(input))})
 
 ${code}
 
-if 'solution' not in globals():
-    print(json.dumps({"error": "Your code must define a function named solution."}), file=sys.stderr)
+target_fn = None
+if 'solution' in globals() and callable(globals()['solution']):
+    target_fn = globals()['solution']
+elif 'twoSum' in globals() and callable(globals()['twoSum']):
+    target_fn = globals()['twoSum']
+elif 'two_sum' in globals() and callable(globals()['two_sum']):
+    target_fn = globals()['two_sum']
+else:
+    for k, v in list(globals().items()):
+        if callable(v) and not k.startswith('__') and k not in ('sys', 'json', 'inspect', 'input_data', 'target_fn'):
+            target_fn = v
+            break
+
+if not target_fn:
+    print(json.dumps({"error": "Your code must define a function for your solution."}), file=sys.stderr)
     sys.exit(1)
 
 try:
-    result = solution(input_data)
+    if isinstance(input_data, dict):
+        arg_spec = inspect.signature(target_fn).parameters
+        if len(arg_spec) > 1 and len(arg_spec) == len(input_data):
+            result = target_fn(*input_data.values())
+        else:
+            try:
+                result = target_fn(*input_data.values())
+            except Exception:
+                result = target_fn(input_data)
+    else:
+        result = target_fn(input_data)
+        
     print(json.dumps(result))
 except Exception as e:
     print(str(e), file=sys.stderr)

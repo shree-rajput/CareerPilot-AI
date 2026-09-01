@@ -207,6 +207,17 @@ export async function getPeerInterviewReport(req, res) {
     const { roomId } = req.params;
     const room = await PeerInterviewRoom.findOne({ roomId });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+
+    const userIdStr = req.user?._id?.toString();
+    const isParticipant = 
+      room.interviewerId?.toString() === userIdStr || 
+      room.intervieweeId?.toString() === userIdStr ||
+      room.createdBy?.toString() === userIdStr;
+
+    if (!isParticipant) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not a participant in this interview session." });
+    }
+
     return res.status(200).json({ success: true, data: room.report });
   } catch (error) {
     console.error("getPeerInterviewReport error:", error);

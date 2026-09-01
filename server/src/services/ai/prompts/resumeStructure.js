@@ -7,7 +7,22 @@ IMPORTANT RULES:
 - For Skills: DO NOT extract section headers (e.g., "Skills", "Frameworks", "Languages", "Tools") as skills.
 - Normalize skill names: "ReactJS" or "React framework" -> "React". "NodeJS" -> "Node.js".
 - Do not use naive token extraction. Understand the context.
-- Every field must be present in the output even if empty.`;
+- Every field must be present in the output even if empty.
+
+CRITICAL ANTI-PATTERNS (these are WRONG and you must NOT do them):
+- Adding "Communication" or "Problem Solving" as skills unless explicitly listed as a skill
+- Adding "Node.js" to skills just because it appears in a project — project techs belong only in projects.technologies
+- Extracting "Skills" or "Programming Languages" as a skill name
+- Duplicating information that already appears in projects.technologies into the skills array
+- Inferring certifications from course descriptions
+
+SKILL SOURCE PROVENANCE RULES:
+- source="skills_section": Skills explicitly listed under a "Skills", "Technical Skills", or similar header
+- source="experience": Skills mentioned in job experience descriptions/responsibilities
+- source="project": Technologies used in projects (prefer putting these in project.technologies, not skills)
+- source="certification": Skills from certification names
+- source="education": Skills from coursework or academic section
+- Only add a skill to the skills[] array if it is EXPLICITLY mentioned as a skill by the candidate, not just used in a project`;
 
 export function buildResumeStructurePrompt(rawText) {
   return `Parse the following resume into the JSON schema below. Return ONLY valid JSON.
@@ -24,7 +39,11 @@ REQUIRED JSON SCHEMA:
     {
       "canonicalName": "string — normalized, universally accepted name (e.g. 'React', 'MongoDB')",
       "originalMention": "string — exact text snippet where it was found in the resume",
-      "category": "string — strictly one of: language, framework, library, database, tool, cloud, concept, domain, soft_skill, certification, other"
+      "category": "string — strictly one of: language, framework, library, database, tool, cloud, concept, domain, soft_skill, certification, other",
+      "source": "string — strictly one of: skills_section, experience, project, certification, education, summary",
+      "proficiency": "string — strictly one of: strong, intermediate, familiar, emerging (infer from evidence)",
+      "confidence": "number — 0 to 100",
+      "evidence": "string — concise reason why this proficiency was assigned (e.g. 'Used in 3 projects', 'Listed in skills section')"
     }
   ],
   "education": [
@@ -57,7 +76,12 @@ REQUIRED JSON SCHEMA:
       "database": "string — databases if explicitly mentioned",
       "deployment": "string — cloud/deployment if explicitly mentioned",
       "keyResponsibilities": ["array of strings — key tasks or achievements"],
-      "link": "string — optional, empty if absent"
+      "link": "string — optional, empty if absent",
+      "problemSolved": "string — concise description of the problem this project solves",
+      "technicalComplexity": "string — assessment of the technical complexity",
+      "userImpact": "string — any quantifiable metrics or user impact mentioned",
+      "role": "string — candidate's role/contribution",
+      "confidence": "number — 0 to 100 (how confident are you that this is a real project)"
     }
   ],
   "certifications": [
@@ -80,3 +104,4 @@ ${rawText}
 
 Return ONLY the JSON object. No markdown. No explanation.`;
 }
+

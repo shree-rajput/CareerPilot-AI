@@ -43,3 +43,16 @@ export const projectRealityCheckSchema = z.object({
   confidenceScore: z.number().min(0).max(100),
   explanation: z.string()
 });
+
+export const coverLetterSchema = z.object({
+  coverLetter: z.string(),
+  wordCount: z.number().optional(),
+  highlightsUsed: z.array(z.string()).optional()
+});
+
+export const recruiterMessageSchema = z.object({
+  message: z.string(),
+  type: z.string().optional(),
+  subjectLine: z.string().optional()
+});
+

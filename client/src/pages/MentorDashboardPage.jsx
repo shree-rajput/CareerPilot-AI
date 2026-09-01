@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   GraduationCap, Clock, CheckCircle2, XCircle, AlertCircle, 
-  User, Calendar, Sparkles, Send, ShieldCheck, RefreshCw, ChevronRight, FileText
+  User, Calendar, Sparkles, Send, ShieldCheck, RefreshCw, ChevronRight, FileText, MessageSquare, Video
 } from "lucide-react";
 import { 
   getMyProfile, 
@@ -14,6 +14,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card"
 import { Badge } from "../components/ui/Badge";
 import { Spinner } from "../components/ui/Spinner";
 import { Link } from "react-router-dom";
+import { MentorMessagingModal } from "../components/mentor/MentorMessagingModal";
 
 export function MentorDashboardPage() {
   const [mentorProfile, setMentorProfile] = useState(null);
@@ -21,6 +22,7 @@ export function MentorDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(null);
+  const [messagingRecipient, setMessagingRecipient] = useState(null);
 
   // Availability editing state
   const [editingAvailability, setEditingAvailability] = useState(false);
@@ -188,7 +190,7 @@ export function MentorDashboardPage() {
               </h3>
               <p className="text-xs text-text-secondary mt-1">
                 {mentorProfile?.mentorStatus === "pending"
-                  ? "Your mentor application is currently being reviewed by CareerPilot admins. You will gain access to incoming bookings once approved."
+                  ? "Your mentor application is currently being reviewed by CareerCopilot admins. You will gain access to incoming bookings once approved."
                   : "Submit your mentor application to start guiding candidates, holding 1:1 sessions, and tracking student outcomes."}
               </p>
             </div>
@@ -388,28 +390,49 @@ export function MentorDashboardPage() {
 
                         {/* Actions Row */}
                         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                          {session.status === 'requested' && (
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                size="xs" 
-                                variant="primary"
-                                disabled={actionLoading === session._id}
-                                onClick={() => handleUpdateRequestStatus(session._id, 'confirmed')}
-                              >
-                                Accept Request
-                              </Button>
-                              <Button 
-                                size="xs" 
+                          <div className="flex items-center gap-2">
+                            {session.candidateId && (
+                              <Button
+                                size="xs"
                                 variant="outline"
-                                disabled={actionLoading === session._id}
-                                onClick={() => handleUpdateRequestStatus(session._id, 'cancelled')}
+                                className="font-bold gap-1"
+                                onClick={() => setMessagingRecipient(session.candidateId)}
                               >
-                                Decline
+                                <MessageSquare size={12} /> Chat Candidate
                               </Button>
-                            </div>
-                          )}
+                            )}
 
-                          {session.status === 'confirmed' && (
+                            {session.status === 'scheduled' && (
+                              <Link to={`/mentor/session/${session._id}`}>
+                                <Button size="xs" variant="primary" className="font-bold gap-1">
+                                  <Video size={12} /> Launch Room
+                                </Button>
+                              </Link>
+                            )}
+
+                            {session.status === 'requested' && (
+                              <>
+                                <Button 
+                                  size="xs" 
+                                  variant="primary"
+                                  disabled={actionLoading === session._id}
+                                  onClick={() => handleUpdateRequestStatus(session._id, 'scheduled')}
+                                >
+                                  Accept Request
+                                </Button>
+                                <Button 
+                                  size="xs" 
+                                  variant="outline"
+                                  disabled={actionLoading === session._id}
+                                  onClick={() => handleUpdateRequestStatus(session._id, 'cancelled')}
+                                >
+                                  Decline
+                                </Button>
+                              </>
+                            )}
+                          </div>
+
+                          {session.status === 'scheduled' && (
                             <div className="flex flex-col gap-3 w-full">
                               {completingSessionId === session._id ? (
                                 <form onSubmit={handleCompleteSession} className="flex flex-col gap-4 mt-2 border-t border-border pt-4 bg-surface p-4 rounded-xl border">
@@ -475,6 +498,13 @@ export function MentorDashboardPage() {
             </Card>
           </div>
         </div>
+      )}
+
+      {messagingRecipient && (
+        <MentorMessagingModal
+          recipient={messagingRecipient}
+          onClose={() => setMessagingRecipient(null)}
+        />
       )}
     </div>
   );

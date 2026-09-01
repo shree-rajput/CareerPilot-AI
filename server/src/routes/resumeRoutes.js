@@ -4,6 +4,7 @@ import {
   deleteResume,
   diffResumeVersions,
   downloadResume,
+  viewResume,
   getResume,
   getResumes,
   getResumeVersions,
@@ -38,6 +39,7 @@ resumeRouter.get("/:id/versions", getResumeVersions);
 resumeRouter.get("/:id/download", downloadResume);
 
 resumeRouter.post("/:id/restore", restoreResumeVersion);
+resumeRouter.get("/:id/view", viewResume);
 
 // Studio Routes
 resumeRouter.post("/:id/draft", saveDraft);

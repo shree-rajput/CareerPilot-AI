@@ -748,7 +748,10 @@ export const diffResumeVersions = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/resume/:id/download
- * Download exact snapshot of requested resume version.
+ * Download the ORIGINAL uploaded resume file.
+ * - If stored in Cloudinary: redirect to the original file URL.
+ * - If no Cloudinary URL (local only): serve rawText as plain text.
+ * NEVER serves structuredData/JSON as a resume file.
  */
 export const downloadResume = asyncHandler(async (req, res) => {
   const resume = await Resume.findOne({
@@ -760,14 +763,64 @@ export const downloadResume = asyncHandler(async (req, res) => {
     throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
   }
 
-  // If Cloudinary URL exists, redirect directly
+  // PRIMARY PATH: If Cloudinary URL exists, redirect to the original stored file
+  if (resume.cloudinaryUrl) {
+    // Use attachment_url pattern to force download with correct filename
+    const originalFilename = resume.originalFilename || `${(resume.name || "Resume").replace(/\s+/g, "_")}.${resume.fileType || "pdf"}`;
+    // Cloudinary supports fl_attachment for forced download
+    const downloadUrl = resume.cloudinaryUrl.includes('/upload/')
+      ? resume.cloudinaryUrl.replace('/upload/', `/upload/fl_attachment:${encodeURIComponent(originalFilename)}/`)
+      : resume.cloudinaryUrl;
+    return res.redirect(downloadUrl);
+  }
+
+  // FALLBACK PATH: No Cloudinary URL — serve rawText if available.
+  // NEVER serve structuredData (JSON) as a resume file.
+  if (!resume.rawText || resume.rawText.trim().length === 0) {
+    throw new AppError(
+      "Original resume file is not available. Please re-upload your resume.",
+      404,
+      "RESUME_FILE_NOT_AVAILABLE"
+    );
+  }
+
+  const filename = `${(resume.name || "Resume").replace(/\s+/g, "_")}_v${resume.version || 1}.txt`;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.send(resume.rawText);
+});
+
+/**
+ * GET /api/resume/:id/view
+ * View the original resume in-browser (not a download).
+ * Returns a redirect to Cloudinary for PDF/DOCX,
+ * or a text/plain response for rawText.
+ */
+export const viewResume = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  }).lean();
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  // If Cloudinary URL exists, redirect for inline viewing
   if (resume.cloudinaryUrl) {
     return res.redirect(resume.cloudinaryUrl);
   }
 
-  // Fallback: Send formatted text attachment
-  const filename = `${(resume.name || "Resume").replace(/\s+/g, "_")}_v${resume.version}.txt`;
-  res.setHeader("Content-Type", "text/plain");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  return res.send(resume.rawText || JSON.stringify(resume.structuredData, null, 2));
+  // Fallback: serve rawText inline (no download prompt)
+  if (!resume.rawText || resume.rawText.trim().length === 0) {
+    throw new AppError(
+      "Original resume file is not available.",
+      404,
+      "RESUME_FILE_NOT_AVAILABLE"
+    );
+  }
+
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", "inline");
+  return res.send(resume.rawText);
 });

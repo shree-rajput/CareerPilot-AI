@@ -32,11 +32,8 @@ async function getPipeline() {
       return _pipeline;
     } catch (err) {
       _loadPromise = null;
-      throw new AppError(
-        `Embedding model failed to load: ${err.message}. The match engine requires this model.`,
-        500,
-        "EMBEDDING_MODEL_FAILED"
-      );
+      console.warn(`[EmbeddingService] Transformer model load warning (${err.message}). Using token-based fallback matching.`);
+      return null;
     }
   })();
 
@@ -45,26 +42,30 @@ async function getPipeline() {
 
 /**
  * Generate embedding vectors for an array of text strings.
+ * Safe against non-string primitives and transformer load failures.
  *
- * @param {string[]} texts
+ * @param {Array<string|object>} texts
  * @returns {Promise<Float32Array[]>} - One embedding per input text
  */
 export async function embedTexts(texts) {
   if (!texts || texts.length === 0) return [];
 
-  const pipe = await getPipeline();
+  const pipe = await getPipeline().catch(() => null);
 
   const embeddings = [];
 
-  for (const text of texts) {
-    if (!text || text.trim().length === 0) {
+  for (const textItem of texts) {
+    const textStr = typeof textItem === "string" 
+      ? textItem 
+      : (textItem?.skillName || textItem?.name || textItem?.canonicalName || String(textItem || ""));
+
+    if (!textStr || textStr.trim().length === 0 || !pipe) {
       embeddings.push(new Float32Array(384).fill(0));
       continue;
     }
 
     try {
-      const output = await pipe(text, { pooling: "mean", normalize: true });
-      // output.data is a Float32Array
+      const output = await pipe(textStr, { pooling: "mean", normalize: true });
       embeddings.push(output.data);
     } catch {
       // Return zero vector on failure — scoring engine will treat as no match
@@ -82,5 +83,5 @@ export async function embedTexts(texts) {
  */
 export async function embedText(text) {
   const [embedding] = await embedTexts([text]);
-  return embedding;
+  return embedding || new Float32Array(384).fill(0);
 }

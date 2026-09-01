@@ -21,7 +21,18 @@ const projectItemSchema = z.object({
   name: z.string().default(""),
   description: z.string().default(""),
   technologies: z.array(z.string()).default([]),
-  link: z.string().default("")
+  architecture: z.string().optional().default(""),
+  frontend: z.string().optional().default(""),
+  backend: z.string().optional().default(""),
+  database: z.string().optional().default(""),
+  deployment: z.string().optional().default(""),
+  keyResponsibilities: z.array(z.string()).optional().default([]),
+  link: z.string().default(""),
+  problemSolved: z.string().default(""),
+  technicalComplexity: z.string().default(""),
+  userImpact: z.string().default(""),
+  role: z.string().default(""),
+  confidence: z.number().min(0).max(100).default(100)
 });
 
 const certificationItemSchema = z.object({
@@ -36,7 +47,14 @@ const skillEntitySchema = z.object({
   category: z.enum([
     "language", "framework", "library", "database", "tool", "cloud", 
     "concept", "domain", "soft_skill", "certification", "other"
-  ]).default("other").describe("The broad category of the skill/technology")
+  ]).default("other").describe("The broad category of the skill/technology"),
+  // Source provenance: where this skill was found in the resume
+  source: z.enum([
+    "skills_section", "experience", "project", "certification", "education", "summary"
+  ]).optional().default("skills_section").describe("Where this skill was explicitly mentioned in the resume"),
+  proficiency: z.enum(["strong", "intermediate", "familiar", "emerging"]).default("emerging").describe("Inferred strength of the skill based on resume evidence"),
+  confidence: z.number().min(0).max(100).default(100),
+  evidence: z.string().default("").describe("Why this proficiency was assigned (e.g. 'Used in 3 projects')")
 });
 
 export const resumeStructureSchema = z.object({

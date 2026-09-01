@@ -150,29 +150,25 @@ export function MatchResultPage() {
           </Card>
         </div>
 
-        {/* RIGHT: EXPLANATION & CATEGORIES */}
+        {/* RIGHT: EXPLANATION, FIT BREAKDOWN & ACTION PLAN */}
         <div className="flex flex-col gap-6">
+          {/* JOB FIT BREAKDOWN */}
           <Card className="shadow-sm border-border">
             <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
-              <CardTitle className="text-lg m-0">AI Explanation</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <p className="text-sm text-text leading-relaxed whitespace-pre-wrap bg-surface p-4 rounded-xl border border-border">
-                {match.explanation || "No explanation available."}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-border">
-            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
-              <CardTitle className="text-lg m-0">Category Scores</CardTitle>
+              <CardTitle className="text-lg m-0">Job Fit Breakdown</CardTitle>
             </CardHeader>
             <CardContent className="p-6">
               <div className="flex flex-col gap-5">
-                {Object.entries(match.categoryScores).map(([key, score]) => (
-                  <div key={key}>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-bold text-text-secondary capitalize tracking-wide">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                {[
+                  { label: "Technical Fit", score: match.fitBreakdown?.technicalFit ?? match.categoryScores?.technicalSkills ?? 0 },
+                  { label: "Experience Fit", score: match.fitBreakdown?.experienceFit ?? match.categoryScores?.experience ?? 0 },
+                  { label: "Skill Fit", score: match.fitBreakdown?.skillFit ?? match.categoryScores?.preferredSkills ?? 0 },
+                  { label: "Project Relevance", score: match.fitBreakdown?.projectFit ?? match.categoryScores?.projects ?? 0 },
+                  { label: "Education / Eligibility", score: match.fitBreakdown?.educationFit ?? match.categoryScores?.education ?? 0 }
+                ].map(({ label, score }) => (
+                  <div key={label}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-bold text-text-secondary">{label}</span>
                       <strong className={`text-sm font-extrabold ${getScoreText(score)}`}>{score}%</strong>
                     </div>
                     <div className="h-2.5 w-full bg-border rounded-full overflow-hidden shadow-inner">
@@ -183,9 +179,47 @@ export function MatchResultPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ACTION PLAN */}
+          {match.actionPlan && match.actionPlan.length > 0 && (
+            <Card className="shadow-sm border-border border-l-4 border-l-primary">
+              <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+                <CardTitle className="text-lg m-0 text-primary">Recommended Action Plan</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 flex flex-col gap-3">
+                {match.actionPlan.map((item, idx) => (
+                  <div key={idx} className="bg-surface p-3.5 rounded-xl border border-border">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                        item.severity === 'critical' ? 'bg-danger-bg text-danger border border-danger/20' :
+                        item.severity === 'important' ? 'bg-warning-bg text-warning border border-warning/20' :
+                        'bg-info-bg text-primary border border-blue-200'
+                      }`}>
+                        {item.severity.replace('_', ' ')}
+                      </span>
+                      <strong className="text-xs font-bold text-text">{item.gap}</strong>
+                    </div>
+                    <p className="text-xs text-text-secondary leading-relaxed">{item.action}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="shadow-sm border-border">
+            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6">
+              <CardTitle className="text-lg m-0">AI Explanation</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <p className="text-sm text-text leading-relaxed whitespace-pre-wrap bg-surface p-4 rounded-xl border border-border">
+                {match.explanation || "No explanation available."}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
       </div>
     </div>
   );
 }
+

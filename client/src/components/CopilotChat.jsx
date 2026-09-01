@@ -6,7 +6,7 @@ import { Button } from './ui/Button';
 export function CopilotChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hi! I am CareerPilot AI. How can I help you maximize your placement chances today?' }
+    { role: 'assistant', content: 'Hi! I am CareerCopilot. How can I help you maximize your placement chances today?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,20 +35,24 @@ export function CopilotChat() {
     try {
       let currentId = activeId;
       if (!currentId) {
-        const conv = await copilotApi.createConversation("Quick Chat");
-        currentId = conv._id;
+        // copilotApi.createConversation() returns { status: 'success', data: conversationObject }
+        const createRes = await copilotApi.createConversation("Quick Chat");
+        currentId = createRes?.data?._id;
+        if (!currentId) throw new Error("Failed to create conversation session");
         setActiveId(currentId);
       }
 
-      const response = await copilotApi.sendMessage(currentId, userQuery);
-      setMessages(prev => {
-        // Find if we already added a user message, replace the assistant response.
-        // Actually, just append the assistant response.
-        return [...prev, { role: 'assistant', content: response.reply }];
-      });
+      // copilotApi.sendMessage() returns { status: 'success', data: { reply, suggestedActions, conversation } }
+      const sendRes = await copilotApi.sendMessage(currentId, userQuery);
+      const replyText = sendRes?.data?.reply
+        || sendRes?.data?.conversation?.messages?.slice(-1)?.[0]?.content
+        || "I couldn't generate a response. Please try again.";
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
     } catch (error) {
       console.error("Copilot error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error while processing your request.' }]);
+      const errMsg = error?.response?.data?.message || error?.message || 'Sorry, I couldn\'t process that request right now. Please try again.';
+      setMessages(prev => [...prev, { role: 'assistant', content: errMsg }]);
     } finally {
       setIsLoading(false);
     }
@@ -59,10 +63,10 @@ export function CopilotChat() {
       {/* Floating Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 p-4 bg-primary text-white rounded-full shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all z-[100] flex items-center justify-center ${isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}
+        className={`fixed bottom-6 right-6 w-11 h-11 bg-primary text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all z-[100] flex items-center justify-center cursor-pointer ${isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}
         aria-label="Open AI Copilot"
       >
-        <MessageSquare size={24} />
+        <MessageSquare size={20} />
       </button>
 
       {/* Chat Window */}
@@ -72,11 +76,11 @@ export function CopilotChat() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-bg-secondary rounded-t-2xl shrink-0">
           <div className="flex items-center gap-3">
-            <div className="bg-primary/10 text-primary p-2 rounded-lg">
-              <Bot size={20} />
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-transparent">
+              <img src="/favicon.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h3 className="font-bold text-text leading-tight">CareerPilot AI</h3>
+              <h3 className="font-bold text-text leading-tight">CareerCopilot</h3>
               <p className="text-xs text-text-secondary font-medium">Your personal placement coach</p>
             </div>
           </div>

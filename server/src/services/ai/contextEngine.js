@@ -54,23 +54,46 @@ export async function buildInterviewQuestionContext({ userId, sessionId }) {
   if (!session) throw new Error("Missing session for interview question context");
 
   const previousQuestions = await InterviewQuestion.find({ sessionId })
-    .sort({ order: 1 })
+    .sort({ createdAt: 1 })
     .lean();
+
+  // Fetch candidate's past weaknesses from previous interview sessions (for intentional revisiting)
+  const pastSessionIds = await InterviewSession.find({ userId, _id: { $ne: sessionId } }).distinct('_id');
+  const pastWeakQuestions = await InterviewQuestion.find({
+    sessionId: { $in: pastSessionIds },
+    "evaluation.correctness": { $in: ["Low", "Medium"] }
+  }).sort({ createdAt: -1 }).limit(5).select("questionText category evaluation expectedConcepts").lean();
+
+  const pastWeaknessTopics = pastWeakQuestions.map(q => ({
+    category: q.category,
+    expectedConcepts: q.expectedConcepts || [],
+    weaknessDetail: q.evaluation?.weaknesses?.join(", ") || "Missing depth"
+  }));
 
   return {
     candidateProfile: {
+      name: user?.name || "Candidate",
+      experienceLevel: user?.experienceLevel || "student",
       targetRoles: user?.targetRoles || [],
+      technicalSkills: user?.technicalSkills || [],
       primaryTechStack: user?.primaryTechStack || [],
-      projects: projects || []
+      projects: projects && projects.length > 0 ? projects : session.resumeSnapshot?.projects || []
     },
     targetRole: session.targetRole,
     technologyStack: session.technologyStack || [],
-    interviewType: session.type,
+    interviewType: session.interviewType || session.type,
     difficulty: session.difficulty,
+    jobDescription: session.jobDescription || "",
+    userPreferences: {
+      interviewPreferences: user?.interviewPreferences || {},
+      aiPreferences: user?.aiPreferences || {}
+    },
+    pastWeaknessTopics,
     previousQuestions: previousQuestions.map(q => ({
       category: q.category,
-      question: q.questionText,
-      score: q.analysis?.technicalAccuracy || 0
+      questionText: q.questionText,
+      status: q.status,
+      evaluation: q.evaluation
     }))
   };
 }

@@ -208,6 +208,15 @@ export async function updateUserReadinessScore(userId, changeReason = "System Up
     careerStrategy: normalizeScore(strategyScore)
   };
 
+  // Self-healing migration: correct any -1 legacy values that slipped through
+  // from the old User schema defaults. normalizeScore(-1) = 0, already handled above.
+  // Explicitly validate all breakdown values are within [0, 100]:
+  for (const key of Object.keys(breakdown)) {
+    if (!Number.isFinite(breakdown[key]) || breakdown[key] < 0 || breakdown[key] > 100) {
+      breakdown[key] = 0;
+    }
+  }
+
   // Normalize existing corrupted readinessHistory entries
   if (user.readinessHistory && user.readinessHistory.length > 0) {
     user.readinessHistory.forEach(entry => {

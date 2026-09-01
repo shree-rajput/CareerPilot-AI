@@ -49,4 +49,5 @@ export const resumeApi = {
   },
 
   downloadUrl: (id) => `/api/resume/${id}/download`,
+  viewUrl: (id) => `/api/resume/${id}/view`,
 };

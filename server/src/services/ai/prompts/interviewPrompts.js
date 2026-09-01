@@ -55,11 +55,15 @@ Based on the candidate's profile, requested difficulty, and PREVIOUS PERFORMANCE
 
 CRITICAL GUIDELINES:
 1. NOVELTY: Do NOT ask any question from the history. Do NOT ask a paraphrased version. Do NOT test the exact same concept unless explicitly following up.
-2. ADAPTIVE DIFFICULTY: If the candidate answered previous questions well (high correctness), ask a harder, deeper question. If they struggled, ask a simpler fundamental question.
-3. PERSONALIZATION: Strongly prefer asking questions based on the Candidate Projects provided above. Ask about their specific architecture, choices, or challenges in those projects instead of generic definitions.
-4. TYPE: Vary the question type. Use a mix of CONCEPTUAL, PRACTICAL, SCENARIO, and BEHAVIORAL based on the interview type.
-5. Make it sound like a real question spoken by a human interviewer.
-6. Return exactly one question.
+2. STRICT DIFFICULTY CALIBRATION:
+   - EASY: Focus on core fundamentals, clear definitions, basic framework mechanics, and approachable concepts.
+   - MEDIUM: Focus on practical implementation, common patterns, real-world scenario trade-offs, and state/error handling.
+   - HARD: Focus on advanced optimization, deep internal mechanics, scalability under load, or complex system trade-offs.
+3. ADAPTIVE DIFFICULTY: If the candidate answered previous questions well (high correctness), ask a slightly deeper question. If they struggled, step down difficulty or ask a concept-building question.
+4. PERSONALIZATION: Strongly prefer asking questions based on the Candidate Projects provided above. Ask about their specific architecture, choices, or challenges in those projects instead of generic definitions.
+5. TYPE: Vary the question type. Use a mix of CONCEPTUAL, PRACTICAL, SCENARIO, and BEHAVIORAL based on the interview type.
+6. Make it sound like a real question spoken by a human interviewer.
+7. Return exactly one question.
 
 You MUST respond with ONLY a valid JSON object — no markdown, no explanation.
 The JSON object must use EXACTLY these field names:
@@ -109,6 +113,15 @@ The JSON object must use EXACTLY these field names:
   "depth": "<High | Medium | Low>",
   "specificity": "<High | Medium | Low>",
   "structure": "<High | Medium | Low>",
+  "communication": {
+    "score": <0-100 overall communication score>,
+    "clarity": <0-100 rating on directness and understandability>,
+    "relevance": <0-100 rating on staying on topic>,
+    "structure": <0-100 rating on logical flow and sequencing>,
+    "conciseness": <0-100 rating on efficiency without rambling>,
+    "fillerUsage": <0-100 rating for minimal filler words>,
+    "evidence": ["<specific observation 1>", "<specific observation 2>"]
+  },
   "evidenceCollected": ["<quote or specific point 1>", "<quote or specific point 2>"],
   "strengths": ["<strength 1>", "..."],
   "weaknesses": ["<weakness 1>", "..."],
@@ -294,10 +307,14 @@ Target Role: ${params.targetRole}
 Technology Stack: ${params.technologyStack.join(", ")}
 Requested Difficulty: ${params.difficulty}
 
-Create a realistic coding challenge that tests their problem-solving and coding skills.
-The challenge must be self-contained and possible to solve in 15-20 minutes.
+DIFFICULTY GUIDELINES:
+- EASY: Basic array/string manipulation, hash map lookup, simple loops, or basic utility functions. Solvable in < 10 mins.
+- MEDIUM: Two-pointers, sliding window, stack/queue, basic tree traversal, or practical API/state manipulation. Solvable in 15 mins.
+- HARD: Algorithmic optimization, advanced data structures, dynamic programming, or complex graph problems.
+
+Make sure the challenge is directly relevant to ${params.targetRole}.
 Include 2-3 public test cases and 1-2 hidden test cases.
-Make sure the starter code is correct for the chosen language.
+Make sure the starter code defines a valid function named solution(input).
 
 You MUST respond with ONLY a valid JSON object matching this structure:
 {

@@ -117,12 +117,18 @@ export const runMatch = asyncHandler(async (req, res) => {
     jdHash,
     overallScore: pipelineResult.overallScore,
     categoryScores: pipelineResult.categoryScores,
+    fitBreakdown: pipelineResult.fitBreakdown,
     matchedSkills: pipelineResult.matchedSkills,
     partialSkills: pipelineResult.partialSkills,
     missingSkills: pipelineResult.missingSkills,
+    criticalGaps: pipelineResult.criticalGaps || [],
+    importantGaps: pipelineResult.importantGaps || [],
+    niceToHaveGaps: pipelineResult.niceToHaveGaps || [],
+    actionPlan: pipelineResult.actionPlan || [],
     evidence: pipelineResult.evidence,
     explanation,
   });
+
 
   // Link to application
   await Application.findByIdAndUpdate(applicationId, {

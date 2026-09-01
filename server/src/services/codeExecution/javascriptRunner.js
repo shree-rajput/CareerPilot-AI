@@ -25,17 +25,48 @@ const input = ${JSON.stringify(input)};
 
 ${code}
 
-// The runner expects the candidate to expose
-// a function called "solution".
-if (typeof solution !== "function") {
+// Smart function discovery: find solution, twoSum, or top-level candidate function
+let targetFn = null;
+if (typeof solution === "function") {
+  targetFn = solution;
+} else if (typeof twoSum === "function") {
+  targetFn = twoSum;
+} else if (typeof two_sum === "function") {
+  targetFn = two_sum;
+} else {
+  // Scan global scope for user-defined function
+  const reserved = new Set(["console", "require", "exports", "module", "process", "Buffer", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate", "queueMicrotask"]);
+  for (const key of Object.keys(globalThis)) {
+    if (!reserved.has(key) && typeof globalThis[key] === "function") {
+      targetFn = globalThis[key];
+      break;
+    }
+  }
+}
+
+if (!targetFn) {
   throw new Error(
-    "Your code must define a function named solution."
+    "Your code must define a solution function (e.g. function solution(...) or function twoSum(...))."
   );
 }
 
-const result = solution(input);
+let result;
+if (input !== null && typeof input === "object" && !Array.isArray(input)) {
+  const argValues = Object.values(input);
+  if (targetFn.length > 1 && argValues.length === targetFn.length) {
+    result = targetFn(...argValues);
+  } else {
+    try {
+      result = targetFn(...argValues);
+    } catch (e) {
+      result = targetFn(input);
+    }
+  }
+} else {
+  result = targetFn(input);
+}
 
-console.log(JSON.stringify(result));
+console.log(JSON.stringify(result !== undefined ? result : null));
 `;
 
     await writeFile(filePath, wrappedCode, "utf8");

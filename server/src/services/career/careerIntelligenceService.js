@@ -46,29 +46,64 @@ function addCount(counter, value, weight = 1) {
 }
 
 function extractResumeSkills(resumes) {
-  const skills = [];
+  const skillMap = new Map();
   const projects = [];
   const certifications = [];
 
   for (const resume of resumes) {
     const data = resume.structuredData || {};
-    skills.push(data.skills || []);
-    certifications.push(data.certifications || []);
+    
+    // Process skills section
+    for (const skill of data.skills || []) {
+      const name = skill.canonicalName || skill; // Handle both old strings and new objects
+      const key = normalize(name);
+      if (!key) continue;
+      
+      if (!skillMap.has(key)) {
+        skillMap.set(key, {
+          name: typeof name === 'string' ? name : String(name),
+          proficiency: skill.proficiency || "emerging",
+          evidence: skill.evidence || "Found in resume skills section",
+          confidence: skill.confidence || 50
+        });
+      }
+    }
+
+    for (const cert of data.certifications || []) {
+      certifications.push(cert);
+    }
 
     for (const project of data.projects || []) {
       projects.push({
         name: project.name || "Project",
         description: project.description || "",
-        technologies: project.technologies || []
+        technologies: project.technologies || [],
+        problemSolved: project.problemSolved || "",
+        technicalComplexity: project.technicalComplexity || "",
+        userImpact: project.userImpact || "",
+        role: project.role || ""
       });
-      skills.push(project.technologies || []);
+      
+      // Add project tech as skills if missing
+      for (const tech of project.technologies || []) {
+        const key = normalize(tech);
+        if (!key) continue;
+        if (!skillMap.has(key)) {
+          skillMap.set(key, {
+            name: tech,
+            proficiency: "familiar",
+            evidence: `Used in project: ${project.name || "Project"}`,
+            confidence: 60
+          });
+        }
+      }
     }
   }
 
   return {
-    skills: unique(skills),
+    skills: Array.from(skillMap.values()),
     projects,
-    certifications: unique(certifications)
+    certifications
   };
 }
 
@@ -89,37 +124,50 @@ function targetRoleSkills(user, applications) {
 }
 
 function buildSkillGap({ userSkills, targetSkills, missingFromMatches, weakFromInterviews }) {
-  const userSkillSet = new Set(userSkills.map(normalize));
+  const userSkillMap = new Map();
+  for (const skill of userSkills) {
+    if (typeof skill === 'string') {
+      userSkillMap.set(normalize(skill), { proficiency: 'emerging', evidence: 'Mentioned in profile' });
+    } else if (skill && skill.name) {
+      userSkillMap.set(normalize(skill.name), skill);
+    }
+  }
+
   const gaps = [];
 
   for (const skill of targetSkills) {
     const key = normalize(skill);
     const matchMissingCount = missingFromMatches[key] || 0;
     const interviewWeakCount = weakFromInterviews[key] || 0;
-    const isKnown = userSkillSet.has(key);
+    const knownSkill = userSkillMap.get(key);
+    const isKnown = !!knownSkill;
 
-    if (isKnown && matchMissingCount === 0 && interviewWeakCount === 0) {
+    if (isKnown && matchMissingCount === 0 && interviewWeakCount === 0 && knownSkill.proficiency === 'strong') {
       gaps.push({
         skill,
         status: "strong",
         priority: "low",
         whyItMatters: "This skill appears in your profile and has not repeatedly appeared as a gap.",
+        evidence: knownSkill.evidence || "Strong evidence in profile",
         recommendedTopics: [],
         practiceRecommendation: "Keep using this in projects and interview explanations."
       });
       continue;
     }
 
-    const priorityScore = matchMissingCount * 2 + interviewWeakCount * 3 + (isKnown ? 0 : 2);
+    const priorityScore = matchMissingCount * 2 + interviewWeakCount * 3 + (isKnown ? (knownSkill.proficiency === 'emerging' ? 1 : 0) : 2);
     const priority = priorityScore >= 5 ? "high" : priorityScore >= 2 ? "medium" : "low";
+    
+    let evidence = knownSkill ? (knownSkill.evidence || `Detected as ${knownSkill.proficiency}`) : "No evidence found in resume or projects.";
 
     gaps.push({
       skill,
       status: isKnown ? "needs_improvement" : "missing",
       priority,
+      evidence,
       whyItMatters: isKnown
-        ? "Your data suggests this skill needs stronger evidence or interview depth."
-        : "This skill is relevant to your target role but is not visible in your profile.",
+        ? `Your data suggests this skill needs stronger evidence or interview depth.`
+        : `This skill is relevant to your target role but is not visible in your profile.`,
       recommendedTopics: getRecommendedTopics(skill),
       practiceRecommendation: getPracticeRecommendation(skill)
     });
@@ -282,7 +330,7 @@ function buildApplicationAdvice(application, matchResult, resumeContext) {
     coverLetterContext: {
       company: application.company,
       role: application.role,
-      usableSkills: matchResult?.matchedSkills || resumeContext.skills.slice(0, 6),
+      usableSkills: matchResult?.matchedSkills || resumeContext.skills.map(s => typeof s === 'string' ? s : s.name).slice(0, 6),
       usableProjects: relevantProjects.slice(0, 2)
     }
   };
@@ -303,7 +351,16 @@ export async function getCareerIntelligence(userId) {
     : [];
 
   const resumeContext = extractResumeSkills(resumes);
-  const userSkills = unique([user?.technicalSkills || [], user?.primaryTechStack || [], resumeContext.skills]);
+  
+  // userSkills array containing both strings (from user model) and objects (from resumeContext)
+  const rawUserSkills = [
+    ...(user?.technicalSkills || []),
+    ...(user?.primaryTechStack || []),
+    ...resumeContext.skills
+  ];
+  
+  // unique won't handle objects well if it only expects strings, so we pass rawUserSkills directly to buildSkillGap
+  // which handles both strings and objects.
   const targetSkills = targetRoleSkills(user || {}, applications);
 
   const missingFromMatches = {};
@@ -323,7 +380,7 @@ export async function getCareerIntelligence(userId) {
   }
 
   const skillGaps = buildSkillGap({
-    userSkills,
+    userSkills: rawUserSkills,
     targetSkills,
     missingFromMatches,
     weakFromInterviews
@@ -342,7 +399,7 @@ export async function getCareerIntelligence(userId) {
   const strongSkills = unique([
     topEntries(strongFromMatches, 8).map((entry) => entry.name),
     skillGaps.filter((gap) => gap.status === "strong").map((gap) => gap.skill),
-    userSkills.slice(0, 8)
+    rawUserSkills.map(s => typeof s === 'string' ? s : s.name).slice(0, 8)
   ]).slice(0, 8);
 
   return {

@@ -203,3 +203,75 @@ export const tailorResume = asyncHandler(async (req, res) => {
     },
   });
 });
+
+/**
+ * POST /api/tailor/save-version
+ * Creates a new Resume version based on accepted tailoring recommendations without overwriting original.
+ */
+export const saveTailoredVersion = asyncHandler(async (req, res) => {
+  const { resumeId, applicationId, versionName, acceptedChanges } = req.body;
+
+  if (!resumeId) throw new AppError("resumeId is required.", 400, "VALIDATION_ERROR");
+
+  const originalResume = await Resume.findOne({ _id: resumeId, userId: req.user._id });
+  if (!originalResume) throw new AppError("Original resume not found.", 404, "RESUME_NOT_FOUND");
+
+  let application = null;
+  if (applicationId) {
+    application = await Application.findOne({ _id: applicationId, userId: req.user._id });
+  }
+
+  // Count existing versions for this user
+  const existingCount = await Resume.countDocuments({ userId: req.user._id });
+  const nextVersionNum = existingCount + 1;
+
+  const targetCompany = application?.company ? ` - ${application.company}` : "";
+  const targetRole = application?.role ? ` (${application.role})` : "";
+  const defaultVersionName = versionName || `${originalResume.name} v${nextVersionNum}${targetRole}${targetCompany}`;
+
+  // Clone structured data and raw text
+  let structuredData = JSON.parse(JSON.stringify(originalResume.structuredData || {}));
+  let rawText = originalResume.rawText || "";
+
+  // Apply accepted rephrasing to summary / bullet points if provided
+  if (Array.isArray(acceptedChanges)) {
+    for (const change of acceptedChanges) {
+      if (!change.original || !change.suggestion) continue;
+      // Perform text replacement in raw text
+      if (rawText.includes(change.original)) {
+        rawText = rawText.replace(change.original, change.suggestion);
+      }
+      // Apply to structured summary if applicable
+      if (change.section === "summary" && structuredData.summary) {
+        if (structuredData.summary.includes(change.original)) {
+          structuredData.summary = structuredData.summary.replace(change.original, change.suggestion);
+        }
+      }
+    }
+  }
+
+  const newVersion = await Resume.create({
+    userId: req.user._id,
+    name: defaultVersionName,
+    version: nextVersionNum,
+    rawText,
+    structuredData,
+    atsScore: originalResume.atsScore || 75,
+    contentScore: originalResume.contentScore || 80,
+    isActive: true,
+    fileKey: originalResume.fileKey || "",
+    originalFilename: originalResume.originalFilename || "tailored_resume.pdf"
+  });
+
+  // Link new version to application if provided
+  if (application) {
+    application.resumeVersionId = newVersion._id;
+    await application.save();
+  }
+
+  return res.status(201).json({
+    message: "Tailored resume version saved successfully.",
+    resume: newVersion
+  });
+});
+

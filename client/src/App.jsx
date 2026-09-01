@@ -26,6 +26,8 @@ import { PreparationPage } from "./pages/PreparationPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { MentorshipPage } from "./pages/MentorshipPage";
 import { MentorDashboardPage } from "./pages/MentorDashboardPage";
+import { BecomeAMentorPage } from "./pages/BecomeAMentorPage";
+import { MentorSessionRoomPage } from "./pages/MentorSessionRoomPage";
 import { CodingPracticePage } from "./pages/CodingPracticePage";
 import { CopilotPage } from "./pages/CopilotPage";
 
@@ -93,8 +95,10 @@ export function App() {
             <Route path="/coding" element={<CodingPracticePage />} />
             <Route path="/coding/:id" element={<CodingPracticePage />} />
             <Route path="/mentorship" element={<MentorshipPage />} />
+            <Route path="/become-a-mentor" element={<BecomeAMentorPage />} />
             <Route path="/mentor" element={<Navigate to="/mentor/dashboard" replace />} />
             <Route path="/mentor/dashboard" element={<MentorDashboardPage />} />
+            <Route path="/mentor/session/:sessionId" element={<MentorSessionRoomPage />} />
           </Route>
         </Route>
       </Routes>

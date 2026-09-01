@@ -48,7 +48,12 @@ export function AuthPage({ mode }) {
       <Card className="w-full max-w-md relative z-10 shadow-xl border-border animate-in fade-in slide-in-from-bottom-4 duration-500">
         <CardContent className="p-8 sm:p-10 flex flex-col gap-8">
           <div>
-            <span className="text-primary font-bold text-xs uppercase tracking-widest mb-2 block">CareerPilot AI</span>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg shadow-sm overflow-hidden flex items-center justify-center bg-transparent">
+                <img src="/favicon.png" alt="CareerCopilot Logo" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-primary font-bold text-xs uppercase tracking-widest block">CareerCopilot</span>
+            </div>
             <h1 id="auth-title" className="text-3xl font-extrabold text-text tracking-tight mb-2">
               {isSignup ? "Create workspace" : "Log in to workspace"}
             </h1>
@@ -105,7 +110,7 @@ export function AuthPage({ mode }) {
           </form>
 
           <p className="text-center text-text-secondary text-sm">
-            {isSignup ? "Already have an account?" : "New to CareerPilot?"}{" "}
+            {isSignup ? "Already have an account?" : "New to CareerCopilot?"}{" "}
             <Link to={isSignup ? "/login" : "/signup"} className="text-primary hover:text-primary-hover font-bold transition-colors">
               {isSignup ? "Log in" : "Create account"}
             </Link>

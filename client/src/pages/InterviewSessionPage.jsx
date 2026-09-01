@@ -117,7 +117,7 @@ export function InterviewSessionPage() {
   useEffect(() => {
     let mounted = true;
     async function loadFirst() {
-      await fetchNextQuestion({ forceFetch: true, mountedRef: { current: mounted } });
+      await fetchNextQuestion({ forceFetch: false, mountedRef: { current: mounted } });
     }
     loadFirst();
     return () => { mounted = false; };
@@ -188,6 +188,14 @@ export function InterviewSessionPage() {
       setFetchStatus("ready");
       setInterviewPhase("questioning");
 
+      if (actualEntity.type === 'challenge') {
+        const starter = actualEntity.data?.starterCode?.javascript 
+          || actualEntity.data?.starterCode?.python 
+          || (typeof actualEntity.data?.starterCode === 'string' ? actualEntity.data.starterCode : "")
+          || "function solution(input) {\n  // Write your code here\n}";
+        setCurrentCode(starter);
+      }
+
       // If there's a transition message for coding, speak it first
       const transitionMessage = response.transitionMessage;
       const questionText = actualEntity.type === 'challenge'
@@ -249,7 +257,6 @@ export function InterviewSessionPage() {
         setRecordTime(prev => prev + 1);
         if (isVideoEnabled) {
           videoMetricsRef.current.checks++;
-          if (Math.random() > 0.8) videoMetricsRef.current.presenceScore -= 2;
         }
       }, 1000);
     }
@@ -276,22 +283,28 @@ export function InterviewSessionPage() {
       const result = await interviewApi.submitAnswer(currentEntity.data._id, {
         transcript,
         metrics: { speakingPace: wpm, fillerWords: fillers, longPauses: 0 },
-        videoMetrics: { presenceScore: isVideoEnabled ? Math.max(0, videoMetricsRef.current.presenceScore) : 0 }
+        videoMetrics: { available: false, score: null, reason: "Reliable visual-behavior analysis is not currently enabled." }
       });
 
-      // The new API returns { question, interviewerReaction }
+      // The API returns { question, interviewerReaction }
       const reaction = result?.interviewerReaction || result;
 
       setInterviewerReaction(reaction?.interviewerReaction || reaction);
       setInterviewPhase("evaluated");
-      setProcessingStep("");
+      setProcessingStep("Answer evaluated ✓ Loading next question...");
 
       // Speak the reaction if it has text
-      if (reaction?.interviewerReaction?.reaction) {
-        setTimeout(() => speakText(reaction.interviewerReaction.reaction), 300);
-      } else if (reaction?.reaction) {
-        setTimeout(() => speakText(reaction.reaction), 300);
+      const reactionText = reaction?.interviewerReaction?.reaction || reaction?.reaction;
+      if (reactionText) {
+        speakText(reactionText);
       }
+
+      // Automatically transition to the next question after brief reaction (1.5s)
+      setTimeout(async () => {
+        setInterviewPhase("loading_next");
+        setProcessingStep("Fetching next question...");
+        await fetchNextQuestion({ forceFetch: true });
+      }, 1500);
 
     } catch (err) {
       console.error("[Interview] Submit answer error:", err);
@@ -351,12 +364,19 @@ export function InterviewSessionPage() {
       });
 
       setInterviewPhase("evaluated");
-      setProcessingStep("");
+      setProcessingStep("Code evaluation complete ✓ Loading next question...");
 
       // Speak the coding follow-up comment
       if (result?.codingFollowUp?.comment) {
-        setTimeout(() => speakText(result.codingFollowUp.comment), 500);
+        speakText(result.codingFollowUp.comment);
       }
+
+      // Automatically transition to the next question after brief follow-up (1.5s)
+      setTimeout(async () => {
+        setInterviewPhase("loading_next");
+        setProcessingStep("Fetching next question...");
+        await fetchNextQuestion({ forceFetch: true });
+      }, 1500);
 
     } catch (err) {
       console.error("[Interview] Submit code error:", err);
@@ -451,9 +471,11 @@ export function InterviewSessionPage() {
       {/* ── TOP BAR ───────────────────────────────────────── */}
       <header className="flex items-center justify-between px-6 py-3 bg-slate-900/80 border-b border-slate-800 backdrop-blur-sm shrink-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-lg">CP</div>
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-lg bg-transparent">
+            <img src="/favicon.png" alt="Logo" className="w-full h-full object-contain" />
+          </div>
           <div>
-            <span className="text-sm font-bold text-white">CareerPilot</span>
+            <span className="text-sm font-bold text-white">CareerCopilot</span>
             <span className="text-slate-400 text-xs ml-2">Solo AI Interview</span>
           </div>
         </div>

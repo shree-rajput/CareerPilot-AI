@@ -66,6 +66,7 @@ export function CopilotPage() {
   const [activeConversation, setActiveConversation] = useState(null);
 
   const [messages, setMessages] = useState([]);
+  const [suggestedActions, setSuggestedActions] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -93,8 +94,10 @@ export function CopilotPage() {
   const loadSharedConversation = async () => {
     try {
       setIsLoading(true);
+      // copilotApi.getSharedConversation() returns { status: 'success', data: conversationObject }
       const res = await copilotApi.getSharedConversation(token);
-      const conv = res.data || res;
+      const conv = res?.data;
+      if (!conv) throw new Error("Shared conversation not found");
       setActiveConversation(conv);
       setMessages(conv.messages || []);
     } catch (err) {
@@ -106,17 +109,12 @@ export function CopilotPage() {
 
   const loadConversations = async (autoSelectId = null) => {
     try {
+      // copilotApi.getConversations() returns { status: 'success', data: [conversations] }
       const res = await copilotApi.getConversations();
-      // Ensure we always get an array
-      let list = [];
-      if (res && Array.isArray(res)) list = res;
-      else if (res && Array.isArray(res.data)) list = res.data;
-      else if (res && res.data && Array.isArray(res.data.data)) list = res.data.data;
+      const list = Array.isArray(res?.data) ? res.data : [];
       
       setConversations(list);
-      if (list.length > 0 && !activeConversation && !autoSelectId) {
-        // don't auto-load the first one, let them see an empty state or load explicit ID
-      } else if (autoSelectId) {
+      if (autoSelectId) {
         handleSelectConversation(autoSelectId);
       }
     } catch (err) {
@@ -129,8 +127,10 @@ export function CopilotPage() {
     if (isSharedView) return;
     try {
       setIsLoading(true);
+      // copilotApi.getConversation() returns { status: 'success', data: conversationObject }
       const res = await copilotApi.getConversation(id);
-      const conv = res.data || res;
+      const conv = res?.data;
+      if (!conv) throw new Error("Invalid conversation data");
       setActiveConversation(conv);
       setMessages(conv.messages || []);
       setError(null);
@@ -182,25 +182,32 @@ export function CopilotPage() {
 
       // Create new conversation if none active
       if (!activeId) {
-        const res = await copilotApi.createConversation("New Conversation");
-        const newConv = res.data || res;
-        activeId = newConv._id;
+        const createRes = await copilotApi.createConversation("New Conversation");
+        const newConv = createRes?.data;
+        activeId = newConv?._id;
+        if (!activeId) throw new Error("Failed to create conversation");
         setActiveConversation(newConv);
       }
 
-      const res = await copilotApi.sendMessage(activeId, userQuery);
-      const responseData = res.data || res;
+      const sendRes = await copilotApi.sendMessage(activeId, userQuery);
+      const payload = sendRes?.data;
 
-      if (responseData && responseData.conversation) {
-        setActiveConversation(responseData.conversation);
-        setMessages(responseData.conversation.messages);
-
-        // Refresh history to update title implicitly generated in backend
+      if (payload?.conversation) {
+        setActiveConversation(payload.conversation);
+        setMessages(payload.conversation.messages || []);
+        setSuggestedActions(payload.suggestedActions || []);
+        loadConversations();
+      } else if (payload?.reply) {
+        setMessages(prev => [...prev, { role: 'assistant', content: payload.reply }]);
+        setSuggestedActions(payload.suggestedActions || []);
         loadConversations();
       }
     } catch (err) {
       console.error("Copilot error:", err);
-      setError("CareerPilot Copilot is temporarily unavailable. Please try again later.");
+      const errMsg = err?.response?.data?.message || err?.message || "CareerCopilot is temporarily unavailable. Please try again later.";
+      setError(errMsg);
+      // Remove optimistic user message on failure
+      setMessages(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
     }
@@ -238,8 +245,11 @@ export function CopilotPage() {
   const handleShare = async (id) => {
     try {
       const res = await copilotApi.shareConversation(id);
-      const data = res.data || res;
-      const url = `${window.location.origin}/copilot/shared/${data.shareToken}`;
+      // API response shape: { status: "success", data: { shareToken } }
+      const data = res?.data || res;
+      const shareToken = data?.shareToken;
+      if (!shareToken) throw new Error("No share token received");
+      const url = `${window.location.origin}/copilot/shared/${shareToken}`;
       navigator.clipboard.writeText(url);
       alert("Share link copied to clipboard!\n\n" + url);
     } catch (err) {
@@ -373,7 +383,7 @@ export function CopilotPage() {
                 <Sparkles size={18} />
               </div>
               <div>
-                <h1 className="font-bold text-text leading-none m-0 text-lg">CareerPilot Copilot</h1>
+                <h1 className="font-bold text-text leading-none m-0 text-lg">CareerCopilot</h1>
                 {isSharedView && <span className="text-[10px] text-primary uppercase font-bold tracking-widest mt-0.5 block">Shared View - Read Only</span>}
               </div>
             </div>
@@ -424,14 +434,31 @@ export function CopilotPage() {
                   {msg.role === 'user' ? <User size={20} /> : <Bot size={20} />}
                 </div>
 
-                <div className={`max-w-[85%] text-sm rounded-2xl p-5 shadow-sm ${msg.role === 'user'
-                    ? 'bg-primary text-white rounded-tr-sm'
-                    : 'bg-bg-secondary text-text border border-border rounded-tl-sm'
-                  }`}>
-                  {msg.role === 'user' ? (
-                    <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
-                  ) : (
-                    <SimpleMarkdown content={msg.content} />
+                <div className="flex flex-col gap-2 max-w-[85%]">
+                  <div className={`text-sm rounded-2xl p-5 shadow-sm ${msg.role === 'user'
+                      ? 'bg-primary text-white rounded-tr-sm'
+                      : 'bg-bg-secondary text-text border border-border rounded-tl-sm'
+                    }`}>
+                    {msg.role === 'user' ? (
+                      <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                    ) : (
+                      <SimpleMarkdown content={msg.content} />
+                    )}
+                  </div>
+
+                  {msg.role === 'assistant' && idx === messages.length - 1 && suggestedActions.length > 0 && !isLoading && (
+                    <div className="flex flex-wrap gap-2 mt-1 animate-in fade-in slide-in-from-top-1">
+                      {suggestedActions.map((actionText, actIdx) => (
+                        <button
+                          key={actIdx}
+                          onClick={() => setInput(actionText)}
+                          className="px-3 py-1.5 bg-surface hover:bg-bg-secondary border border-primary/30 hover:border-primary text-xs font-semibold text-primary rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                        >
+                          <span>{actionText}</span>
+                          <span className="text-[10px]">→</span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -494,7 +521,7 @@ export function CopilotPage() {
               </form>
               <div className="text-center mt-3">
                 <p className="text-[10px] text-text-secondary font-medium uppercase tracking-widest">
-                  CareerPilot Copilot AI can make mistakes. Check important information.
+                  CareerCopilot AI can make mistakes. Check important information.
                 </p>
               </div>
             </div>

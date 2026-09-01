@@ -46,7 +46,7 @@ export function ProfileConfirmationModal({ isOpen, onClose, structuredData, onCo
             AI Extracted Profile
           </DialogTitle>
           <p className="text-sm text-text-secondary">
-            We extracted the following career details from your resume. Review and confirm to update your CareerPilot profile.
+            We extracted the following career details from your resume. Review and confirm to update your CareerCopilot profile.
           </p>
         </DialogHeader>
         

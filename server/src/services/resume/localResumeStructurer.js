@@ -36,9 +36,15 @@ function extractSkills(text) {
   }
 
   const processed = processExtractedSkills(rawSkills);
-  // local parser will just return strings for backward compatibility, or structured if we want.
-  // The AI parser will return objects. For now, let's return canonical names.
-  return processed.map(p => p.canonicalName);
+  return processed.map(p => ({
+    canonicalName: p.canonicalName,
+    originalMention: p.originalMention || p.canonicalName,
+    category: p.category || "other",
+    source: "skills_section",
+    proficiency: "emerging",
+    confidence: 50,
+    evidence: "Found via local keyword extraction"
+  }));
 }
 
 function extractLinks(text) {
@@ -52,7 +58,12 @@ function extractProjects(text) {
   return splitBullets(projectsSection).slice(0, 8).map((line) => ({
     name: line.split(/[:|-]/)[0]?.trim().slice(0, 80) || "Project",
     description: line,
-    technologies: extractSkills(line),
+    technologies: extractSkills(line).map(s => s.canonicalName),
+    problemSolved: "",
+    technicalComplexity: "",
+    userImpact: "",
+    role: "",
+    confidence: 50,
     link: line.match(/https?:\/\/[^\s)]+/i)?.[0] || ""
   }));
 }

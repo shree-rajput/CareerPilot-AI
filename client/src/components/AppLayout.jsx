@@ -25,6 +25,7 @@ import { Button } from "./ui/Button";
 import { CopilotChat } from "./CopilotChat";
 
 import { FEATURES, FEATURE_STATUS } from "../config/features";
+import api from "../api/axios";
 
 export function AppLayout() {
   const { user, logout } = useAuth();
@@ -40,90 +41,62 @@ export function AppLayout() {
 
   // Notification Center State
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    {
-      id: "n1",
-      title: "Welcome to CareerPilot OS",
-      message: "Establish your profile and complete priority actions to raise your Readiness Score.",
-      read: false,
-      date: "Just now"
-    },
-    {
-      id: "n2",
-      title: "Demo Mentors Active",
-      message: "Demo mode is active. Five industry mock mentors are loaded and ready in the Matching Engine.",
-      read: false,
-      date: "5m ago"
-    }
-  ]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Handle Ctrl+K Command Palette Trigger
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 10000); // Poll notifications every 10s
+    return () => clearInterval(interval);
   }, []);
 
-  // Reset indices on query change
-  useEffect(() => {
-    setPaletteIndex(0);
-  }, [searchQuery]);
-
-  // Focus palette input on open
-  useEffect(() => {
-    if (commandPaletteOpen) {
-      setTimeout(() => paletteInputRef.current?.focus(), 50);
-    } else {
-      setSearchQuery("");
-    }
-  }, [commandPaletteOpen]);
-
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
-
-  // Filter features based on search query
-  const filteredFeatures = FEATURES.filter(item => 
-    item.label.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Keyboard navigation inside Palette
-  const handlePaletteKeyDown = (e) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setPaletteIndex((prev) => (prev + 1) % Math.max(filteredFeatures.length, 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setPaletteIndex((prev) => (prev - 1 + filteredFeatures.length) % Math.max(filteredFeatures.length, 1));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filteredFeatures[paletteIndex]) {
-        navigate(filteredFeatures[paletteIndex].to);
-        setCommandPaletteOpen(false);
-      }
-    } else if (e.key === "Escape") {
-      setCommandPaletteOpen(false);
+  const fetchNotifications = async () => {
+    try {
+      const res = await api.get("/notifications");
+      const data = res.data.data || res.data;
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unreadCount || 0);
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
     }
   };
 
-  const markAllNotificationsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const handleNotificationClick = async (n) => {
+    try {
+      if (!n.read) {
+        await api.patch(`/notifications/${n._id || n.id}/read`);
+        setNotifications((prev) =>
+          prev.map((item) => ((item._id === n._id || item.id === n.id) ? { ...item, read: true } : item))
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+      if (n.actionUrl) {
+        navigate(n.actionUrl);
+        setNotificationsOpen(false);
+      }
+    } catch (err) {
+      console.error("Error marking notification read:", err);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await api.patch("/notifications/read-all");
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error("Failed to mark all notifications read:", err);
+    }
   };
 
   const SidebarContent = () => (
     <>
       <div className="flex items-center gap-3 px-6 py-6 mb-4">
-        <div className="bg-primary text-white p-1.5 rounded-lg shadow-sm">
-          <Sparkles size={24} aria-hidden="true" />
+        <div className="w-8 h-8 rounded-lg shadow-sm overflow-hidden flex items-center justify-center bg-transparent">
+          <img src="/favicon.png" alt="CareerCopilot Logo" className="w-full h-full object-contain" />
         </div>
         <div className="flex flex-col">
-          <strong className="text-text font-bold text-lg leading-tight">CareerPilot AI</strong>
+          <strong className="text-text font-bold text-lg leading-tight">CareerCopilot</strong>
           <span className="text-text-secondary text-[11px] font-bold uppercase tracking-wider">Command Center</span>
         </div>
       </div>
@@ -226,8 +199,10 @@ export function AppLayout() {
                 className="relative p-2 rounded-full hover:bg-bg-secondary text-text-secondary hover:text-text transition-colors border border-transparent hover:border-border"
               >
                 <Bell size={20} />
-                {notifications.some(n => !n.read) && (
-                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-danger animate-pulse"></span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-danger text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+                    {unreadCount}
+                  </span>
                 )}
               </button>
               
@@ -236,7 +211,9 @@ export function AppLayout() {
                   <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)}></div>
                   <div className="absolute right-0 mt-2 w-80 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-bg-secondary">
-                      <span className="font-bold text-xs text-text">Notifications</span>
+                      <span className="font-bold text-xs text-text flex items-center gap-1.5">
+                        <Bell size={14} className="text-primary" /> Notifications ({unreadCount} unread)
+                      </span>
                       <button
                         onClick={markAllNotificationsRead}
                         className="text-[10px] font-bold text-primary hover:underline"
@@ -246,15 +223,21 @@ export function AppLayout() {
                     </div>
                     <div className="max-h-72 overflow-y-auto divide-y divide-border">
                       {notifications.length === 0 ? (
-                        <div className="p-6 text-center text-xs text-text-secondary">No new alerts.</div>
+                        <div className="p-6 text-center text-xs text-text-secondary font-medium">No alerts registered.</div>
                       ) : (
-                        notifications.map(n => (
-                          <div key={n.id} className={`p-4 transition-colors hover:bg-bg-secondary ${n.read ? "opacity-75" : "bg-primary/5"}`}>
+                        notifications.map((n) => (
+                          <div 
+                            key={n._id || n.id} 
+                            onClick={() => handleNotificationClick(n)}
+                            className={`p-3.5 transition-colors hover:bg-bg-secondary cursor-pointer ${n.read ? "opacity-70" : "bg-primary/5"}`}
+                          >
                             <div className="flex items-center justify-between mb-1">
                               <strong className="text-xs font-bold text-text leading-tight">{n.title}</strong>
-                              <span className="text-[9px] text-text-secondary">{n.date}</span>
+                              <span className="text-[9px] text-text-secondary font-mono">
+                                {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Now"}
+                              </span>
                             </div>
-                            <p className="text-[11px] text-text-secondary m-0 leading-normal">{n.message}</p>
+                            <p className="text-[11px] text-text-secondary m-0 leading-normal font-medium">{n.message}</p>
                           </div>
                         ))
                       )}

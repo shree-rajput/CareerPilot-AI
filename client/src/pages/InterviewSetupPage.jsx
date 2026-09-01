@@ -8,23 +8,43 @@ import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
 
+import { useAuth } from "../context/useAuth";
+
 export function InterviewSetupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [fetchingSessions, setFetchingSessions] = useState(true);
 
   const initialSkill = searchParams.get("skill");
 
+  const primaryRole = (user?.targetRoles || []).find(r => r.isPrimary) || user?.targetRoles?.[0];
+  const defaultTechs = initialSkill 
+    ? [initialSkill] 
+    : (primaryRole?.techStack?.length > 0 ? primaryRole.techStack : (user?.technicalSkills || []).slice(0, 4));
+
   const [form, setForm] = useState({
-    targetRole: "",
-    technologyStack: initialSkill ? [initialSkill] : [],
-    interviewType: "technical",
-    difficulty: "medium",
+    targetRole: primaryRole?.title || "",
+    technologyStack: defaultTechs,
+    interviewType: user?.interviewPreferences?.defaultInterviewType || "mixed",
+    difficulty: user?.interviewPreferences?.defaultDifficulty || "medium",
     jobDescription: "",
     numberOfQuestions: 5
   });
+
+  useEffect(() => {
+    if (user && !form.targetRole) {
+      setForm(prev => ({
+        ...prev,
+        targetRole: primaryRole?.title || prev.targetRole,
+        technologyStack: prev.technologyStack.length > 0 ? prev.technologyStack : defaultTechs,
+        interviewType: user?.interviewPreferences?.defaultInterviewType || prev.interviewType,
+        difficulty: user?.interviewPreferences?.defaultDifficulty || prev.difficulty
+      }));
+    }
+  }, [user]);
 
   const [techInput, setTechInput] = useState("");
 

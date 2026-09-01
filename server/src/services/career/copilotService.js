@@ -1,33 +1,19 @@
 import { executeAiTask } from "../ai/orchestrator.js";
+import { CopilotConversation } from "../../models/CopilotConversation.js";
+import { User } from "../../models/User.js";
 import { UserSkill } from "../../models/UserSkill.js";
 import { Application } from "../../models/Application.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
-import { User } from "../../models/User.js";
-import { CopilotConversation } from "../../models/CopilotConversation.js";
+import { getCandidateIntelligenceContext } from "./candidateIntelligenceService.js";
+import {
+  classifyIntent,
+  mapIntentToMode,
+  buildFilteredContext,
+  filterRelevantHistory,
+  validateResponseRelevance
+} from "./copilotIntentEngine.js";
+import { aiLogger } from "../ai/observability.js";
 import crypto from "crypto";
-
-async function getContextData(userId) {
-  const user = await User.findById(userId).lean();
-  
-  const weakSkills = await UserSkill.find({ userId, proficiency: { $lt: 60 } })
-    .sort({ proficiency: 1 })
-    .limit(3)
-    .lean();
-
-  const activeApplications = await Application.find({
-    userId,
-    status: { $in: ["applied", "interviewing", "SHORTLISTED"] }
-  }).limit(3).lean();
-
-  const activePlan = await PreparationPlan.findOne({ userId, isActive: true }).lean();
-
-  return {
-    targetRole: user?.careerProfile?.targetRoles?.[0]?.title || "Software Engineer",
-    weakSkills: weakSkills.map(s => s.canonicalName),
-    activeApplications: activeApplications.map(a => `${a.company} (${a.role})`),
-    pendingActionItems: activePlan ? activePlan.actionItems.filter(i => i.status === "pending").map(i => i.title) : []
-  };
-}
 
 export async function getConversations(userId) {
   return await CopilotConversation.find({ userId })
@@ -86,9 +72,37 @@ export async function getSharedConversation(shareToken) {
 }
 
 /**
- * Handles sending a message to a specific conversation
+ * Truncates and budgets context object payload to prevent HTTP 413 / LLM token overload.
+ */
+function budgetContextData(contextData, maxChars = 3000) {
+  let str = typeof contextData === "string" ? contextData : JSON.stringify(contextData);
+  if (str.length <= maxChars) return str;
+
+  const clone = JSON.parse(JSON.stringify(contextData));
+
+  // Trim sub-arrays
+  if (clone.resumeIntelligence?.projects) {
+    clone.resumeIntelligence.projects = clone.resumeIntelligence.projects.slice(0, 2);
+  }
+  if (Array.isArray(clone.applications)) {
+    clone.applications = clone.applications.slice(0, 2);
+  }
+  if (clone.interviewIntelligence?.weaknesses) {
+    clone.interviewIntelligence.weaknesses = clone.interviewIntelligence.weaknesses.slice(0, 2);
+  }
+
+  str = JSON.stringify(clone);
+  if (str.length <= maxChars) return str;
+
+  return str.substring(0, maxChars);
+}
+
+/**
+ * Handles sending a message to a specific conversation with Intent Detection,
+ * Context Relevance Filtering, and Post-Generation Relevance Validation.
  */
 export async function sendMessage(userId, conversationId, query) {
+  const startTime = Date.now();
   const conv = await CopilotConversation.findOne({ _id: conversationId, userId });
   if (!conv) throw new Error("Conversation not found");
 
@@ -100,40 +114,105 @@ export async function sendMessage(userId, conversationId, query) {
   // 1. Add User Message
   conv.messages.push({ role: "user", content: query });
   
-  // 2. Gather Context
-  const contextData = await getContextData(userId);
-  
-  // Prepare history for AI (skip system messages to save tokens, only pass user/assistant)
-  // Take last 10 messages for context window size constraints
-  const history = conv.messages.slice(-11, -1).map(m => ({
-    role: m.role,
-    content: m.content
+  // 2. Classify Intent & Map Mode
+  const intent = classifyIntent(query, conv.messages);
+  const mode = mapIntentToMode(intent);
+
+  // 3. Retrieve & Filter Context strictly based on intent
+  const rawContext = await getCandidateIntelligenceContext(userId, intent);
+  const filteredContext = buildFilteredContext(rawContext, intent);
+
+  // Filter conversation history to prevent topic contamination
+  const history = filterRelevantHistory(conv.messages.slice(0, -1), intent);
+
+  // Clean null/empty keys
+  const cleanContext = JSON.parse(JSON.stringify(filteredContext, (key, value) => {
+    if (value === null || value === undefined || value === "") return undefined;
+    if (Array.isArray(value) && value.length === 0) return undefined;
+    return value;
   }));
+
+  const budgetedContextStr = budgetContextData(cleanContext, 1500);
 
   let aiResponseContent = "";
   let suggestedActions = [];
+  let wasCorrected = false;
 
   try {
-    const response = await executeAiTask("COPILOT_CHAT", {
+    // 4. Primary AI Call
+    let response = await executeAiTask("COPILOT_CHAT", {
       query,
       history,
-      contextData: JSON.stringify(contextData)
+      contextData: budgetedContextStr
     });
-    
+
+    // 5. Response Relevance Check
+    let validation = validateResponseRelevance(response, query, intent, filteredContext);
+
+    if (!validation.isValid) {
+      console.warn(`[CopilotService] Response failed relevance validation (${validation.reason}). Retrying with targeted correction...`);
+      wasCorrected = true;
+
+      // Targeted correction retry
+      const correctionQuery = `${query}\n\n[INSTRUCTION: The previous answer failed validation because: ${validation.reason}. Answer the user's question directly without inventing non-existent records or forcing unrelated profile/resume details.]`;
+
+      response = await executeAiTask("COPILOT_CHAT", {
+        query: correctionQuery,
+        history,
+        contextData: budgetedContextStr
+      });
+
+      validation = validateResponseRelevance(response, query, intent, filteredContext);
+    }
+
     aiResponseContent = response.reply;
     suggestedActions = response.suggestedActions || [];
+
   } catch (error) {
-    console.error("[CopilotService] AI Copilot failed:", error);
-    aiResponseContent = "I am having trouble connecting to my intelligence engine right now. Please try again in a moment.";
+    console.warn("[CopilotService] Primary AI Copilot request failed. Retrying with minimal fallback context...", error?.message || error);
+    
+    try {
+      const minimalContext = {
+        candidateProfile: {
+          name: rawContext?.careerProfile?.name || "Candidate",
+          targetRoles: rawContext?.careerProfile?.targetRoles || []
+        }
+      };
+
+      const fallbackResponse = await executeAiTask("COPILOT_CHAT", {
+        query,
+        history: [], // Drop history to eliminate token bloat
+        contextData: JSON.stringify(minimalContext)
+      });
+      
+      aiResponseContent = fallbackResponse.reply;
+      suggestedActions = fallbackResponse.suggestedActions || [];
+    } catch (fallbackErr) {
+      console.error("[CopilotService] AI Copilot fallback also failed:", fallbackErr);
+      throw new Error("CareerCopilot is temporarily unavailable. Please try again later.");
+    }
   }
 
-  // 3. Save AI Message
+  // 6. Save AI Message
   conv.messages.push({ role: "assistant", content: aiResponseContent });
   await conv.save();
+
+  // 7. Observability Logging
+  aiLogger.logOperation({
+    task: "COPILOT_CHAT",
+    modelRole: mode,
+    latencyMs: Date.now() - startTime,
+    success: true,
+    retryCount: wasCorrected ? 1 : 0,
+    validationResult: wasCorrected ? "corrected" : "passed"
+  });
 
   return {
     reply: aiResponseContent,
     suggestedActions,
+    intent,
+    mode,
     conversation: conv.toObject()
   };
 }
+

@@ -12,10 +12,16 @@ export const updateProfile = asyncHandler(async (req, res) => {
     "targetRoles",
     "targetCompanies",
     "preferredLocations",
+    "remotePreference",
+    "salaryExpectation",
+    "placementDeadline",
     "experienceLevel",
     "technicalSkills",
     "primaryTechStack",
-    "interviewPreferences"
+    "interviewPreferences",
+    "aiPreferences",
+    "preparationPreferences",
+    "notificationPreferences"
   ];
 
   for (const key of allowedUpdates) {

@@ -64,10 +64,38 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
       <section className="bg-surface p-4 rounded-xl border border-border">
         <h2 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Contact Info</h2>
         <div className="grid grid-cols-2 gap-4">
-          <Input label="Name" value={data.basics?.name || ""} onChange={(e) => handleChange("basics", "name", e.target.value)} />
-          <Input label="Email" value={data.basics?.email || ""} onChange={(e) => handleChange("basics", "email", e.target.value)} />
-          <Input label="Phone" value={data.basics?.phone || ""} onChange={(e) => handleChange("basics", "phone", e.target.value)} />
-          <Input label="Location" value={data.basics?.location || ""} onChange={(e) => handleChange("basics", "location", e.target.value)} />
+          <Input 
+            label="Name" 
+            value={data.name || data.basics?.name || ""} 
+            onChange={(e) => {
+              const val = e.target.value;
+              onChange({ ...data, name: val, basics: { ...data.basics, name: val } });
+            }} 
+          />
+          <Input 
+            label="Email" 
+            value={data.email || data.basics?.email || ""} 
+            onChange={(e) => {
+              const val = e.target.value;
+              onChange({ ...data, email: val, basics: { ...data.basics, email: val } });
+            }} 
+          />
+          <Input 
+            label="Phone" 
+            value={data.phone || data.basics?.phone || ""} 
+            onChange={(e) => {
+              const val = e.target.value;
+              onChange({ ...data, phone: val, basics: { ...data.basics, phone: val } });
+            }} 
+          />
+          <Input 
+            label="Location" 
+            value={data.location || data.basics?.location || ""} 
+            onChange={(e) => {
+              const val = e.target.value;
+              onChange({ ...data, location: val, basics: { ...data.basics, location: val } });
+            }} 
+          />
         </div>
       </section>
 
@@ -86,8 +114,8 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
       <section className="bg-surface p-4 rounded-xl border border-border">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-sm font-bold text-text uppercase tracking-wider">Experience</h2>
-          <button onClick={addExperience} className="text-xs text-primary hover:text-primary-hover flex items-center gap-1 font-bold">
-            <Plus size={14}/> Add Role
+          <button onClick={addExperience} className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center gap-1 cursor-pointer">
+            <Plus size={13}/> Add Role
           </button>
         </div>
         <div className="space-y-6">
@@ -120,8 +148,8 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
       <section className="bg-surface p-4 rounded-xl border border-border">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-sm font-bold text-text uppercase tracking-wider">Education</h2>
-          <button onClick={addEducation} className="text-xs text-primary hover:text-primary-hover flex items-center gap-1 font-bold">
-            <Plus size={14}/> Add Education
+          <button onClick={addEducation} className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center gap-1 cursor-pointer">
+            <Plus size={13}/> Add Education
           </button>
         </div>
         <div className="space-y-6">
@@ -147,8 +175,8 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
       <section className="bg-surface p-4 rounded-xl border border-border">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-sm font-bold text-text uppercase tracking-wider">Projects</h2>
-          <button onClick={addProject} className="text-xs text-primary hover:text-primary-hover flex items-center gap-1 font-bold">
-            <Plus size={14}/> Add Project
+          <button onClick={addProject} className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center gap-1 cursor-pointer">
+            <Plus size={13}/> Add Project
           </button>
         </div>
         <div className="space-y-6">
@@ -162,7 +190,14 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
                 <Input label="Link / URL" value={proj.link || ""} onChange={(e) => handleChange("projects", "link", e.target.value, idx)} />
               </div>
               <div className="mb-3">
-                <Input label="Technologies (comma separated)" value={proj.technologies || ""} onChange={(e) => handleChange("projects", "technologies", e.target.value, idx)} />
+                <Input 
+                  label="Technologies (comma separated)" 
+                  value={Array.isArray(proj.technologies) ? proj.technologies.join(", ") : proj.technologies || ""} 
+                  onChange={(e) => {
+                    const techArr = e.target.value.split(",").map(t => t.trim()).filter(Boolean);
+                    handleChange("projects", "technologies", techArr, idx);
+                  }} 
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-text-secondary mb-1">Description</label>
@@ -183,7 +218,7 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
         <h2 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Skills (Comma separated)</h2>
         <textarea 
           className="w-full bg-bg-secondary border border-border rounded-lg p-3 text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary outline-none min-h-[80px]"
-          value={(data.skills || []).join(", ")}
+          value={(data.skills || []).map(s => typeof s === 'string' ? s : (s.canonicalName || s.name || '')).filter(Boolean).join(", ")}
           onChange={(e) => {
             const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
             handleArrayChange("skills", arr);

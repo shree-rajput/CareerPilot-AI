@@ -94,12 +94,9 @@ export const sendMessage = async (req, res, next) => {
       category: "CONTROLLER_FAILURE"
     });
     
-    res.status(200).json({
-      status: "success",
-      data: {
-        reply: "CareerPilot Copilot is temporarily unavailable. Please try again later.",
-        suggestedActions: []
-      }
+    res.status(error.statusCode || 500).json({
+      status: "error",
+      message: error.message || "CareerPilot Copilot is temporarily unavailable. Please try again later."
     });
   }
 };

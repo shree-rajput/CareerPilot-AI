@@ -3,6 +3,7 @@ import { User } from "../../models/User.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import { generatePreSessionBrief, generatePostSessionSummary } from "./mentorInsightService.js";
 import { updateUserReadinessScore } from "./readinessService.js";
+import { createNotification } from "../notification/notificationService.js";
 
 /**
  * Requests/books a mentorship session.
@@ -14,7 +15,7 @@ export async function requestSession({ studentId, mentorId, topic, description, 
     User.findById(mentorId)
   ]);
 
-  if (!student || !mentor || mentor.mentorStatus !== "approved") {
+  if (!student || !mentor || (mentor.mentorStatus !== "approved" && mentor.mentorStatus !== "verified")) {
     throw new Error("Invalid student or mentor selected");
   }
 
@@ -34,6 +35,18 @@ export async function requestSession({ studentId, mentorId, topic, description, 
 
   await session.save();
   await updateUserReadinessScore(studentId, "Requested mentor session");
+
+  // Send real notification + email to mentor
+  await createNotification({
+    userId: mentorId,
+    type: "MENTOR_REQUEST",
+    title: "New Student Mentorship Request",
+    message: `${student.name} requested a ${duration}-min session on "${topic}".`,
+    entityType: "mentor_session",
+    entityId: session._id.toString(),
+    actionUrl: "/mentor/dashboard"
+  });
+
   return session;
 }
 
@@ -52,6 +65,23 @@ export async function respondToSession(sessionId, { status, scheduledAt, meeting
 
   await session.save();
   await updateUserReadinessScore(session.studentId, `Mentor session response: ${status}`);
+
+  // Trigger notification to student
+  const mentor = await User.findById(session.mentorId).select("name").lean();
+  const isAccepted = status === "scheduled" || status === "confirmed";
+  
+  await createNotification({
+    userId: session.studentId,
+    type: isAccepted ? "MENTOR_ACCEPTED" : "MENTOR_REJECTED",
+    title: isAccepted ? "Mentorship Session Confirmed! 🎉" : "Mentorship Request Update",
+    message: isAccepted
+      ? `Mentor ${mentor?.name || ""} accepted your session on "${session.topic}".`
+      : `Mentor ${mentor?.name || ""} was unable to accept your request.`,
+    entityType: "mentor_session",
+    entityId: session._id.toString(),
+    actionUrl: "/mentorship"
+  });
+
   return session;
 }
 

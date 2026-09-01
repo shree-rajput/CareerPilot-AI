@@ -26,6 +26,9 @@ import preparationRoutes from "./routes/preparationRoutes.js";
 import copilotRoutes from "./routes/copilotRoutes.js";
 import mentorRouter from "./routes/mentorRoutes.js";
 import codingRouter from "./routes/codingRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import messageRoutes from "./routes/messageRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -61,6 +64,9 @@ export function createApp() {
   app.use("/api/resume", resumeRouter);
   app.use("/api/resumes", resumeRouter); // Plural alias to resolve client-side 404 bugs
   app.use("/api/mentors", mentorRouter); // Mentor ecosystem routes
+  app.use("/api/notifications", notificationRoutes);
+  app.use("/api/messages", messageRoutes);
+  app.use("/api/admin", adminRoutes);
   app.use("/api/applications", applicationRouter);
   app.use("/api/match", matchRouter);
   app.use("/api/tailor", tailoringRouter);

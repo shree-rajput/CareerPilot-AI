@@ -74,6 +74,22 @@ const interviewQuestionSchema = new mongoose.Schema(
       missingConcepts: { type: [String], default: [] }
     },
     
+    // Canonical numerical analysis object matching frontend contracts
+    analysis: {
+      technicalAccuracy: { type: Number, default: 70 },
+      communication: { type: Number, default: 75 },
+      clarity: { type: Number, default: 75 },
+      depth: { type: Number, default: 70 },
+      overall: { type: Number, default: 70 }
+    },
+
+    // Canonical feedback object for UI consumption
+    feedback: {
+      strengths: { type: [String], default: [] },
+      weaknesses: { type: [String], default: [] },
+      missingConcepts: { type: [String], default: [] }
+    },
+    
     confidence: {
       type: String,
       enum: ["HIGH", "MEDIUM", "LOW"],

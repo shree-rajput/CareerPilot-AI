@@ -9,6 +9,7 @@ import ResumePreview from "../components/resume/ResumePreview";
 import ResumeIntelligence from "../components/resume/ResumeIntelligence";
 import { KeywordIntelligence } from "../components/resume/KeywordIntelligence";
 import { ProfileConfirmationModal } from "../components/resume/ProfileConfirmationModal";
+import { OriginalResumeViewer } from "../components/resume/OriginalResumeViewer";
 import api from "../api/axios";
 function debounce(func, wait) {
   let timeout;
@@ -43,6 +44,7 @@ export function ResumeStudioPage() {
   const [diffError, setDiffError] = useState("");
 
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showOriginalModal, setShowOriginalModal] = useState(false);
 
   useEffect(() => {
     loadResume();
@@ -164,17 +166,25 @@ export function ResumeStudioPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {resume.cloudinaryUrl && (
-              <Button variant="outline" size="xs" onClick={() => window.open(resume.cloudinaryUrl, "_blank")} className="flex items-center gap-1">
-                <ExternalLink size={14} /> View Original
-              </Button>
-            )}
-            <Button variant="outline" size="xs" onClick={() => setShowProfileModal(true)}>
+            <button 
+              onClick={() => setShowProfileModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-bg-secondary text-xs font-semibold shadow-xs transition-all cursor-pointer"
+            >
               Sync Profile
-            </Button>
-            <Button variant="primary" size="xs" onClick={handleSaveVersion} disabled={saving} className="flex items-center gap-1">
-              <Save size={14} /> Commit Version
-            </Button>
+            </button>
+            <button 
+              onClick={() => setShowOriginalModal(true)} 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold shadow-xs transition-all cursor-pointer"
+            >
+              <ExternalLink size={13} /> View Original
+            </button>
+            <button 
+              onClick={handleSaveVersion} 
+              disabled={saving} 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Save size={13} /> Commit Version
+            </button>
           </div>
         </div>
         
@@ -185,39 +195,47 @@ export function ResumeStudioPage() {
 
       {/* RIGHT PANEL: INTERACTIVE SWITCHBOARD */}
       <div className="w-1/2 flex flex-col bg-bg">
-        <div className="p-2 border-b border-border flex gap-2 bg-surface">
-          <Button 
-            variant={rightPanel === "preview" ? "primary" : "outline"} 
-            size="xs" 
-            className="flex-1 flex items-center justify-center gap-1"
+        <div className="p-2 border-b border-border flex gap-1.5 bg-surface/80 backdrop-blur shadow-xs">
+          <button 
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              rightPanel === "preview" 
+                ? "bg-primary text-white shadow-sm" 
+                : "text-text-secondary hover:text-text hover:bg-bg-secondary"
+            }`}
             onClick={() => setRightPanel("preview")}
           >
             <Layout size={14} /> Preview
-          </Button>
-          <Button 
-            variant={rightPanel === "intelligence" ? "primary" : "outline"} 
-            size="xs" 
-            className="flex-1 flex items-center justify-center gap-1"
+          </button>
+          <button 
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              rightPanel === "intelligence" 
+                ? "bg-primary text-white shadow-sm" 
+                : "text-text-secondary hover:text-text hover:bg-bg-secondary"
+            }`}
             onClick={() => setRightPanel("intelligence")}
           >
             <Sparkles size={14} /> Intelligence
-          </Button>
-          <Button 
-            variant={rightPanel === "ats" ? "primary" : "outline"} 
-            size="xs" 
-            className="flex-1 flex items-center justify-center gap-1"
+          </button>
+          <button 
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              rightPanel === "ats" 
+                ? "bg-primary text-white shadow-sm" 
+                : "text-text-secondary hover:text-text hover:bg-bg-secondary"
+            }`}
             onClick={() => setRightPanel("ats")}
           >
             <BarChart2 size={14} /> ATS & Keywords
-          </Button>
-          <Button 
-            variant={rightPanel === "diff" ? "primary" : "outline"} 
-            size="xs" 
-            className="flex-1 flex items-center justify-center gap-1"
+          </button>
+          <button 
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              rightPanel === "diff" 
+                ? "bg-primary text-white shadow-sm" 
+                : "text-text-secondary hover:text-text hover:bg-bg-secondary"
+            }`}
             onClick={() => setRightPanel("diff")}
           >
             <GitCompare size={14} /> Version Diff
-          </Button>
+          </button>
         </div>
         
         {/* Workspace Display Area */}
@@ -345,6 +363,14 @@ export function ResumeStudioPage() {
             alert("Profile synced successfully!");
             setShowProfileModal(false);
           }}
+        />
+      )}
+
+      {showOriginalModal && (
+        <OriginalResumeViewer
+          isOpen={showOriginalModal}
+          onClose={() => setShowOriginalModal(false)}
+          resume={resume}
         />
       )}
     </div>

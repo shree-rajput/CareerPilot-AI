@@ -24,7 +24,16 @@ export async function callWithRetry({
   try {
     let initialMessages = [];
     if (Array.isArray(userPrompt)) {
-      initialMessages = [{ role: "system", content: systemPrompt }, ...userPrompt];
+      if (userPrompt.length > 0 && userPrompt[0].role === "system") {
+        // Merge system prompts because many models (e.g. Llama 3) strictly reject multiple system messages
+        const mergedSystem = `${systemPrompt}\n\n${userPrompt[0].content}`;
+        initialMessages = [
+          { role: "system", content: mergedSystem },
+          ...userPrompt.slice(1)
+        ];
+      } else {
+        initialMessages = [{ role: "system", content: systemPrompt }, ...userPrompt];
+      }
     } else {
       initialMessages = [
         { role: "system", content: systemPrompt },
@@ -52,9 +61,19 @@ export async function callWithRetry({
     try {
       let correctionMessages = [];
       if (Array.isArray(userPrompt)) {
+        let baseMessages = [...userPrompt];
+        if (baseMessages.length > 0 && baseMessages[0].role === "system") {
+          const mergedSystem = `${systemPrompt}\n\n${baseMessages[0].content}`;
+          baseMessages = [
+            { role: "system", content: mergedSystem },
+            ...baseMessages.slice(1)
+          ];
+        } else {
+          baseMessages = [{ role: "system", content: systemPrompt }, ...baseMessages];
+        }
+
         correctionMessages = [
-          { role: "system", content: systemPrompt },
-          ...userPrompt,
+          ...baseMessages,
           { role: "assistant", content: rawOutput },
           {
             role: "user",

@@ -23,8 +23,10 @@ import { env } from "../config/env.js";
 import { groqTranscribe } from "../services/ai/groqProvider.js";
 import fs from "fs";
 import crypto from "crypto";
-import { isNovelQuestion, fingerprintQuestion } from "../services/interview/questionNoveltyService.js";
+import { isNovelQuestion, fingerprintQuestion, getNextDiverseCategory } from "../services/interview/questionNoveltyService.js";
+import { validateGeneratedQuestion } from "../services/interview/questionValidationService.js";
 import { executeCode } from "../services/codeExecution/executionService.js";
+import { calculateSessionScores, normalizeQuestionEvaluation, safeScore } from "../services/interview/reportScoringService.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // INTERVIEW STATE MACHINE
@@ -130,6 +132,16 @@ export async function createSession(req, res, next) {
   try {
     const { targetRole, technologyStack, interviewType, difficulty, applicationId, jobDescription, numberOfQuestions, mode, resumeText } = req.body;
 
+    const userPrefs = req.user?.interviewPreferences || {};
+    const primaryRole = (req.user?.targetRoles || []).find(r => r.isPrimary) || req.user?.targetRoles?.[0];
+
+    const finalTargetRole = targetRole || primaryRole?.title || "Software Engineer";
+    const finalTechStack = (technologyStack && Array.isArray(technologyStack) && technologyStack.length > 0)
+      ? technologyStack
+      : (primaryRole?.techStack || req.user?.technicalSkills || []);
+    const finalInterviewType = interviewType || userPrefs.defaultInterviewType || "mixed";
+    const finalDifficulty = difficulty || userPrefs.defaultDifficulty || "medium";
+
     let extractedResumeText = resumeText || "";
     let resumeData = null;
     if (!extractedResumeText && applicationId) {
@@ -152,7 +164,7 @@ export async function createSession(req, res, next) {
     let candidateContext = { summary: "", relevantSkills: [], potentialGaps: [] };
     if (extractedResumeText || jobDescription) {
       try {
-        candidateContext = await extractCandidateContext({ resumeText: extractedResumeText, jobDescription, targetRole });
+        candidateContext = await extractCandidateContext({ resumeText: extractedResumeText, jobDescription, targetRole: finalTargetRole });
       } catch (err) {
         console.error("Failed to extract candidate context", err);
       }
@@ -167,16 +179,16 @@ export async function createSession(req, res, next) {
       education: {}
     };
 
-    const clampedQuestions = Math.min(Math.max(numberOfQuestions || 10, 10), 15);
+    const clampedQuestions = Math.min(Math.max(numberOfQuestions || 10, 5), 15);
 
     let interviewPlan = [];
     try {
       const planRes = await generateInterviewPlan({
-        targetRole,
-        technologyStack,
-        interviewType,
-        difficulty,
-        durationMinutes: 30
+        targetRole: finalTargetRole,
+        technologyStack: finalTechStack,
+        interviewType: finalInterviewType,
+        difficulty: finalDifficulty,
+        durationMinutes: userPrefs.durationMinutes || 30
       });
       interviewPlan = planRes.plan || [];
     } catch (err) {
@@ -186,10 +198,10 @@ export async function createSession(req, res, next) {
     const session = new InterviewSession({
       userId: req.user._id,
       applicationId: applicationId || null,
-      targetRole,
-      technologyStack,
-      interviewType,
-      difficulty,
+      targetRole: finalTargetRole,
+      technologyStack: finalTechStack,
+      interviewType: finalInterviewType,
+      difficulty: finalDifficulty,
       jobDescription: jobDescription || "",
       numberOfQuestions: clampedQuestions,
       mode: mode || "realistic",
@@ -256,9 +268,13 @@ export async function getNextQuestion(req, res, next) {
       });
     }
 
-    // Check pending stubs (generation in-flight)
-    const pendingStub = previousQuestions.find(q => q.status === "pending");
-    const pendingChallenge = previousChallenges.find(c => c.validationStatus === "pending");
+    // Cleanup stale pending stubs (>30s old) from past interrupted generations
+    await InterviewQuestion.deleteMany({ interviewSessionId: sessionId, status: "pending", createdAt: { $lt: new Date(Date.now() - 30000) } });
+    await InterviewChallenge.deleteMany({ interviewSessionId: sessionId, validationStatus: "pending", createdAt: { $lt: new Date(Date.now() - 30000) } });
+
+    // Check pending stubs (generation in-flight < 30s)
+    const pendingStub = previousQuestions.find(q => q.status === "pending" && (Date.now() - new Date(q.createdAt).getTime() < 30000));
+    const pendingChallenge = previousChallenges.find(c => c.validationStatus === "pending" && (Date.now() - new Date(c.createdAt).getTime() < 30000));
     if (pendingStub || pendingChallenge) {
       return res.status(202).json({
         success: true,
@@ -445,19 +461,29 @@ export async function getNextQuestion(req, res, next) {
         }
 
         let novelty = { isNovel: true, maxSimilarity: 0 };
-        // Only run novelty check if we have a question text
+        let validation = { isValid: true, reason: "" };
+
         if (aiQuestion && aiQuestion.questionText) {
           console.log(`[Interview] AI generated: "${aiQuestion.questionText}"`);
           novelty = isNovelQuestion(aiQuestion.questionText, previousQuestionTexts);
+          validation = validateGeneratedQuestion({
+            questionText: aiQuestion.questionText,
+            candidateContext: session.candidateContext || {},
+            targetRole: session.targetRole,
+            technologyStack: session.technologyStack,
+            difficulty: session.difficulty,
+            interviewType: session.interviewType
+          });
         } else {
           console.log(`[Interview] AI generation failed or returned empty question:`, aiQuestion);
+          validation = { isValid: false, reason: "Empty or null question generated" };
         }
 
-        if (novelty.isNovel || !limitCheck.allowed) {
+        if ((novelty.isNovel && validation.isValid) || !limitCheck.allowed) {
           break;
         }
 
-        console.log(`[Interview] Question too similar (score: ${novelty.maxSimilarity}, similar to: "${novelty.similarTo}"). Retrying... attempt ${attempts}`);
+        console.log(`[Interview] Question rejected (novelty: ${novelty.isNovel}, valid: ${validation.isValid}, reason: "${validation.reason || novelty.reason}"). Retrying... attempt ${attempts}`);
       }
 
       // If we failed to get a novel question after max attempts, fallback to an unused question from a local bank
@@ -591,6 +617,11 @@ export async function submitAnswer(req, res, next) {
     question.analysisFallbackReason = evaluation.fallbackReason || "";
     question.status = "answered";
 
+    // Compute canonical numeric analysis & feedback matching frontend contracts
+    const normalized = normalizeQuestionEvaluation(question.toObject ? question.toObject() : question);
+    question.analysis = normalized.analysis;
+    question.feedback = normalized.feedback;
+
     await question.save();
 
     if (question.analysisSource === "ai") {
@@ -664,17 +695,32 @@ export async function runCode(req, res, next) {
     const { questionId } = req.params;
     const { language, code } = req.body;
 
-    const challenge = await InterviewChallenge.findById(questionId).populate("interviewSessionId");
-    if (!challenge || challenge.interviewSessionId.userId.toString() !== req.user._id.toString()) {
+    let challenge = await InterviewChallenge.findById(questionId).populate("interviewSessionId");
+    if (!challenge) {
+      challenge = await InterviewChallenge.findOne({ _id: questionId });
+    }
+
+    if (!challenge) {
       throw new AppError("Challenge not found", 404);
     }
+
+    const sessionUserId = challenge.interviewSessionId?.userId
+      ? challenge.interviewSessionId.userId.toString()
+      : challenge.interviewSessionId?.toString();
+
+    if (sessionUserId && sessionUserId !== req.user._id.toString()) {
+      throw new AppError("Unauthorized access to this challenge", 403);
+    }
+
+    const rawLang = String(language || challenge.language || "javascript").toLowerCase();
+    const cleanLanguage = rawLang === "js" ? "javascript" : rawLang === "py" ? "python" : rawLang;
 
     // Only run public test cases (hidden: false) during Run
     const publicTestCases = (challenge.testCases || []).filter(tc => !tc.hidden);
 
     const executionResult = await executeCode({
-      language,
-      code,
+      language: cleanLanguage,
+      code: code || "",
       testCases: publicTestCases.length > 0 ? publicTestCases : challenge.testCases || []
     });
 
@@ -688,6 +734,7 @@ export async function runCode(req, res, next) {
       }
     });
   } catch (error) {
+    console.error("[Interview] runCode error:", error);
     next(error);
   }
 }
@@ -701,19 +748,35 @@ export async function submitCodingAnswer(req, res, next) {
     const { questionId } = req.params;
     const { language, code } = req.body;
 
-    const challenge = await InterviewChallenge.findById(questionId).populate("interviewSessionId");
-    if (!challenge || challenge.interviewSessionId.userId.toString() !== req.user._id.toString()) {
+    let challenge = await InterviewChallenge.findById(questionId).populate("interviewSessionId");
+    if (!challenge) {
+      challenge = await InterviewChallenge.findOne({ _id: questionId });
+    }
+
+    if (!challenge) {
       throw new AppError("Challenge not found", 404);
     }
 
+    const sessionUserId = challenge.interviewSessionId?.userId
+      ? challenge.interviewSessionId.userId.toString()
+      : challenge.interviewSessionId?.toString();
+
+    if (sessionUserId && sessionUserId !== req.user._id.toString()) {
+      throw new AppError("Unauthorized access to this challenge", 403);
+    }
+
+    const rawLang = String(language || challenge.language || "javascript").toLowerCase();
+    const cleanLanguage = rawLang === "js" ? "javascript" : rawLang === "py" ? "python" : rawLang;
+
     // Execute against ALL test cases (including hidden)
     const executionResult = await executeCode({
-      language,
-      code,
+      language: cleanLanguage,
+      code: code || "",
       testCases: challenge.testCases || []
     });
 
     const totalTests = challenge.testCases?.length || 0;
+    const passedTests = executionResult?.passedTests || 0;
 
     // AI Code Review
     let aiReview = null;
@@ -722,16 +785,16 @@ export async function submitCodingAnswer(req, res, next) {
       const reviewResult = await evaluateCodingChallenge({
         questionTitle: challenge.question,
         questionDescription: challenge.description || challenge.question,
-        language,
-        code,
-        testResults: `Passed ${executionResult.passedTests} of ${totalTests} test cases.`
+        language: cleanLanguage,
+        code: code || "",
+        testResults: `Passed ${passedTests} of ${totalTests} test cases.`
       });
       aiReview = reviewResult;
       aiReviewSummary = [
-        reviewResult.timeComplexity ? `Time: ${reviewResult.timeComplexity}` : "",
-        reviewResult.spaceComplexity ? `Space: ${reviewResult.spaceComplexity}` : "",
-        reviewResult.strengths?.length ? `Strengths: ${reviewResult.strengths.join(", ")}` : "",
-        reviewResult.potentialIssues?.length ? `Issues: ${reviewResult.potentialIssues.join(", ")}` : ""
+        reviewResult?.timeComplexity ? `Time: ${reviewResult.timeComplexity}` : "",
+        reviewResult?.spaceComplexity ? `Space: ${reviewResult.spaceComplexity}` : "",
+        reviewResult?.strengths?.length ? `Strengths: ${reviewResult.strengths.join(", ")}` : "",
+        reviewResult?.potentialIssues?.length ? `Issues: ${reviewResult.potentialIssues.join(", ")}` : ""
       ].filter(Boolean).join(". ");
     } catch (aiError) {
       console.warn("[Interview] AI code review failed:", aiError.message);
@@ -742,52 +805,75 @@ export async function submitCodingAnswer(req, res, next) {
     try {
       codingFollowUp = await generateCodingFollowUp({
         questionTitle: challenge.question,
-        language,
-        code,
-        passedTests: executionResult.passedTests,
+        language: cleanLanguage,
+        code: code || "",
+        passedTests,
         totalTests,
         aiReviewSummary
       });
     } catch (cfErr) {
       console.warn("[Interview] Coding follow-up generation failed:", cfErr.message);
       codingFollowUp = {
-        comment: `Your solution passed ${executionResult.passedTests} of ${totalTests} test cases.`,
+        comment: `Your solution passed ${passedTests} of ${totalTests} test cases.`,
         followUpQuestion: "Can you walk me through your approach and any trade-offs you considered?"
       };
     }
 
-    // Mark challenge as answered and store results
+    // Mark challenge as answered and store results safely
     challenge.status = "answered";
     challenge.executionSummary = {
-      passedTests: executionResult.passedTests,
+      passedTests,
       totalTests
     };
     if (aiReview) {
       challenge.aiReview = {
-        metrics: aiReview.metrics || {},
-        timeComplexity: aiReview.timeComplexity || "",
-        spaceComplexity: aiReview.spaceComplexity || "",
-        strengths: aiReview.strengths || [],
-        potentialIssues: aiReview.potentialIssues || [],
-        optimizationOpportunities: aiReview.optimizationOpportunities || [],
-        followUpComment: codingFollowUp?.comment || ""
+        metrics: {
+          correctness: typeof aiReview.metrics?.correctness === 'number' ? aiReview.metrics.correctness : (passedTests === totalTests ? 100 : 50),
+          efficiency: typeof aiReview.metrics?.efficiency === 'number' ? aiReview.metrics.efficiency : 70,
+          codeQuality: typeof aiReview.metrics?.codeQuality === 'number' ? aiReview.metrics.codeQuality : 70,
+          edgeCases: typeof aiReview.metrics?.edgeCases === 'number' ? aiReview.metrics.edgeCases : 70
+        },
+        timeComplexity: String(aiReview.timeComplexity || ""),
+        spaceComplexity: String(aiReview.spaceComplexity || ""),
+        strengths: Array.isArray(aiReview.strengths) ? aiReview.strengths : [],
+        potentialIssues: Array.isArray(aiReview.potentialIssues) ? aiReview.potentialIssues : [],
+        optimizationOpportunities: Array.isArray(aiReview.optimizationOpportunities) ? aiReview.optimizationOpportunities : [],
+        followUpComment: String(codingFollowUp?.comment || "")
       };
     }
+
+    // Safely normalize difficulty enum value before saving to prevent Mongoose enum ValidationError
+    if (challenge.difficulty) {
+      const lowerDiff = String(challenge.difficulty).toLowerCase();
+      challenge.difficulty = ["easy", "medium", "hard"].includes(lowerDiff) ? lowerDiff : "medium";
+    }
+
     await challenge.save();
 
-    console.log(`[Interview State] Coding challenge ${challenge._id} ANSWERED | passed=${executionResult.passedTests}/${totalTests}`);
+    // Advance session interviewState to CODING_REVIEW
+    try {
+      const parentSessionId = challenge.interviewSessionId?._id || challenge.interviewSessionId;
+      if (parentSessionId) {
+        await InterviewSession.findByIdAndUpdate(parentSessionId, { interviewState: "CODING_REVIEW" });
+      }
+    } catch (sessErr) {
+      console.warn("[Interview] Failed to update session state to CODING_REVIEW:", sessErr.message);
+    }
+
+    console.log(`[Interview State] Coding challenge ${challenge._id} ANSWERED | passed=${passedTests}/${totalTests}`);
 
     res.status(200).json({
       success: true,
       data: {
-        passedTests: executionResult.passedTests,
+        passedTests,
         totalTests,
-        results: executionResult.results,
+        results: executionResult?.results || [],
         aiReview,
-        codingFollowUp  // ← Shown to candidate as interviewer comment before "Next Question"
+        codingFollowUp
       }
     });
   } catch (error) {
+    console.error("[Interview] submitCodingAnswer error:", error);
     next(error);
   }
 }
@@ -806,7 +892,9 @@ export async function completeSession(req, res, next) {
     session.completedAt = new Date();
 
     const questions = await InterviewQuestion.find({ sessionId, status: "answered" }).sort({ createdAt: 1 });
-    if (questions.length > 0) {
+    const challenges = await InterviewChallenge.find({ interviewSessionId: sessionId, status: "answered" }).sort({ createdAt: 1 });
+
+    if (questions.length > 0 || challenges.length > 0) {
       try {
         const report = await generateCoachingReport({ targetRole: session.targetRole, questions });
         session.finalReport = report;
@@ -814,6 +902,11 @@ export async function completeSession(req, res, next) {
         console.error("Failed to generate final report", err);
       }
     }
+
+    // Compute finite numeric session scores
+    const { overallScore, scores } = calculateSessionScores(session, questions, challenges);
+    session.overallScore = overallScore;
+    session.scores = scores;
 
     await session.save();
 
@@ -836,8 +929,18 @@ export async function getSessionReport(req, res, next) {
     const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user._id });
     if (!session) throw new AppError("Session not found", 404);
 
-    const questions = await InterviewQuestion.find({ sessionId }).sort({ createdAt: 1 });
-    const challenges = await InterviewChallenge.find({ interviewSessionId: sessionId }).sort({ createdAt: 1 });
+    const rawQuestions = await InterviewQuestion.find({ sessionId }).sort({ createdAt: 1 }).lean();
+    const challenges = await InterviewChallenge.find({ interviewSessionId: sessionId }).sort({ createdAt: 1 }).lean();
+
+    const questions = rawQuestions.map(normalizeQuestionEvaluation);
+
+    // Compute scores on the fly if missing or zero
+    if (!session.overallScore || session.overallScore === 0) {
+      const computed = calculateSessionScores(session, questions, challenges);
+      session.overallScore = computed.overallScore;
+      session.scores = computed.scores;
+      await InterviewSession.updateOne({ _id: session._id }, { overallScore: session.overallScore, scores: session.scores });
+    }
 
     res.status(200).json({
       success: true,

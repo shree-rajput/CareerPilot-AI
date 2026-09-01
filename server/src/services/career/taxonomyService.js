@@ -116,15 +116,145 @@ const TAXONOMY_DICTIONARY = [
     name: "Git",
     canonicalName: "Git",
     category: "tool",
-    aliases: ["git", "version control"],
+    aliases: ["git", "version control", "github", "gitlab"],
     technologyType: "tool"
   },
   {
     name: "GitHub Actions",
     canonicalName: "GitHub Actions",
     category: "devops",
-    aliases: ["github actions", "gh actions", "actions"],
+    aliases: ["github actions", "gh actions", "actions", "ci/cd"],
     technologyType: "devops"
+  },
+  {
+    name: "Vue.js",
+    canonicalName: "Vue.js",
+    category: "framework",
+    aliases: ["vue", "vuejs", "vue.js", "vue 3"],
+    technologyType: "frontend"
+  },
+  {
+    name: "Angular",
+    canonicalName: "Angular",
+    category: "framework",
+    aliases: ["angular", "angularjs", "angular.js", "angular 2+"],
+    technologyType: "frontend"
+  },
+  {
+    name: "Tailwind CSS",
+    canonicalName: "Tailwind CSS",
+    category: "framework",
+    aliases: ["tailwind", "tailwindcss", "tailwind css"],
+    technologyType: "frontend"
+  },
+  {
+    name: "Bootstrap",
+    canonicalName: "Bootstrap",
+    category: "framework",
+    aliases: ["bootstrap", "bootstrap 5"],
+    technologyType: "frontend"
+  },
+  {
+    name: "C++",
+    canonicalName: "C++",
+    category: "programming_language",
+    aliases: ["c++", "cpp", "c plus plus"],
+    technologyType: "backend/systems"
+  },
+  {
+    name: "C#",
+    canonicalName: "C#",
+    category: "programming_language",
+    aliases: ["c#", "csharp", "c sharp", ".net"],
+    technologyType: "backend"
+  },
+  {
+    name: "Go",
+    canonicalName: "Go",
+    category: "programming_language",
+    aliases: ["golang", "go"],
+    technologyType: "backend"
+  },
+  {
+    name: "Rust",
+    canonicalName: "Rust",
+    category: "programming_language",
+    aliases: ["rust", "rustlang"],
+    technologyType: "backend/systems"
+  },
+  {
+    name: "Ruby",
+    canonicalName: "Ruby",
+    category: "programming_language",
+    aliases: ["ruby", "ror", "ruby on rails"],
+    technologyType: "backend"
+  },
+  {
+    name: "PHP",
+    canonicalName: "PHP",
+    category: "programming_language",
+    aliases: ["php", "laravel"],
+    technologyType: "backend"
+  },
+  {
+    name: "Django",
+    canonicalName: "Django",
+    category: "framework",
+    aliases: ["django"],
+    technologyType: "backend",
+    parentSkill: "Python"
+  },
+  {
+    name: "Flask",
+    canonicalName: "Flask",
+    category: "framework",
+    aliases: ["flask"],
+    technologyType: "backend",
+    parentSkill: "Python"
+  },
+  {
+    name: "FastAPI",
+    canonicalName: "FastAPI",
+    category: "framework",
+    aliases: ["fastapi", "fast api"],
+    technologyType: "backend",
+    parentSkill: "Python"
+  },
+  {
+    name: "Spring Boot",
+    canonicalName: "Spring Boot",
+    category: "framework",
+    aliases: ["spring", "spring boot", "springboot"],
+    technologyType: "backend",
+    parentSkill: "Java"
+  },
+  {
+    name: "GraphQL",
+    canonicalName: "GraphQL",
+    category: "tool",
+    aliases: ["graphql", "gql"],
+    technologyType: "backend/frontend"
+  },
+  {
+    name: "REST API",
+    canonicalName: "REST API",
+    category: "tool",
+    aliases: ["rest", "restful", "rest api", "restful api"],
+    technologyType: "backend"
+  },
+  {
+    name: "Redis",
+    canonicalName: "Redis",
+    category: "database",
+    aliases: ["redis", "in-memory db"],
+    technologyType: "database"
+  },
+  {
+    name: "SQL",
+    canonicalName: "SQL",
+    category: "programming_language",
+    aliases: ["sql", "relational database"],
+    technologyType: "database"
   }
 ];
 

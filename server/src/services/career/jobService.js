@@ -1,5 +1,6 @@
 import { Job } from "../../models/Job.js";
 import { extractJobDescription } from "../ai/aiService.js";
+import { normalizeSkill } from "./taxonomyService.js";
 
 /**
  * Creates a new Job from manual input or an extraction source.
@@ -42,13 +43,34 @@ export async function extractAndCreateJob({ title, company, description, locatio
     isInternship: isInternship || false,
     isNewGrad: isNewGrad || false,
     postedDate: postedDate || null,
-    requiredSkills: extractedData.requiredSkills || [],
-    preferredSkills: extractedData.preferredSkills || [],
-    softSkills: extractedData.softSkills || [],
+    requiredSkills: formatSkillList(extractedData?.requiredSkills),
+    preferredSkills: formatSkillList(extractedData?.preferredSkills),
+    softSkills: formatSkillList(extractedData?.softSkills),
     isActive: true
   });
 
   return await newJob.save();
+}
+
+export function formatSkillList(skills) {
+  if (!Array.isArray(skills)) return [];
+  return skills.map(s => {
+    let name = "";
+    let importance = "MEDIUM";
+    if (typeof s === "string") {
+      name = s.trim();
+    } else if (s && typeof s === "object") {
+      name = s.skillName || s.name || s.canonicalName || "";
+      importance = s.importance || "MEDIUM";
+    }
+    if (!name) return null;
+
+    const normalized = normalizeSkill(name);
+    return {
+      skillName: normalized ? normalized.canonicalName : name,
+      importance
+    };
+  }).filter(s => s && s.skillName);
 }
 
 /**

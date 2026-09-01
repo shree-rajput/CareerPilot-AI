@@ -246,41 +246,36 @@ export const generateCoverLetter = asyncHandler(async (req, res) => {
   const app = await Application.findOne({ _id: req.params.id, userId: req.user._id }).lean();
   if (!app) throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
 
-  // Get user's resume (latest active)
-  const resume = await Resume.findOne({ userId: req.user._id, isActive: true })
-    .sort({ createdAt: -1 })
-    .select("name rawText structuredData")
-    .lean();
+  // Get user's resume (latest active or linked)
+  let resume = null;
+  if (app.resumeVersionId) {
+    resume = await Resume.findOne({ _id: app.resumeVersionId, userId: req.user._id }).lean();
+  }
+  if (!resume) {
+    resume = await Resume.findOne({ userId: req.user._id, isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
+  }
 
-  const tone = req.body.tone || "professional"; // professional | enthusiastic | concise
+  const tone = req.body.tone || "professional";
   const highlight = req.body.highlight || "";
 
-  const systemPrompt = `You are an expert cover letter writer. Write a compelling, personalized cover letter for a job application.
-
-Rules:
-- Never invent credentials, degrees, companies, or achievements not in the resume.
-- Use specific details from the resume and JD.
-- Keep it under 350 words.
-- Tone: ${tone}.
-- Format: 3 paragraphs (hook + match + call-to-action). No subject line. No "Dear Hiring Manager" unless explicitly requested.
-- Return JSON: { coverLetter: string, wordCount: number }`;
-
-  const prompt = `Company: ${app.company}
-Role: ${app.role}
-Job Description Summary: ${app.jobDescription?.slice(0, 1500) || "N/A"}
-Resume Summary: ${resume?.rawText?.slice(0, 2000) || "N/A"}
-${highlight ? `Candidate wants to highlight: ${highlight}` : ""}`;
-
   try {
-    const result = await executeAiTask("COPILOT_CHAT", {
-      systemOverride: systemPrompt,
-      message: prompt,
-      history: []
+    const result = await executeAiTask("GENERATE_COVER_LETTER", {
+      company: app.company,
+      role: app.role,
+      tone,
+      highlight,
+      jobDescription: app.jobDescription || "",
+      resumeText: resume?.rawText || ""
     });
+
     return res.json({
       status: "success",
       data: {
-        coverLetter: result?.reply || result?.coverLetter || "",
+        coverLetter: result?.coverLetter || "",
+        wordCount: result?.wordCount || 0,
+        highlightsUsed: result?.highlightsUsed || [],
         company: app.company,
         role: app.role
       }
@@ -302,31 +297,34 @@ export const generateRecruiterMessage = asyncHandler(async (req, res) => {
   const app = await Application.findOne({ _id: req.params.id, userId: req.user._id }).lean();
   if (!app) throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
 
-  const messageType = req.body.type || "application"; // application | followup | thankyou
+  let resume = null;
+  if (app.resumeVersionId) {
+    resume = await Resume.findOne({ _id: app.resumeVersionId, userId: req.user._id }).lean();
+  }
+  if (!resume) {
+    resume = await Resume.findOne({ userId: req.user._id, isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
+  }
+
+  const messageType = req.body.type || "application";
   const recruiterName = req.body.recruiterName || "";
 
-  const typeInstructions = {
-    application: "Write a short, professional LinkedIn message or email introducing yourself and expressing interest in the role.",
-    followup: "Write a polite follow-up message 1-2 weeks after applying, referencing the application and reaffirming interest.",
-    thankyou: "Write a brief thank-you note after an interview, referencing specific topics discussed."
-  };
-
-  const systemPrompt = `You are a career coach helping candidates write effective recruiter messages.
-${typeInstructions[messageType] || typeInstructions.application}
-Keep it under 150 words. Be specific, not generic. Return JSON: { message: string }`;
-
-  const prompt = `Company: ${app.company}\nRole: ${app.role}${recruiterName ? `\nRecruiter Name: ${recruiterName}` : ""}\nApplication Status: ${app.status}`;
-
   try {
-    const result = await executeAiTask("COPILOT_CHAT", {
-      systemOverride: systemPrompt,
-      message: prompt,
-      history: []
+    const result = await executeAiTask("GENERATE_RECRUITER_MESSAGE", {
+      company: app.company,
+      role: app.role,
+      type: messageType,
+      recruiterName,
+      jobDescription: app.jobDescription || "",
+      resumeText: resume?.rawText || ""
     });
+
     return res.json({
       status: "success",
       data: {
-        message: result?.reply || result?.message || "",
+        message: result?.message || "",
+        subjectLine: result?.subjectLine || "",
         type: messageType
       }
     });
@@ -334,6 +332,7 @@ Keep it under 150 words. Be specific, not generic. Return JSON: { message: strin
     throw new AppError(`Message generation failed: ${err.message}`, 502, "MESSAGE_GENERATION_FAILED");
   }
 });
+
 
 /**
  * GET /api/applications/:id/readiness

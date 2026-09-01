@@ -202,12 +202,12 @@ export function ApplicationsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-bg-secondary border-b border-border text-xs uppercase tracking-wider text-text-secondary font-bold">
-                  <th className="px-6 py-4">Role</th>
-                  <th className="px-6 py-4">Company</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Applied Date</th>
-                  <th className="px-6 py-4 text-center">Match Score</th>
+                <tr className="bg-bg-secondary border-b border-border text-[11px] uppercase tracking-wider text-text-secondary font-bold">
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Company</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Applied Date</th>
+                  <th className="px-4 py-3 text-center">Match Score</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -233,25 +233,25 @@ export function ApplicationsPage() {
                         onClick={() => navigate(`/applications/${app._id}`)}
                         className="hover:bg-bg cursor-pointer transition-colors group"
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="font-bold text-text group-hover:text-primary transition-colors">{app.role}</span>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="font-bold text-xs text-text group-hover:text-primary transition-colors">{app.role}</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-text-secondary font-medium">
+                        <td className="px-4 py-3 whitespace-nowrap text-xs text-text-secondary font-medium">
                           {app.company}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="bg-info-bg text-primary border border-blue-200 px-2.5 py-1 rounded-full text-xs font-bold capitalize shadow-sm">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="badge-pill bg-info-bg text-primary border border-blue-200 capitalize">
                             {app.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary font-medium">
+                        <td className="px-4 py-3 whitespace-nowrap text-xs text-text-secondary font-medium">
                           {app.dateApplied ? new Date(app.dateApplied).toLocaleDateString() : "—"}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                        <td className="px-4 py-3 whitespace-nowrap text-center text-xs">
                           {score ? (
                             <span className={scoreColor}>{score}%</span>
                           ) : (
-                            <span className="text-text-secondary font-medium bg-bg-secondary px-2 py-1 rounded-md text-xs">N/A</span>
+                            <span className="text-text-secondary font-medium bg-bg-secondary px-2 py-0.5 rounded text-[11px]">N/A</span>
                           )}
                         </td>
                       </tr>
