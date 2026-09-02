@@ -14,9 +14,24 @@ import {
   BookOpen,
   ChevronRight,
   ShieldAlert,
-  Brain
+  Brain,
+  Bug,
+  Compass,
+  Cpu,
+  Layers
 } from "lucide-react";
 import { getAINudge, executeContextAction } from "../../api/techDiscussion";
+
+const ACTIONS = [
+  { id: "explain", label: "Explain Code / Spec", icon: BookOpen, color: "text-primary", desc: "Line-by-line explanation" },
+  { id: "complexity", label: "Analyze Complexity (Big-O)", icon: Code2, color: "text-purple-600", desc: "Time & Space complexity" },
+  { id: "challenge", label: "Challenge Approach", icon: ShieldAlert, color: "text-warning", desc: "Find edge cases & bottlenecks" },
+  { id: "suggest", label: "Suggest Optimization", icon: Lightbulb, color: "text-success", desc: "Cleaner implementation pattern" },
+  { id: "debug", label: "Debug & Find Bugs", icon: Bug, color: "text-danger", desc: "Identify race conditions & nulls" },
+  { id: "design", label: "Propose System Diagram", icon: Layers, color: "text-blue-600", desc: "Component architecture outline" },
+  { id: "optimize", label: "Performance Tuning", icon: Flame, color: "text-orange-500", desc: "Speed & memory optimizations" },
+  { id: "analyze", label: "Analyze Scalability Limits", icon: Cpu, color: "text-indigo-600", desc: "High-throughput throughput caps" },
+];
 
 export default function DiscussionAssistantPanel({
   roomId,
@@ -35,7 +50,7 @@ export default function DiscussionAssistantPanel({
       id: "welcome-1",
       senderId: "system",
       senderName: "AI Practice Companion",
-      text: `Welcome to Tech Discussion! Discuss the '${problem?.title || "Problem"}' problem, write code together, and click Context Actions or Progressive Hints for assistance.`,
+      text: `Welcome to Tech Discussion! Discuss '${problem?.title || "Topic"}', write code or draw system design stencils together, and click Context Actions for instant AI feedback.`,
       type: "system",
       timestamp: new Date().toISOString()
     }
@@ -117,10 +132,9 @@ export default function DiscussionAssistantPanel({
       if (res?.data) {
         setNudgeData(res.data);
 
-        // Optionally broadcast AI nudge to chat so both peers benefit!
         if (socket && res.data.nudgeText) {
           socket.emit("discussion:message", {
-            text: `[AI Hint Level ${level}] ${res.data.nudgeText}`,
+            text: `[AI Facilitator Level ${level}] ${res.data.nudgeText}`,
             type: "ai_nudge",
             actionType: `level_${level}`
           });
@@ -232,7 +246,7 @@ export default function DiscussionAssistantPanel({
             <form onSubmit={handleSendMessage} className="p-3 border-t border-border bg-bg-secondary flex gap-2 shrink-0">
               <input
                 type="text"
-                placeholder="Discuss problem strategy with your peer..."
+                placeholder="Discuss technical approach with your peer..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-xs text-text outline-none focus:border-primary"
@@ -248,15 +262,15 @@ export default function DiscussionAssistantPanel({
           </div>
         )}
 
-        {/* --- TAB 2: PROGRESSIVE NUDGE SYSTEM --- */}
+        {/* --- TAB 2: PROGRESSIVE HINTS --- */}
         {activeTab === "nudge" && (
           <div className="p-4 space-y-4">
             <div>
               <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                <Brain className="w-4 h-4 text-primary" /> Progressive Nudge Engine
+                <Brain className="w-4 h-4 text-primary" /> Progressive Facilitator Hints
               </h3>
               <p className="text-xs text-text-secondary mt-1">
-                Receive guided hints step-by-step without spoiling the solution immediately.
+                Receive guided hints step-by-step without spoiling full architecture or code immediately.
               </p>
             </div>
 
@@ -281,7 +295,7 @@ export default function DiscussionAssistantPanel({
                 }`}
               >
                 <span className="block text-[10px] uppercase font-bold tracking-widest text-text-secondary">Level 2</span>
-                Conceptual Hint
+                Conceptual Pattern
               </button>
 
               <button
@@ -292,7 +306,7 @@ export default function DiscussionAssistantPanel({
                 }`}
               >
                 <span className="block text-[10px] uppercase font-bold tracking-widest text-text-secondary">Level 3</span>
-                Strong Pattern Hint
+                Structural Outline
               </button>
 
               <button
@@ -303,7 +317,7 @@ export default function DiscussionAssistantPanel({
                 }`}
               >
                 <span className="block text-[10px] uppercase font-bold tracking-widest text-warning">Level 4</span>
-                Full Solution Code
+                Optimal Solution Pattern
               </button>
             </div>
 
@@ -340,15 +354,15 @@ export default function DiscussionAssistantPanel({
           </div>
         )}
 
-        {/* --- TAB 3: CONTEXT ACTIONS --- */}
+        {/* --- TAB 3: 9 CONTEXT ACTIONS --- */}
         {activeTab === "actions" && (
           <div className="p-4 space-y-4">
             <div>
               <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                <Zap className="w-4 h-4 text-success" /> Code & Discussion Context Actions
+                <Zap className="w-4 h-4 text-success" /> AI Facilitator Actions
               </h3>
               <p className="text-xs text-text-secondary mt-1">
-                Select a code snippet in the Monaco editor and click an action below for instant targeted feedback.
+                Select code or canvas elements and trigger actions for instant targeted feedback.
               </p>
             </div>
 
@@ -358,56 +372,41 @@ export default function DiscussionAssistantPanel({
               </div>
             ) : (
               <div className="p-2.5 bg-bg border border-dashed border-border rounded-xl text-[11px] text-text-secondary text-center">
-                Tip: Highlight code lines in editor to scope AI actions to that block.
+                Tip: Highlight code in editor to scope AI actions to that block.
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={() => handleTriggerAction("explain")}
-                disabled={actionLoading}
-                className="w-full p-2.5 bg-bg hover:bg-bg-secondary border border-border rounded-xl text-xs font-bold text-text text-left flex items-center justify-between transition-all"
-              >
-                <span className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5 text-primary" /> Explain Code</span>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </button>
-
-              <button
-                onClick={() => handleTriggerAction("complexity")}
-                disabled={actionLoading}
-                className="w-full p-2.5 bg-bg hover:bg-bg-secondary border border-border rounded-xl text-xs font-bold text-text text-left flex items-center justify-between transition-all"
-              >
-                <span className="flex items-center gap-2"><Code2 className="w-3.5 h-3.5 text-purple-600" /> Analyze Complexity (Big-O)</span>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </button>
-
-              <button
-                onClick={() => handleTriggerAction("challenge")}
-                disabled={actionLoading}
-                className="w-full p-2.5 bg-bg hover:bg-bg-secondary border border-border rounded-xl text-xs font-bold text-text text-left flex items-center justify-between transition-all"
-              >
-                <span className="flex items-center gap-2"><ShieldAlert className="w-3.5 h-3.5 text-warning" /> Challenge Approach / Edge Cases</span>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </button>
-
-              <button
-                onClick={() => handleTriggerAction("suggest")}
-                disabled={actionLoading}
-                className="w-full p-2.5 bg-bg hover:bg-bg-secondary border border-border rounded-xl text-xs font-bold text-text text-left flex items-center justify-between transition-all"
-              >
-                <span className="flex items-center gap-2"><Lightbulb className="w-3.5 h-3.5 text-success" /> Suggest Optimization Pattern</span>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </button>
+            {/* 8 Action Buttons Grid */}
+            <div className="grid grid-cols-1 gap-2">
+              {ACTIONS.map((act) => {
+                const IconComponent = act.icon;
+                return (
+                  <button
+                    key={act.id}
+                    onClick={() => handleTriggerAction(act.id)}
+                    disabled={actionLoading}
+                    className="w-full p-2.5 bg-bg hover:bg-bg-secondary border border-border rounded-xl text-xs font-bold text-text text-left flex items-center justify-between transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <IconComponent className={`w-3.5 h-3.5 ${act.color}`} />
+                      <div>
+                        <span>{act.label}</span>
+                        <span className="block text-[10px] text-text-secondary font-normal">{act.desc}</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" />
+                  </button>
+                );
+              })}
             </div>
 
             {/* Custom Question input */}
             <div className="pt-2">
-              <label className="block text-xs font-bold text-text mb-1">Ask Custom Technical Question</label>
+              <label className="block text-xs font-bold text-text mb-1">💬 Ask Technical Question</label>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. How does garbage collection affect map deletion?"
+                  placeholder="e.g. How to handle cache invalidation on write?"
                   value={userQuestionText}
                   onChange={(e) => setUserQuestionText(e.target.value)}
                   className="flex-1 bg-bg border border-border rounded-xl px-3 py-2 text-xs text-text outline-none"
@@ -425,7 +424,7 @@ export default function DiscussionAssistantPanel({
             {actionLoading && (
               <div className="flex items-center justify-center p-6 text-text-secondary gap-2">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                <span className="text-xs font-medium">Executing Context Action...</span>
+                <span className="text-xs font-medium">Executing AI Facilitator Action...</span>
               </div>
             )}
 

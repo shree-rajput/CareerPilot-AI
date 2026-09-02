@@ -14,7 +14,7 @@ import { Track } from "livekit-client";
 import "@livekit/components-styles";
 import { toast } from "../context/ToastContext";
 import CodeEditor from "../components/interview/CodeEditor/CodeEditor.jsx";
-import Whiteboard from "../components/interview/Whiteboard.jsx";
+import ArchitecturalCanvas from "../components/interview/ArchitecturalCanvas.jsx";
 import PreJoinLobby from "../components/interview/PreJoinLobby.jsx";
 import QuestionPanel from "../components/interview/QuestionPanel.jsx";
 import DiscussionAssistantPanel from "../components/interview/DiscussionAssistantPanel.jsx";
@@ -37,13 +37,13 @@ import {
   Sparkles,
   Users,
   Terminal,
-  Columns
+  Layout,
+  FileText
 } from "lucide-react";
 import { useSocket } from "../hooks/useSocket.js";
 import { getLiveKitToken, endTechDiscussionSession } from "../api/techDiscussion";
 import { executeCode } from "../api/peerInterview";
 
-// Error Boundary for LiveKit
 class LiveKitErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -97,7 +97,10 @@ export default function TechDiscussionRoomPage() {
   const [currentCode, setCurrentCode] = useState("");
   const [currentLanguage, setCurrentLanguage] = useState("javascript");
   const [selectedCode, setSelectedCode] = useState("");
-  const [activeTab, setActiveTab] = useState("code"); // "code" | "whiteboard"
+  const [specNotes, setSpecNotes] = useState("# System Architecture Spec Notes\n\n- Component 1: Client Application\n- Component 2: API Gateway / Load Balancer\n- Component 3: Microservice Cluster\n- Database: PostgreSQL & Redis Cache");
+
+  // Multi-tool Workspace Mode: "code" | "canvas" | "spec"
+  const [activeWorkspace, setActiveWorkspace] = useState("code");
 
   // Code Execution State
   const [isRunning, setIsRunning] = useState(false);
@@ -107,7 +110,7 @@ export default function TechDiscussionRoomPage() {
   // Layout Ratios & Panels Visibility
   const [isProblemCollapsed, setIsProblemCollapsed] = useState(false);
   const [isDiscussionCollapsed, setIsDiscussionCollapsed] = useState(false);
-  const [isVideoMinimized, setIsVideoMinimized] = useState(true); // Video minimized by default to prioritize code!
+  const [isVideoMinimized, setIsVideoMinimized] = useState(true); // Video minimized by default to prioritize code & canvas!
   const [problemWidth, setProblemWidth] = useState(320); // px
   const [discussionWidth, setDiscussionWidth] = useState(340); // px
 
@@ -134,6 +137,10 @@ export default function TechDiscussionRoomPage() {
         if (data.problem) {
           setProblem(data.problem);
           setCurrentLanguage(data.problem.defaultLanguage || "javascript");
+          // If category is architecture, default workspace to canvas!
+          if (data.category === "architecture") {
+            setActiveWorkspace("canvas");
+          }
         }
         if (data.codeState?.code) {
           setCurrentCode(data.codeState.code);
@@ -142,7 +149,6 @@ export default function TechDiscussionRoomPage() {
           setParticipants(data.participants);
         }
 
-        // Calculate timer from startedAt & duration
         if (data.expiresAt) {
           const expires = new Date(data.expiresAt).getTime();
           const now = Date.now();
@@ -173,7 +179,7 @@ export default function TechDiscussionRoomPage() {
       setTimeRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          toast.info("Session time expired! Finalizing Tech Discussion Report...");
+          toast.info("Session time expired! Finalizing Learning Report...");
           handleEndSession();
           return 0;
         }
@@ -248,7 +254,7 @@ export default function TechDiscussionRoomPage() {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-bg text-text">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
-        <h2 className="text-xl font-bold">Connecting to Tech Discussion Room...</h2>
+        <h2 className="text-xl font-bold">Connecting to Practice Workspace...</h2>
       </div>
     );
   }
@@ -257,7 +263,7 @@ export default function TechDiscussionRoomPage() {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-bg text-text">
         <AlertCircle className="mb-4 h-12 w-12 text-danger" />
-        <h2 className="text-xl font-bold text-danger">Discussion Room Unavailable</h2>
+        <h2 className="text-xl font-bold text-danger">Practice Room Unavailable</h2>
         <p className="mt-2 text-text-secondary font-medium">{error || "Invalid room session"}</p>
         <button
           onClick={() => navigate("/tech-discussion")}
@@ -330,7 +336,7 @@ export default function TechDiscussionRoomPage() {
             onClick={handleEndSession}
             className="flex items-center gap-1.5 rounded-lg bg-danger-bg hover:bg-danger/20 border border-danger/30 px-3.5 py-1.5 text-xs font-bold text-danger transition-all shadow-sm"
           >
-            End Discussion
+            End Practice
           </button>
         </div>
       </header>
@@ -346,7 +352,7 @@ export default function TechDiscussionRoomPage() {
       >
         <LiveKitErrorBoundary>
           
-          {/* FLOATING / DOCKED MINIMIZABLE VIDEO PANEL */}
+          {/* FLOATING MINIMIZABLE VIDEO PANEL */}
           {!isVideoMinimized && (
             <div className="absolute top-3 right-4 z-30 w-72 bg-surface/95 backdrop-blur border border-border rounded-2xl shadow-2xl p-2 space-y-2 fade-in">
               <div className="flex items-center justify-between px-2 py-1 border-b border-border text-xs font-bold text-text-secondary">
@@ -372,7 +378,7 @@ export default function TechDiscussionRoomPage() {
           {/* THREE-COLUMN RESIZABLE WORKSPACE */}
           <div className="flex flex-1 w-full h-full overflow-hidden">
             
-            {/* LEFT COLUMN: PROBLEM PANEL */}
+            {/* LEFT COLUMN: SCENARIO / PROBLEM PANEL */}
             <section
               style={{ width: isProblemCollapsed ? "44px" : `${problemWidth}px` }}
               className="flex flex-col bg-surface border-r border-border shrink-0 transition-all duration-200 relative overflow-hidden"
@@ -383,13 +389,13 @@ export default function TechDiscussionRoomPage() {
                   className="flex flex-col items-center py-4 gap-4 text-text-secondary hover:text-text h-full"
                 >
                   <ChevronRight className="w-5 h-5" />
-                  <span className="writing-mode-vertical text-xs font-bold tracking-widest uppercase text-primary">Problem Statement</span>
+                  <span className="writing-mode-vertical text-xs font-bold tracking-widest uppercase text-primary">Scenario Prompt</span>
                 </button>
               ) : (
                 <div className="flex flex-col h-full overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-bg-secondary shrink-0">
                     <span className="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-1.5">
-                      <Code2 className="w-3.5 h-3.5 text-primary" /> Problem
+                      <Code2 className="w-3.5 h-3.5 text-primary" /> Scenario Prompt
                     </span>
                     <button onClick={() => setIsProblemCollapsed(true)} className="p-1 hover:bg-border rounded text-text-secondary">
                       <ChevronLeft className="w-4 h-4" />
@@ -399,33 +405,44 @@ export default function TechDiscussionRoomPage() {
                     {problem ? (
                       <QuestionPanel question={problem} />
                     ) : (
-                      <div className="p-4 text-xs text-text-secondary">Loading problem statement...</div>
+                      <div className="p-4 text-xs text-text-secondary">Loading scenario prompt...</div>
                     )}
                   </div>
                 </div>
               )}
             </section>
 
-            {/* MIDDLE COLUMN: LEETCODE MONACO CODE EDITOR */}
+            {/* MIDDLE COLUMN: MULTI-TOOL WORKSPACE */}
             <section className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden relative">
-              {/* Workspace Header Bar & Tabs */}
+              
+              {/* Workspace Mode Bar: Code | Architectural Canvas | Spec Notes */}
               <div className="flex items-center justify-between border-b border-border bg-bg-secondary px-4 py-2 shrink-0">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setActiveTab("code")}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                      activeTab === "code" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
+                    onClick={() => setActiveWorkspace("code")}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                      activeWorkspace === "code" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
                     }`}
                   >
-                    Code Editor
+                    <Terminal className="w-3.5 h-3.5" /> Code Editor
                   </button>
+
                   <button
-                    onClick={() => setActiveTab("whiteboard")}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                      activeTab === "whiteboard" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
+                    onClick={() => setActiveWorkspace("canvas")}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                      activeWorkspace === "canvas" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
                     }`}
                   >
-                    Whiteboard
+                    <Layout className="w-3.5 h-3.5 text-warning" /> Architecture Canvas
+                  </button>
+
+                  <button
+                    onClick={() => setActiveWorkspace("spec")}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                      activeWorkspace === "spec" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-success" /> System Spec Notes
                   </button>
                 </div>
 
@@ -434,9 +451,9 @@ export default function TechDiscussionRoomPage() {
                 </div>
               </div>
 
-              {/* Editor Workspace Container */}
+              {/* Multi-Tool Canvas / Editor Container */}
               <div className="flex-1 relative overflow-hidden">
-                {activeTab === "code" ? (
+                {activeWorkspace === "code" ? (
                   <CodeEditor
                     question={problem}
                     sessionId={roomId}
@@ -455,15 +472,29 @@ export default function TechDiscussionRoomPage() {
                     isSubmitting={isSubmitting}
                     executionResult={executionResult}
                   />
-                ) : (
+                ) : activeWorkspace === "canvas" ? (
                   <div className="h-full w-full absolute inset-0">
-                    <Whiteboard socket={socket} isReadOnly={false} />
+                    <ArchitecturalCanvas
+                      socket={socket}
+                      initialElements={problem?.starterCanvasElements || []}
+                      isReadOnly={false}
+                    />
+                  </div>
+                ) : (
+                  /* Spec Notes Workspace */
+                  <div className="flex flex-col h-full w-full p-4 bg-bg font-mono">
+                    <textarea
+                      value={specNotes}
+                      onChange={(e) => setSpecNotes(e.target.value)}
+                      placeholder="Write system architecture specs, API endpoints, data flow, and trade-off notes here..."
+                      className="w-full h-full bg-surface border border-border rounded-xl p-4 text-xs text-text outline-none focus:border-primary transition-all resize-none"
+                    />
                   </div>
                 )}
               </div>
             </section>
 
-            {/* RIGHT COLUMN: DISCUSSION & AI ASSISTANT PANEL */}
+            {/* RIGHT COLUMN: DISCUSSION & AI FACILITATOR PANEL */}
             <section
               style={{ width: isDiscussionCollapsed ? "44px" : `${discussionWidth}px` }}
               className="flex flex-col bg-surface border-l border-border shrink-0 transition-all duration-200 relative overflow-hidden"
@@ -480,7 +511,7 @@ export default function TechDiscussionRoomPage() {
                 <div className="flex flex-col h-full overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary shrink-0">
                     <span className="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-warning" /> AI Companion
+                      <Sparkles className="w-3.5 h-3.5 text-warning" /> AI Facilitator
                     </span>
                     <button onClick={() => setIsDiscussionCollapsed(true)} className="p-1 hover:bg-border rounded text-text-secondary">
                       <ChevronRight className="w-4 h-4" />

@@ -90,11 +90,19 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
 
   assertCleanModel(model);
 
+  // Sanitize and truncate messages to prevent 413 Request Entity Too Large errors
+  const sanitizedMessages = (messages || []).map((msg) => ({
+    role: msg.role,
+    content: typeof msg.content === "string" && msg.content.length > 1200
+      ? msg.content.slice(0, 1200) + "\n\n[Truncated to fit API limits]"
+      : msg.content
+  }));
+
   // Inner function: one attempt at the Groq API
   async function attempt() {
     const request = {
       model,
-      messages,
+      messages: sanitizedMessages,
       temperature
     };
     

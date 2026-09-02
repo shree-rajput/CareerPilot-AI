@@ -212,7 +212,8 @@ export async function getPeerInterviewReport(req, res) {
     const isParticipant = 
       room.interviewerId?.toString() === userIdStr || 
       room.intervieweeId?.toString() === userIdStr ||
-      room.createdBy?.toString() === userIdStr;
+      room.createdBy?.toString() === userIdStr ||
+      (room.participants && room.participants.some(p => (p.userId?._id?.toString() || p.userId?.toString()) === userIdStr));
 
     if (!isParticipant) {
       return res.status(403).json({ success: false, message: "Access denied. You are not a participant in this interview session." });

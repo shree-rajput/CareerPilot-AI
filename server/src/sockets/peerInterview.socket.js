@@ -30,7 +30,7 @@ export function registerPeerInterviewSocket(io) {
         roomId,
       });
 
-      // Send latest code, language & discussion state to joining participant
+      // Send latest code, language, canvas elements & discussion state to joining participant
       const state = roomStates.get(roomId);
       if (state) {
         if (state.code) {
@@ -41,6 +41,9 @@ export function registerPeerInterviewSocket(io) {
         }
         if (state.cursors) {
           socket.emit("code:cursor-map", { cursors: Array.from(state.cursors.values()) });
+        }
+        if (state.canvasElements) {
+          socket.emit("canvas:elements-sync", { elements: state.canvasElements });
         }
       }
     });
@@ -130,6 +133,18 @@ export function registerPeerInterviewSocket(io) {
       }
     });
 
+    // Real-Time Excalidraw-Style Architectural Canvas Sync
+    socket.on("canvas:elements-update", (data) => {
+      const roomId = socket.data.roomId;
+      if (roomId) {
+        const state = roomStates.get(roomId) || {};
+        state.canvasElements = data.elements || [];
+        roomStates.set(roomId, state);
+
+        socket.to(`discussion:${roomId}`).emit("canvas:elements-sync", data);
+      }
+    });
+
     socket.on("whiteboard:draw", (data) => {
       const roomId = socket.data.roomId;
       if (roomId) {
@@ -141,8 +156,13 @@ export function registerPeerInterviewSocket(io) {
     socket.on("whiteboard:clear", () => {
       const roomId = socket.data.roomId;
       if (roomId) {
+        const state = roomStates.get(roomId) || {};
+        state.canvasElements = [];
+        roomStates.set(roomId, state);
+
         socket.to(`discussion:${roomId}`).emit("whiteboard:clear");
         socket.to(`interview:${roomId}`).emit("whiteboard:clear");
+        socket.to(`discussion:${roomId}`).emit("canvas:elements-sync", { elements: [] });
       }
     });
   });

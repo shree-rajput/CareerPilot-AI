@@ -264,6 +264,15 @@ export const AI_TASKS = {
     schema: recruiterMessageSchema,
     buildContext: (params) => params,
     jsonMode: true
+  },
+  SOLO_INTERVIEW_FEEDBACK: {
+    featureName: "tech discussion feedback",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a senior staff software engineer and technical facilitator. Return valid JSON.",
+    buildPrompt: (context) => context.customPrompt || "Analyze code and provide technical feedback.",
+    schema: null,
+    buildContext: (params) => params,
+    jsonMode: false
   }
 };
 

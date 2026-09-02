@@ -7,77 +7,33 @@ import { getCareerIntelligence } from "./careerIntelligenceService.js";
 import { updateUserReadinessScore } from "./readinessService.js";
 import { updateSkillStatus } from "./preparationService.js";
 import { executeAiTask } from "../ai/orchestrator.js";
+import { getDeterministicScenarioRecommendation } from "./deterministicSelectionService.js";
 
 /**
- * AI-recommended problem selector based on candidate intelligence & skill gaps.
+ * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
  */
-export async function getAIProblemRecommendation(userId, { topic = "DSA", difficulty = "medium" } = {}) {
-  let userGaps = [];
-  let targetRole = "Software Engineer";
-  let readinessScore = 50;
-
-  try {
-    const intel = await getCareerIntelligence(userId);
-    userGaps = intel.skillGaps || [];
-    targetRole = intel.targetRoles?.[0] || "Software Engineer";
-    readinessScore = intel.readinessScore || 50;
-  } catch (err) {
-    console.warn("Could not fetch full career intelligence for problem recommendation:", err.message);
-  }
-
-  // 1. Try to find a matching coding question in DB
-  const query = { isActive: true };
-  if (difficulty) query.difficulty = difficulty;
-
-  const dbQuestions = await CodingQuestion.find(query).lean();
-  let selectedQuestion = null;
-  let rationale = "";
-
-  if (dbQuestions && dbQuestions.length > 0) {
-    // Pick question matching topic or gap
-    const gapNames = userGaps.map(g => g.skill.toLowerCase());
-    const matched = dbQuestions.find(q => 
-      (q.topics || []).some(t => gapNames.includes(t.toLowerCase()))
-    );
-
-    if (matched) {
-      selectedQuestion = matched;
-      const matchedSkill = userGaps.find(g => (matched.topics || []).some(t => t.toLowerCase() === g.skill.toLowerCase()))?.skill;
-      rationale = `Recommended based on your target role (${targetRole}). Your profile shows a skill gap in '${matchedSkill || matched.topics[0]}', so practicing '${matched.title}' will boost your readiness score (currently ${readinessScore}%).`;
-    } else {
-      selectedQuestion = dbQuestions[Math.floor(Math.random() * dbQuestions.length)];
-      rationale = `Recommended for ${targetRole} practice in ${topic}. This problem tests core data structures and algorithmic complexity.`;
-    }
-  }
-
-  // Fallback default question if DB is empty
-  if (!selectedQuestion) {
-    selectedQuestion = {
-      id: "lru-cache-fallback",
-      title: "LRU Cache Implementation",
-      description: "Design a data structure that follows the constraints of a Least Recently Used (LRU) cache. Implement the `get` and `put` methods with O(1) average time complexity.",
-      difficulty: difficulty || "medium",
-      topics: ["Data Structures", "HashMap", "Doubly Linked List"],
-      supportedLanguages: ["javascript", "python", "java"],
-      defaultLanguage: "javascript",
-      starterCode: {
-        javascript: "class LRUCache {\n  /**\n   * @param {number} capacity\n   */\n  constructor(capacity) {\n    this.capacity = capacity;\n    this.map = new Map();\n  }\n\n  get(key) {\n    // Implement O(1) get\n    return -1;\n  }\n\n  put(key, value) {\n    // Implement O(1) put\n  }\n}",
-        python: "class LRUCache:\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self.cache = {}\n\n    def get(self, key: int) -> int:\n        return -1\n\n    def put(self, key: int, value: int) -> None:\n        pass",
-        java: "import java.util.*;\n\nclass LRUCache {\n    private int capacity;\n    public LRUCache(int capacity) {\n        this.capacity = capacity;\n    }\n    public int get(int key) {\n        return -1;\n    }\n    public void put(int key, int value) {\n    }\n}"
-      },
-      testCases: [
-        { input: "LRUCache(2); put(1, 1); put(2, 2); get(1); put(3, 3); get(2);", expectedOutput: "1, -1", explanation: "key 2 was evicted when key 3 was inserted" }
-      ],
-      constraints: ["1 <= capacity <= 3000", "0 <= key <= 10000", "At most 2*10^5 calls to get and put"],
-      hints: ["Consider combining a HashMap for O(1) lookup with a Doubly Linked List for O(1) node removal and insertion."],
-      expectedComplexity: "Time: O(1) for get and put, Space: O(capacity)"
-    };
-    rationale = `Recommended: LRU Cache (${difficulty.toUpperCase()}). Rationale: Your profile indicates high target role expectations in ${targetRole}. Building caching structures is essential for backend & system design readiness.`;
-  }
-
+export async function getAIProblemRecommendation(userId, { topic = "architecture", category = "architecture", difficulty = "medium" } = {}) {
+  const cat = category || (topic ? topic.toLowerCase().replace(/ /g, "_") : "architecture");
+  const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty });
+  
   return {
-    question: selectedQuestion,
-    rationale
+    question: {
+      id: result.scenario.scenarioId || `scenario-${Date.now()}`,
+      title: result.scenario.title,
+      description: result.scenario.openingPrompt,
+      difficulty: result.scenario.difficulty || difficulty,
+      topics: result.scenario.expectedConcepts || [topic],
+      supportedLanguages: ["javascript", "python", "java", "cpp", "typescript"],
+      defaultLanguage: "javascript",
+      starterCode: result.scenario.starterCode || {},
+      starterCanvasElements: result.scenario.starterCanvasElements || [],
+      constraints: result.scenario.tradeOffsToExplore || [],
+      hints: result.scenario.guidedFollowUps || [],
+      expectedComplexity: "System Architecture & Scalability Focus"
+    },
+    rationale: result.rationale,
+    targetRole: result.targetRole,
+    matchedSkill: result.matchedSkill
   };
 }
 
@@ -87,7 +43,8 @@ export async function getAIProblemRecommendation(userId, { topic = "DSA", diffic
 export async function createTechDiscussionRoom({
   userId,
   clientUrl = process.env.CLIENT_URL || "http://localhost:5173",
-  topic = "DSA",
+  category = "architecture",
+  topic = "Architecture",
   problemType = "ai_recommended",
   selectedProblemId = null,
   customProblem = null,
@@ -123,13 +80,13 @@ export async function createTechDiscussionRoom({
         hints: q.hints || [],
         expectedComplexity: q.expectedComplexity || ""
       };
-      aiReason = `Selected Problem: ${q.title}`;
+      aiReason = `Selected Scenario: ${q.title}`;
     }
   } else if (problemType === "custom_problem" && customProblem?.title) {
     problemData = {
       id: `custom-${Date.now()}`,
       title: customProblem.title,
-      description: customProblem.description || "Custom technical problem.",
+      description: customProblem.description || "Custom technical practice topic.",
       difficulty: customProblem.difficulty || difficulty,
       topics: customProblem.topics || [topic],
       supportedLanguages: ["javascript", "python", "java"],
@@ -140,12 +97,12 @@ export async function createTechDiscussionRoom({
       hints: customProblem.hints || [],
       expectedComplexity: customProblem.expectedComplexity || ""
     };
-    aiReason = "Custom challenge defined by room host.";
+    aiReason = "Custom topic defined by host.";
   }
 
-  // Fallback to AI recommended
+  // Fallback to Deterministic Recommendation
   if (!problemData) {
-    const rec = await getAIProblemRecommendation(userId, { topic, difficulty });
+    const rec = await getAIProblemRecommendation(userId, { topic, category, difficulty });
     problemData = rec.question;
     aiReason = rec.rationale;
   }
@@ -162,6 +119,7 @@ export async function createTechDiscussionRoom({
     roomId,
     createdBy: userId,
     status: "waiting",
+    category,
     topic,
     difficulty,
     language,
@@ -229,7 +187,6 @@ export async function joinTechDiscussionRoom({ roomId, userId }) {
   const userName = user?.name || "Peer Participant";
   const userIdStr = userId.toString();
 
-  // Check if participant is already registered
   let existingIndex = room.participants.findIndex(p => p.userId.toString() === userIdStr);
 
   if (existingIndex >= 0) {
@@ -250,13 +207,11 @@ export async function joinTechDiscussionRoom({ roomId, userId }) {
       lastSeenAt: new Date()
     });
 
-    // Populate backward compatibility field
     if (!room.intervieweeId && room.createdBy.toString() !== userIdStr) {
       room.intervieweeId = userId;
     }
   }
 
-  // If 2 peers joined, set room active & starting timer
   if (room.participants.length >= 2 && room.status === "waiting") {
     room.status = "active";
     room.startedAt = new Date();
@@ -277,7 +232,7 @@ export async function joinTechDiscussionRoom({ roomId, userId }) {
 }
 
 /**
- * Generates LiveKit WebRTC access token for Tech Discussion peers.
+ * Generates LiveKit WebRTC access token.
  */
 export async function generateTechDiscussionToken({ roomId, userId }) {
   if (!roomId || !userId) {
@@ -330,128 +285,102 @@ export async function generateTechDiscussionToken({ roomId, userId }) {
 }
 
 /**
- * AI Technical Discussion Assistant: Progressive Nudges (Level 1 to 4).
+ * AI Technical Facilitator: Progressive Nudges (Level 1 to 4).
  */
 export async function getAIProgressiveNudge({ roomId, currentCode, hintLevel = 1, questionTitle, selectedSnippet }) {
   const levelNames = {
     1: "Question (Socratic Guidance)",
-    2: "Conceptual Hint (Data Structure / Approach)",
-    3: "Strong Hint (Specific Algorithm / Key Pattern)",
-    4: "Direct Solution Code Explanation"
+    2: "Conceptual Hint (Architecture / Pattern)",
+    3: "Strong Pattern Hint (Structural Outline)",
+    4: "Direct Solution Code / Architecture Design"
   };
 
-  const prompt = `You are a Technical Discussion Assistant in a peer coding session.
-Problem: ${questionTitle || "Coding Problem"}
+  const prompt = `You are a Technical Facilitator in a collaborative peer technical practice session.
+Topic/Scenario: ${questionTitle || "Technical Practice Topic"}
 Hint Level requested: Level ${hintLevel} - ${levelNames[hintLevel] || "Hint"}
 
-Current Code:
+Current Code/Notes:
 \`\`\`
-${currentCode || "// No code yet"}
+${currentCode || "// Workspace empty"}
 \`\`\`
 
 ${selectedSnippet ? `User focused on snippet:\n\`\`\`\n${selectedSnippet}\n\`\`\`` : ""}
 
 Instructions by Level:
-- Level 1: Ask an engaging Socratic question that helps the peers discover key considerations (e.g. time complexity, boundary condition, zero/null cases) without revealing algorithm names.
-- Level 2: Point to the high-level computer science concept or optimal data structure pattern without writing implementation code.
-- Level 3: Give a clear structural outline (pseudocode or specific steps) of how to combine the components.
-- Level 4: Provide the recommended code pattern and explain why it is optimal.
+- Level 1: Ask an engaging Socratic question that encourages the two engineers to think about trade-offs, edge cases, scalability, or data flow without spoiling answers.
+- Level 2: Point out the high-level pattern, algorithm, or architecture stencil without full code.
+- Level 3: Provide a structural outline or pseudocode steps for combining components.
+- Level 4: Give the optimal solution or architectural pattern and explain why it's optimal.
 
-Keep your output concise, encouraging, and developer-centric. Return a JSON object with:
+Return JSON:
 {
   "level": ${hintLevel},
   "nudgeText": "Your concise nudge message",
-  "keyTakeaway": "1 line summary takeaway"
+  "keyTakeaway": "1 line takeaway"
 }`;
 
   try {
-    const aiResult = await executeAiTask("SOLO_INTERVIEW_FEEDBACK", {
-      customPrompt: prompt
-    });
-
-    if (aiResult?.nudgeText) {
-      return aiResult;
-    }
+    const aiResult = await executeAiTask("SOLO_INTERVIEW_FEEDBACK", { customPrompt: prompt });
+    if (aiResult?.nudgeText) return aiResult;
   } catch (err) {
     console.error("AI Progressive Nudge error:", err);
   }
 
-  // Fallback progressive hints if AI call is throttled
   const fallbacks = {
-    1: { level: 1, nudgeText: "What is the time complexity of searching or updating your current structure? Could a different layout reduce lookup time?", keyTakeaway: "Evaluate lookup & insertion overhead." },
-    2: { level: 2, nudgeText: "Consider using a Hash Table or Map to store previously visited elements for O(1) retrieval.", keyTakeaway: "Use HashMap for fast lookup." },
-    3: { level: 3, nudgeText: "Initialize a map, iterate through array elements, compute target complement (target - num), and return indices if complement exists.", keyTakeaway: "Complement matching pattern." },
-    4: { level: 4, nudgeText: "Here is the standard O(N) solution:\n```javascript\nconst map = new Map();\nfor (let i = 0; i < nums.length; i++) {\n  const diff = target - nums[i];\n  if (map.has(diff)) return [map.get(diff), i];\n  map.set(nums[i], i);\n}\n```", keyTakeaway: "O(N) Time and O(N) Space solution." }
+    1: { level: 1, nudgeText: "What are the primary bottleneck operations in your current design or code? Have you considered latency vs consistency trade-offs?", keyTakeaway: "Evaluate trade-offs & bottlenecks." },
+    2: { level: 2, nudgeText: "Consider placing an in-memory cache (Redis) or decoupling events via a message broker (Kafka/RabbitMQ).", keyTakeaway: "Use caching & decoupling." },
+    3: { level: 3, nudgeText: "1. Client submits request -> Load Balancer -> API Service.\n2. API checks Redis cache.\n3. If miss, query primary Database and update cache.", keyTakeaway: "Cache-aside pattern." },
+    4: { level: 4, nudgeText: "Here is the recommended architecture pattern for optimal throughput:\n- Load Balancer: Nginx (Round Robin)\n- Cache: Redis LRU (Eviction policy)\n- Persistence: PostgreSQL with Read Replicas", keyTakeaway: "Scalable 3-tier architecture." }
   };
 
   return fallbacks[hintLevel] || fallbacks[1];
 }
 
 /**
- * AI Context Actions: Ask, Challenge, Suggest, Explain, Complexity.
+ * AI Context Actions (9 Actions): Ask, Challenge, Hint, Explain, Complexity, Optimize, Debug, Design, Analyze.
+ */
+
+
+/**
+ * AI Context Actions (9 Actions): Ask, Challenge, Hint, Explain, Complexity, Optimize, Debug, Design, Analyze.
  */
 export async function executeContextAction({ actionType, selectedCode, currentCode, problem, userQuestion }) {
-  const codeToAnalyze = selectedCode?.trim() ? selectedCode : currentCode;
+  const rawText = selectedCode?.trim() ? selectedCode : currentCode;
+  const textToAnalyze = (rawText || "").slice(0, 1500);
+  const problemTitle = typeof problem === "string" ? problem : (problem?.title || "Technical Topic");
 
   const prompts = {
-    ask: `Answer this peer developer question concisely based on the code and problem statement:
-Question: "${userQuestion}"
-Problem: ${problem?.title}
-Code:
-\`\`\`
-${codeToAnalyze}
-\`\`\``,
-
-    challenge: `Act as a constructive peer code reviewer. Challenge the current approach or point out a tricky edge case in this code:
-Problem: ${problem?.title}
-Code:
-\`\`\`
-${codeToAnalyze}
-\`\`\``,
-
-    suggest: `Suggest an alternative or cleaner implementation for this code block:
-Problem: ${problem?.title}
-Code:
-\`\`\`
-${codeToAnalyze}
-\`\`\``,
-
-    explain: `Explain this code line-by-line in simple, clear technical terms:
-Code:
-\`\`\`
-${codeToAnalyze}
-\`\`\``,
-
-    complexity: `Analyze the exact Time and Space complexity of this code block. Give Big-O notation for both worst and average cases with short justifications:
-Code:
-\`\`\`
-${codeToAnalyze}
-\`\`\``
+    ask: `Answer concisely: "${userQuestion}"\nTopic: ${problemTitle}\nSnippet:\n${textToAnalyze}`,
+    challenge: `Challenge this design approach or highlight edge cases:\nTopic: ${problemTitle}\nSnippet:\n${textToAnalyze}`,
+    suggest: `Suggest an optimization or cleaner pattern:\nTopic: ${problemTitle}\nSnippet:\n${textToAnalyze}`,
+    explain: `Explain this code or architecture step-by-step:\nTopic: ${problemTitle}\nSnippet:\n${textToAnalyze}`,
+    complexity: `Analyze Time and Space complexity (Big-O):\nSnippet:\n${textToAnalyze}`,
+    optimize: `Provide performance tuning suggestions:\nSnippet:\n${textToAnalyze}`,
+    debug: `Identify potential bugs or race conditions:\nSnippet:\n${textToAnalyze}`,
+    design: `Provide a high-level system component outline:\nTopic: ${problemTitle}\nSnippet:\n${textToAnalyze}`
   };
 
   const selectedPrompt = prompts[actionType] || prompts.explain;
 
   try {
     const aiResult = await executeAiTask("SOLO_INTERVIEW_FEEDBACK", {
-      customPrompt: `${selectedPrompt}\n\nReturn JSON: { "actionType": "${actionType}", "title": "Brief Title", "response": "Markdown formatted explanation" }`
+      customPrompt: `${selectedPrompt}\n\nReturn JSON: { "actionType": "${actionType}", "title": "${actionType.toUpperCase()} Analysis", "response": "Markdown formatted explanation" }`
     });
 
-    if (aiResult?.response) {
-      return aiResult;
-    }
+    if (aiResult?.response) return aiResult;
   } catch (err) {
-    console.error("Context Action error:", err);
+    console.error("Context Action error:", err.message);
   }
 
   return {
     actionType,
-    title: `${actionType.toUpperCase()} Analysis`,
-    response: `Analysis for ${actionType}:\n- Selected snippet evaluated.\n- Complexity: Time O(N), Space O(1).\n- Edge cases considered: Empty inputs, null pointers, boundaries.`
+    title: `${actionType.toUpperCase()} Feedback`,
+    response: `Analysis for ${actionType}:\n- Snippet evaluated successfully.\n- Key focus: Verified against trade-offs, edge cases, and engineering best practices.`
   };
 }
 
 /**
- * Ends session & generates evidence-based individual reports for peers.
+ * Ends session & generates multi-dimensional individual reports evaluating 6 engineering competencies.
  */
 export async function endTechDiscussionSession({ roomId, userId }) {
   const room = await PeerInterviewRoom.findOne({ roomId }).populate("participants.userId", "name targetRoles");
@@ -476,39 +405,39 @@ export async function endTechDiscussionSession({ roomId, userId }) {
     ? Math.floor((room.endedAt.getTime() - room.startedAt.getTime()) / 1000) 
     : 0;
 
-  // Generate individual reports for each participant
   const generatedReports = [];
 
   for (const part of room.participants) {
     const pId = part.userId?._id ? part.userId._id.toString() : part.userId.toString();
-    const pName = part.name || part.userId?.name || "Peer Developer";
+    const pName = part.name || part.userId?.name || "Peer Engineer";
 
-    // Filter submissions by this user or room
     const userSubmissions = (room.submissions || []).filter(s => s.userId?.toString() === pId);
     const passedSubmissions = userSubmissions.filter(s => s.status === "completed" || s.passedTests === s.totalTests);
     const code = room.codeState?.code || "";
 
-    let techScore = 75;
-    let problemSolvingScore = 70;
-    let codeQualityScore = 80;
-    let commScore = 82;
-    let collabScore = 85;
+    let techScore = 78;
+    let problemSolvingScore = 75;
+    let codeQualityScore = 82;
+    let commScore = 85;
+    let collabScore = 88;
+    let engineeringThinkingScore = 80;
 
     if (userSubmissions.length > 0) {
       const passRatio = passedSubmissions.length / userSubmissions.length;
-      techScore = Math.round(60 + passRatio * 35);
-      problemSolvingScore = Math.round(65 + passRatio * 30);
+      techScore = Math.round(65 + passRatio * 30);
+      problemSolvingScore = Math.round(70 + passRatio * 25);
     } else if (code.trim().length > 50) {
-      techScore = 78;
-      problemSolvingScore = 75;
+      techScore = 80;
+      problemSolvingScore = 78;
     }
 
     const overallScore = Math.round(
-      techScore * 0.25 + 
-      problemSolvingScore * 0.25 + 
-      codeQualityScore * 0.20 + 
+      techScore * 0.20 + 
+      problemSolvingScore * 0.20 + 
+      codeQualityScore * 0.15 + 
       commScore * 0.15 + 
-      collabScore * 0.15
+      collabScore * 0.15 +
+      engineeringThinkingScore * 0.15
     );
 
     const reportObj = {
@@ -521,22 +450,23 @@ export async function endTechDiscussionSession({ roomId, userId }) {
         codeQuality: codeQualityScore,
         communication: commScore,
         collaboration: collabScore,
+        engineeringThinking: engineeringThinkingScore
       },
       strengths: [
-        `Demonstrated strong understanding of ${room.problem?.title || room.topic} implementation patterns`,
-        `Collaborated effectively on technical trade-offs and code structure`,
+        `Demonstrated strong understanding of ${room.problem?.title || room.topic} trade-offs and component design`,
+        `Collaborated effectively on technical decisions and code/system structure`,
         `Communicated edge cases and solution steps clearly with peer`
       ],
       areasForImprovement: [
-        `Explain space-time complexity trade-offs explicitly before coding`,
-        `Test null/boundary inputs systematically before final code submission`
+        `Discuss space-time complexity or memory cache invalidation trade-offs explicitly`,
+        `Systematically verify null pointers and boundary conditions during solution design`
       ],
-      summary: `In this Tech Discussion session on '${room.problem?.title || room.topic}', ${pName} worked collaboratively to analyze requirements, implement solution logic, and test edge cases in ${room.language.toUpperCase()}.`,
-      recommendedNextPractice: `Try practicing 'LFU Cache' or 'Sliding Window Maximum' to further master complex data structure optimizations.`,
+      summary: `In this Collaborative Practice session on '${room.problem?.title || room.topic}', ${pName} worked together to analyze technical requirements, design solutions, and evaluate trade-offs.`,
+      recommendedNextPractice: `Practice 'Redis Caching & Sliding Window Rate Limiting' to further strengthen backend engineering readiness.`,
       evidence: [
-        `Real-time collaborative code edits in ${room.language}`,
-        `Submitted code with ${passedSubmissions.length}/${userSubmissions.length || 1} test pass rate`,
-        `Engaged in technical discussion and progressive AI hint evaluation`
+        `Collaborative practice in ${room.topic}`,
+        `Submitted code/canvas updates with active peer interaction`,
+        `Engaged in technical discussion and progressive AI facilitator nudges`
       ],
       generatedAt: new Date()
     };
@@ -557,7 +487,6 @@ export async function endTechDiscussionSession({ roomId, userId }) {
   room.reports = generatedReports;
   room.status = "report_generated";
 
-  // Populate legacy report object for backward compatibility
   if (generatedReports.length > 0) {
     const firstRep = generatedReports[0];
     room.report = {
@@ -599,7 +528,6 @@ export async function getIndividualTechDiscussionReport({ roomId, userId }) {
     throw err;
   }
 
-  // Find user's individual report
   let userReport = room.reports.find(r => r.userId === userIdStr);
 
   if (!userReport && room.reports.length > 0) {
@@ -607,7 +535,6 @@ export async function getIndividualTechDiscussionReport({ roomId, userId }) {
   }
 
   if (!userReport) {
-    // Return report format built from legacy report if available
     return {
       userId: userIdStr,
       overallScore: room.report?.overallScore || 0,
@@ -617,11 +544,12 @@ export async function getIndividualTechDiscussionReport({ roomId, userId }) {
         codeQuality: room.report?.scores?.codeQuality || 0,
         communication: room.report?.scores?.communication || 0,
         collaboration: 80,
+        engineeringThinking: 80
       },
       strengths: room.report?.feedback?.strengths || [],
       areasForImprovement: room.report?.feedback?.weaknesses || [],
       summary: "Tech Discussion Session Report",
-      recommendedNextPractice: room.report?.feedback?.recommendedPractice?.[0] || "Advanced Problem Solving",
+      recommendedNextPractice: room.report?.feedback?.recommendedPractice?.[0] || "Advanced System Design",
       generatedAt: room.endedAt || new Date()
     };
   }
