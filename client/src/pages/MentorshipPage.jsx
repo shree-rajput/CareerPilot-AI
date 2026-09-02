@@ -10,6 +10,7 @@ import {
   completeSession, 
   rateSession 
 } from "../api/mentor";
+import { toast } from "../context/ToastContext";
 import api from "../api/axios";
 import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
@@ -196,10 +197,11 @@ export function MentorshipPage() {
       });
       setBookingMentor(null);
       setBookingForm({ topic: "", description: "", duration: 30, scheduledAt: "" });
+      toast.success("Mentorship session request submitted successfully!");
       setActiveTab("sessions");
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to submit booking request.");
+      toast.error(err.response?.data?.message || "Failed to submit booking request.");
     } finally {
       setBookingLoading(false);
     }

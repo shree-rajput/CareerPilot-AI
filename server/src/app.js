@@ -17,6 +17,7 @@ import { profileRouter } from "./routes/profileRoutes.js";
 import { resumeRouter } from "./routes/resumeRoutes.js";
 import { tailoringRouter } from "./routes/tailoringRoutes.js";
 import peerInterviewRoutes from "./routes/peerInterview.routes.js";
+import techDiscussionRoutes from "./routes/techDiscussion.routes.js";
 import codingQuestionRoutes from "./routes/codingQuestionRoutes.js";
 import codeExecutionRoutes from "./routes/codeExecutionRoutes.js";
 import jobRoutes from "./routes/jobRoutes.js";
@@ -73,6 +74,7 @@ export function createApp() {
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/interview", interviewRouter);
   app.use("/api/interview-rooms", peerInterviewRoutes);
+  app.use("/api/tech-discussion", techDiscussionRoutes);
   app.use("/api/interview", codingQuestionRoutes);
   app.use("/api/interview", codeExecutionRoutes);
   app.use("/api/jobs", jobRoutes);

@@ -10,6 +10,7 @@ import ResumeIntelligence from "../components/resume/ResumeIntelligence";
 import { KeywordIntelligence } from "../components/resume/KeywordIntelligence";
 import { ProfileConfirmationModal } from "../components/resume/ProfileConfirmationModal";
 import { OriginalResumeViewer } from "../components/resume/OriginalResumeViewer";
+import { toast } from "../context/ToastContext";
 import api from "../api/axios";
 function debounce(func, wait) {
   let timeout;
@@ -360,7 +361,7 @@ export function ResumeStudioPage() {
           onClose={() => setShowProfileModal(false)}
           structuredData={structuredData}
           onConfirmSuccess={() => {
-            alert("Profile synced successfully!");
+            toast.success("Profile synced successfully!");
             setShowProfileModal(false);
           }}
         />

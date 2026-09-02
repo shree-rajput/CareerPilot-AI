@@ -18,6 +18,9 @@ import { SettingsPage } from "./pages/SettingsPage";
 import PeerInterviewRoomPage from "./pages/PeerInterviewRoomPage";
 import PeerInterviewSetupPage from "./pages/PeerInterviewSetup";
 import PeerInterviewReportPage from "./pages/PeerInterviewReportPage";
+import TechDiscussionSetupPage from "./pages/TechDiscussionSetupPage";
+import TechDiscussionRoomPage from "./pages/TechDiscussionRoomPage";
+import TechDiscussionReportPage from "./pages/TechDiscussionReportPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { JobBoardPage } from "./pages/JobBoardPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
@@ -77,18 +80,30 @@ export function App() {
             />
 
             <Route
-              path="/peer-interview/:roomId"
-              element={<PeerInterviewRoomPage />}
+              path="/tech-discussion"
+              element={<TechDiscussionSetupPage />}
+            />
+            <Route
+              path="/tech-discussion/:roomId"
+              element={<TechDiscussionRoomPage />}
+            />
+            <Route
+              path="/tech-discussion/:roomId/report"
+              element={<TechDiscussionReportPage />}
             />
 
+            {/* Redirects for legacy peer interview links */}
             <Route
               path="/peer-interview/:roomId/report"
-              element={<PeerInterviewReportPage />}
+              element={<TechDiscussionReportPage />}
             />
-
+            <Route
+              path="/peer-interview/:roomId"
+              element={<TechDiscussionRoomPage />}
+            />
             <Route
               path="/peer-interview"
-              element={<PeerInterviewSetupPage />}
+              element={<Navigate to="/tech-discussion" replace />}
             />
 
             <Route path="/settings" element={<SettingsPage />} />

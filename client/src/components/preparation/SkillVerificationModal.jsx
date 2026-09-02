@@ -3,6 +3,7 @@ import { X, Award, CheckCircle, AlertTriangle, Sparkles, ArrowRight, RefreshCw }
 import { preparationApi } from "../../api/career";
 import { Button } from "../ui/Button";
 import { Spinner } from "../ui/Spinner";
+import { toast } from "../../context/ToastContext";
 
 export function SkillVerificationModal({ isOpen, onClose, skillName, onVerificationSuccess }) {
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,7 @@ export function SkillVerificationModal({ isOpen, onClose, skillName, onVerificat
         onVerificationSuccess(resData);
       }
     } catch (err) {
-      alert("Failed to submit assessment. Please try again.");
+      toast.error("Failed to submit assessment. Please try again.");
     } finally {
       setSubmitting(false);
     }

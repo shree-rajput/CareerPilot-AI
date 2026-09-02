@@ -11,6 +11,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import api from "../api/axios";
+import { toast } from "../context/ToastContext";
 
 export function MentorSessionRoomPage() {
   const { sessionId } = useParams();
@@ -68,7 +69,7 @@ export function MentorSessionRoomPage() {
   const handleCompleteSession = async (e) => {
     e.preventDefault();
     if (!mentorFeedback.trim()) {
-      alert("Please enter mentor feedback notes for the candidate.");
+      toast.warning("Please enter mentor feedback notes for the candidate.");
       return;
     }
 
@@ -81,10 +82,10 @@ export function MentorSessionRoomPage() {
         actionItems: items
       });
 
-      alert("Session completed! Feedback and action items synced to candidate plan.");
+      toast.success("Session completed! Feedback and action items synced to candidate plan.");
       navigate("/mentor/dashboard");
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to complete session.");
+      toast.error(err.response?.data?.message || "Failed to complete session.");
     } finally {
       setCompleting(false);
     }

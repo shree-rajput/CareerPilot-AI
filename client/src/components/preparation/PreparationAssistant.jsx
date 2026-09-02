@@ -3,6 +3,7 @@ import { MessageSquare, Bell, CalendarClock, Send, Sparkles, CheckCircle } from 
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Spinner } from "../ui/Spinner";
+import { toast } from "../../context/ToastContext";
 import api from "../../api/axios";
 
 export function PreparationAssistant({ activePlan }) {
@@ -22,9 +23,10 @@ export function PreparationAssistant({ activePlan }) {
       // await api.post('/career/preparation/schedule', { planId: activePlan._id, studyHours, emailTime })
       
       setScheduled(true);
+      toast.success("Schedule & reminder set successfully!");
     } catch (err) {
       console.error(err);
-      alert("Failed to schedule plan.");
+      toast.error("Failed to schedule plan.");
     } finally {
       setLoadingSchedule(false);
     }

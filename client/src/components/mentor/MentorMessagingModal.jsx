@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, Send, User, MessageSquare, Clock } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Spinner } from "../ui/Spinner";
+import { toast } from "../../context/ToastContext";
 import api from "../../api/axios";
 
 export function MentorMessagingModal({ recipient, onClose }) {
@@ -52,7 +53,7 @@ export function MentorMessagingModal({ recipient, onClose }) {
       setMessages((prev) => [...prev, res.data.data]);
       setInputText("");
     } catch (err) {
-      alert("Failed to send message.");
+      toast.error("Failed to send message.");
     } finally {
       setSending(false);
     }

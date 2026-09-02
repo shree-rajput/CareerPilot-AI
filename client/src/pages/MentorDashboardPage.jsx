@@ -16,6 +16,8 @@ import { Spinner } from "../components/ui/Spinner";
 import { Link } from "react-router-dom";
 import { MentorMessagingModal } from "../components/mentor/MentorMessagingModal";
 
+import { toast } from "../context/ToastContext";
+
 export function MentorDashboardPage() {
   const [mentorProfile, setMentorProfile] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -83,9 +85,10 @@ export function MentorDashboardPage() {
     setActionLoading(sessionId);
     try {
       await respondToSession(sessionId, { status });
+      toast.success(`Session status updated to ${status}`);
       await loadMentorData();
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to update session status.");
+      toast.error(err.response?.data?.message || "Failed to update session status.");
     } finally {
       setActionLoading(null);
     }
@@ -95,11 +98,11 @@ export function MentorDashboardPage() {
     e.preventDefault();
     setActionLoading("availability");
     try {
-      alert("Availability schedule updated successfully!");
+      toast.success("Availability schedule updated successfully!");
       setEditingAvailability(false);
       await loadMentorData();
     } catch (err) {
-      alert("Failed to update availability.");
+      toast.error("Failed to update availability.");
     } finally {
       setActionLoading(null);
     }
@@ -120,12 +123,12 @@ export function MentorDashboardPage() {
         actionItems: itemsArray
       });
 
-      alert("Session feedback logged & action items synced to candidate!");
+      toast.success("Session feedback logged & action items synced to candidate!");
       setCompletingSessionId(null);
       setCompletionForm({ mentorFeedback: "", actionItems: "" });
       await loadMentorData();
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to complete session.");
+      toast.error(err.response?.data?.message || "Failed to complete session.");
     } finally {
       setCompletionLoading(false);
     }

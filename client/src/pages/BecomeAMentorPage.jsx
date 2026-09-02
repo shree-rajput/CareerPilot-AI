@@ -6,6 +6,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { onboardMentor } from "../api/mentor";
+import { toast } from "../context/ToastContext";
 
 export function BecomeAMentorPage() {
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ export function BecomeAMentorPage() {
       };
 
       await onboardMentor(parsed);
-      alert("Mentor application submitted successfully! Your profile is pending verification.");
+      toast.success("Mentor application submitted successfully! Your profile is pending verification.");
       navigate("/mentor/dashboard");
     } catch (err) {
       setError(err.response?.data?.message || "Failed to submit mentor application.");

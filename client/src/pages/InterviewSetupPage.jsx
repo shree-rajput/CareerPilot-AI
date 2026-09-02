@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Mic, Target, Plus, X, BrainCircuit } from "lucide-react";
 import { interviewApi } from "../api/interview.js";
+import { toast } from "../context/ToastContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
@@ -78,14 +79,14 @@ export function InterviewSetupPage() {
 
   const handleStart = async (e) => {
     e.preventDefault();
-    if (!form.targetRole.trim()) return alert("Target role is required");
+    if (!form.targetRole.trim()) return toast.warning("Target role is required");
 
     try {
       setLoading(true);
       const session = await interviewApi.createSession(form);
       navigate(`/interview/${session._id}`);
     } catch (err) {
-      alert("Failed to start session: " + (err.response?.data?.message || err.message));
+      toast.error("Failed to start session: " + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }

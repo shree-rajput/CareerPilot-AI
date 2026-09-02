@@ -7,6 +7,7 @@ import { resumeApi } from "../api/resume";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
+import { toast } from "../context/ToastContext";
 import api from "../api/axios";
 
 const STATUSES = [
@@ -88,8 +89,9 @@ export function ApplicationDetailPage() {
     try {
       const data = await applicationsApi.update(id, { status: newStatus });
       setApp(data.application);
+      toast.success("Application status updated!");
     } catch (err) {
-      alert("Failed to update status.");
+      toast.error("Failed to update status.");
     }
   }
 
@@ -97,15 +99,16 @@ export function ApplicationDetailPage() {
     setIsSavingNotes(true);
     try {
       await applicationsApi.update(id, { notes });
+      toast.success("Notes saved!");
     } catch (err) {
-      alert("Failed to save notes.");
+      toast.error("Failed to save notes.");
     } finally {
       setIsSavingNotes(false);
     }
   }
 
   async function handleRunMatch() {
-    if (!selectedResumeId) return alert("Select a resume first.");
+    if (!selectedResumeId) return toast.warning("Select a resume first.");
     setRunningMatch(true);
     try {
       await applicationsApi.update(id, { resumeVersionId: selectedResumeId });
@@ -113,14 +116,14 @@ export function ApplicationDetailPage() {
       setMatchResult(data.matchResult);
       await loadData(); // refresh app state
     } catch (err) {
-      alert(err.response?.data?.message || "Match failed.");
+      toast.error(err.response?.data?.message || "Match failed.");
     } finally {
       setRunningMatch(false);
     }
   }
 
   async function fetchTailoring() {
-    if (!selectedResumeId) return alert("Select a resume first.");
+    if (!selectedResumeId) return toast.warning("Select a resume first.");
     setLoadingTailoring(true);
     try {
       const result = await tailoringApi.getRecommendations(id, selectedResumeId);
@@ -128,14 +131,14 @@ export function ApplicationDetailPage() {
         setTailoringData(result.data?.tailoring?.recommendations || "No specific recommendations provided.");
       }
     } catch (err) {
-      alert("Failed to fetch tailoring recommendations.");
+      toast.error("Failed to fetch tailoring recommendations.");
     } finally {
       setLoadingTailoring(false);
     }
   }
 
   async function handleSaveTailoredVersion() {
-    if (!selectedResumeId) return alert("Select a resume first.");
+    if (!selectedResumeId) return toast.warning("Select a resume first.");
     setIsSavingVersion(true);
     setVersionSavedSuccess("");
     try {
@@ -145,9 +148,10 @@ export function ApplicationDetailPage() {
         acceptedChanges: Array.isArray(tailoringData) ? tailoringData : []
       });
       setVersionSavedSuccess(res.data?.message || "New tailored resume version saved!");
+      toast.success("New tailored resume version saved!");
       await loadData();
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to save tailored version.");
+      toast.error(err.response?.data?.message || "Failed to save tailored version.");
     } finally {
       setIsSavingVersion(false);
     }
@@ -163,7 +167,7 @@ export function ApplicationDetailPage() {
       });
       setCoverLetter(res.data?.data?.coverLetter || "");
     } catch (err) {
-      alert(err?.response?.data?.message || "Cover letter generation failed.");
+      toast.error(err?.response?.data?.message || "Cover letter generation failed.");
     } finally {
       setLoadingCoverLetter(false);
     }
@@ -177,7 +181,7 @@ export function ApplicationDetailPage() {
       });
       setRecruiterMsg(res.data?.data?.message || "");
     } catch (err) {
-      alert(err?.response?.data?.message || "Message generation failed.");
+      toast.error(err?.response?.data?.message || "Message generation failed.");
     } finally {
       setLoadingRecruiterMsg(false);
     }

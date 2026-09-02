@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Search, Filter, AlertCircle, BriefcaseBusiness } from "lucide-react";
 import { applicationsApi } from "../api/applications";
+import { toast } from "../context/ToastContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent } from "../components/ui/Card";
@@ -38,8 +39,9 @@ export function ApplicationsPage() {
       // Optimistically update the UI
       setApps(prev => prev.map(app => app._id === appId ? { ...app, status: newStatus } : app));
       await applicationsApi.update(appId, { status: newStatus });
+      toast.success("Application status updated!");
     } catch (err) {
-      alert("Failed to update status.");
+      toast.error("Failed to update status.");
       loadApps(); // Revert on failure
     }
   }
@@ -68,11 +70,12 @@ export function ApplicationsPage() {
         location: form.location,
         jobDescription: form.jd
       });
+      toast.success("Application saved successfully!");
       setShowAdd(false);
       setForm({ company: "", role: "", location: "", jd: "" });
       loadApps();
     } catch (err) {
-      alert("Failed to save application.");
+      toast.error("Failed to save application.");
     }
   }
 

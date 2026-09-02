@@ -1,6 +1,4 @@
-import React from "react";
-import { useEffect, useMemo, useState } from "react";
-import { useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import EditorToolbar from "./EditorToolbar";
 import TestCasesPanel from "./TestCasesPanel";
@@ -68,25 +66,24 @@ export default function CodeEditor({
   question,
   sessionId,
   mode = "ai",
-
   initialLanguage,
-
   value,
   onChange,
-
   onRun,
   onSubmit,
-
+  onSelectionChange,
   isRunning = false,
   isSubmitting = false,
-
   executionResult = null,
-
   readOnly = false,
-
   editorOptions = {},
   socket = null,
+  userName = "You",
 }) {
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const decorationsRef = useRef([]);
+
   const availableLanguages = useMemo(() => {
     const raw = (question?.supportedLanguages?.length > 0
       ? question.supportedLanguages
@@ -107,7 +104,6 @@ export default function CodeEditor({
     if (typeof value === "string") {
       return value;
     }
-
     return getStarterCode(question, firstLanguage);
   });
 
@@ -138,12 +134,34 @@ export default function CodeEditor({
     }
   }, [question?.id, question?._id]);
 
-  // Setup Socket Listeners
+  // Setup Monaco mount handler
+  const handleEditorMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // Track cursor and selection changes to emit to peer
+    editor.onDidChangeCursorPosition((e) => {
+      if (socket) {
+        socket.emit("code:cursor", {
+          cursor: { lineNumber: e.position.lineNumber, column: e.position.column },
+          userName,
+        });
+      }
+    });
+
+    editor.onDidChangeCursorSelection((e) => {
+      const selectedText = editor.getModel()?.getValueInRange(e.selection);
+      if (selectedText) {
+        onSelectionChange?.(selectedText);
+      }
+    });
+  };
+
+  // Setup Socket Listeners for code, language & peer cursors
   useEffect(() => {
-    if (!socket || mode !== "peer") return;
+    if (!socket) return;
 
     const handleCodeChange = (data) => {
-      // Use function state update to access latest code without adding it to dependencies
       setCode((prevCode) => {
         if (data.code !== prevCode) {
           remoteCode.current = data.code;
@@ -162,14 +180,43 @@ export default function CodeEditor({
       });
     };
 
+    const handleRemoteCursor = (data) => {
+      if (!editorRef.current || !monacoRef.current || !data.cursor) return;
+      const editor = editorRef.current;
+      const monaco = monacoRef.current;
+
+      const newDecorations = [
+        {
+          range: new monaco.Range(
+            data.cursor.lineNumber,
+            data.cursor.column,
+            data.cursor.lineNumber,
+            data.cursor.column + 1
+          ),
+          options: {
+            className: "peer-cursor-glow",
+            hoverMessage: { value: `👤 ${data.userName || "Peer Collaborator"}` },
+            beforeContentClassName: "peer-cursor-badge",
+          },
+        },
+      ];
+
+      decorationsRef.current = editor.deltaDecorations(
+        decorationsRef.current,
+        newDecorations
+      );
+    };
+
     socket.on("code:change", handleCodeChange);
     socket.on("language:change", handleLanguageChange);
+    socket.on("code:cursor", handleRemoteCursor);
 
     return () => {
       socket.off("code:change", handleCodeChange);
       socket.off("language:change", handleLanguageChange);
+      socket.off("code:cursor", handleRemoteCursor);
     };
-  }, [socket, mode]);
+  }, [socket]);
 
   const testCases = question?.testCases || [];
 
@@ -177,12 +224,11 @@ export default function CodeEditor({
     const normalizedLanguage = normalizeLanguage(newLanguage);
 
     setLanguage(normalizedLanguage);
-
     const newStarterCode = getStarterCode(question, normalizedLanguage);
 
     setCode(newStarterCode);
 
-    if (socket && mode === "peer") {
+    if (socket) {
       socket.emit("language:change", { language: normalizedLanguage, sessionId });
       socket.emit("code:change", { code: newStarterCode, sessionId });
     }
@@ -200,11 +246,10 @@ export default function CodeEditor({
     setCode(updatedCode);
 
     // Only emit if the change originated from THIS user's keyboard
-    if (updatedCode !== remoteCode.current && socket && mode === "peer") {
+    if (updatedCode !== remoteCode.current && socket) {
       socket.emit("code:change", { code: updatedCode, sessionId });
     }
 
-    // Reset the remote change flag equivalence
     remoteCode.current = "";
 
     onChange?.(updatedCode, {
@@ -253,6 +298,7 @@ export default function CodeEditor({
           language={language}
           value={code}
           theme="light"
+          onMount={handleEditorMount}
           onChange={handleEditorChange}
           options={{
             ...DEFAULT_EDITOR_OPTIONS,

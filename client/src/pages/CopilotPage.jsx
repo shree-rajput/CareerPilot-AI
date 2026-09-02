@@ -52,6 +52,8 @@ const SimpleMarkdown = ({ content }) => {
   );
 };
 
+import { toast } from "../context/ToastContext";
+
 export function CopilotPage() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -219,9 +221,10 @@ export function CopilotPage() {
     if (newName && newName.trim() && newName !== currentName) {
       try {
         await copilotApi.renameConversation(id, newName.trim());
+        toast.success("Conversation renamed.");
         loadConversations();
       } catch (err) {
-        alert("Failed to rename conversation.");
+        toast.error("Failed to rename conversation.");
       }
     }
     setMenuOpen(null);
@@ -234,9 +237,10 @@ export function CopilotPage() {
         if (activeConversation?._id === id) {
           handleNewChat();
         }
+        toast.success("Conversation deleted.");
         loadConversations();
       } catch (err) {
-        alert("Failed to delete conversation.");
+        toast.error("Failed to delete conversation.");
       }
     }
     setMenuOpen(null);
@@ -251,9 +255,9 @@ export function CopilotPage() {
       if (!shareToken) throw new Error("No share token received");
       const url = `${window.location.origin}/copilot/shared/${shareToken}`;
       navigator.clipboard.writeText(url);
-      alert("Share link copied to clipboard!\n\n" + url);
+      toast.success("Share link copied to clipboard!");
     } catch (err) {
-      alert("Failed to generate share link.");
+      toast.error("Failed to generate share link.");
     }
     setMenuOpen(null);
   };

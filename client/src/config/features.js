@@ -78,10 +78,10 @@ export const FEATURES = [
     status: FEATURE_STATUS.WORKING 
   },
   { 
-    id: "peer-interview",
-    to: "/peer-interview", 
-    label: "Peer Interview", 
-    icon: Users,
+    id: "tech-discussion",
+    to: "/tech-discussion", 
+    label: "Tech Discussion Room", 
+    icon: Code2,
     status: FEATURE_STATUS.WORKING 
   },
   { 

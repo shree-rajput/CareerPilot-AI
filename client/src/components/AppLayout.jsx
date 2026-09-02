@@ -89,6 +89,11 @@ export function AppLayout() {
     }
   };
 
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
   const SidebarContent = () => (
     <>
       <div className="flex items-center gap-3 px-6 py-6 mb-4">

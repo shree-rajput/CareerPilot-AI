@@ -18,6 +18,7 @@ import {
 import { interviewApi } from "../api/interview.js";
 import { Card, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { toast } from "../context/ToastContext";
 import { useSpeech } from "../hooks/useSpeech.js";
 import AIAvatar from "../components/interview/AIAvatar.jsx";
 import CodeEditor from "../components/interview/CodeEditor/CodeEditor.jsx";
@@ -310,9 +311,9 @@ export function InterviewSessionPage() {
       console.error("[Interview] Submit answer error:", err);
       const status = err?.response?.status;
       if (status === 429) {
-        alert("Daily limit reached. Please try again tomorrow.");
+        toast.error("Daily limit reached. Please try again tomorrow.");
       } else {
-        alert("Failed to process answer. Please try again.");
+        toast.error("Failed to process answer. Please try again.");
       }
       setInterviewPhase("questioning");
       setProcessingStep("");
@@ -380,7 +381,7 @@ export function InterviewSessionPage() {
 
     } catch (err) {
       console.error("[Interview] Submit code error:", err);
-      alert("Failed to submit code. Please try again.");
+      toast.error("Failed to submit code. Please try again.");
       setInterviewPhase("questioning");
       setProcessingStep("");
     }
@@ -404,7 +405,7 @@ export function InterviewSessionPage() {
         navigate(`/interview/${sessionId}/report`);
       } catch (err) {
         console.error(err);
-        alert("Failed to complete session.");
+        toast.error("Failed to complete session.");
       }
     }
   };

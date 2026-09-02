@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Plus, Search, FolderGit2, Code2, BrainCircuit, CheckCircle2, Wand2 } from "lucide-react";
 import { projectApi } from "../api/career";
+import { toast } from "../context/ToastContext";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent } from "../components/ui/Card";
@@ -49,11 +50,12 @@ export function ProjectsPage() {
       };
       
       await projectApi.createProject(dataToSubmit);
+      toast.success("Project saved successfully!");
       setShowAdd(false);
       setForm({ name: "", description: "", role: "", architecture: "", technologies: "", achievements: "", complexity: "medium" });
       loadProjects();
     } catch (err) {
-      alert("Failed to save project.");
+      toast.error("Failed to save project.");
     }
   }
 
@@ -61,9 +63,10 @@ export function ProjectsPage() {
     setGeneratingId(id);
     try {
       await projectApi.generateInterviewKit(id);
+      toast.success("Interview kit generated!");
       await loadProjects(); // Reload to get the new kit
     } catch (err) {
-      alert("Failed to generate interview kit.");
+      toast.error("Failed to generate interview kit.");
     } finally {
       setGeneratingId(null);
     }

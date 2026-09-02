@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { matchApi } from "../api/features";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
+import { toast } from "../context/ToastContext";
 
 export function MatchResultPage() {
   const { id } = useParams();
@@ -14,7 +15,7 @@ export function MatchResultPage() {
   useEffect(() => {
     matchApi.getOne(id)
       .then(data => setMatch(data.matchResult))
-      .catch(() => alert("Failed to load match result"))
+      .catch(() => toast.error("Failed to load match result"))
       .finally(() => setLoading(false));
   }, [id]);
 

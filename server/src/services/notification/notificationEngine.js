@@ -87,11 +87,12 @@ export async function runNotificationEngine() {
 
     // 2. Incomplete Preparation Plan Reminders
     const incompletePlans = await PreparationPlan.find({
-      "dailyTasks.completed": false
+      isActive: true
     }).lean();
 
     for (const plan of incompletePlans) {
-      const pendingCount = plan.dailyTasks.filter((t) => !t.completed).length;
+      const items = plan.actionItems || [];
+      const pendingCount = items.filter((t) => t.status === "pending" || t.completed === false).length;
       if (pendingCount > 0) {
         await createNotification({
           userId: plan.userId,
@@ -109,12 +110,12 @@ export async function runNotificationEngine() {
 
     // 3. Significant Skill Gap Reminders from Job Matches
     const highMatches = await MatchResult.find({
-      score: { $gte: 70 },
-      "gapAnalysis.missingSkills": { $exists: true, $not: { $size: 0 } }
+      overallScore: { $gte: 70 }
     }).sort({ createdAt: -1 }).limit(20).lean();
 
     for (const match of highMatches) {
-      const topGap = match.gapAnalysis?.missingSkills?.[0];
+      const missing = match.missingSkills || match.criticalGaps || [];
+      const topGap = missing[0];
       if (topGap) {
         await createNotification({
           userId: match.userId,
@@ -122,7 +123,7 @@ export async function runNotificationEngine() {
           title: "Target Skill Gap Identified",
           message: `Your match for target role indicates a gap in "${topGap}". Consider adding a targeted practice module.`,
           entityType: "skill",
-          entityId: match.jobId ? match.jobId.toString() : "",
+          entityId: match.applicationId ? match.applicationId.toString() : "",
           actionUrl: "/preparation",
           idempotencyKey: `skill_gap_${match.userId}_${topGap}_${dateKey}`
         });

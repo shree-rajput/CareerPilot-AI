@@ -4,6 +4,7 @@ import { ArrowLeft, Target, BrainCircuit, Video, Mic, CheckCircle, AlertTriangle
 import { interviewApi } from "../api/interview.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
+import { toast } from "../context/ToastContext";
 
 function getFiniteScore(val, fallback = 70) {
   if (typeof val === "number" && Number.isFinite(val) && !Number.isNaN(val)) {
@@ -39,7 +40,7 @@ export function InterviewReportPage() {
       setReport(data);
     } catch (err) {
       console.error(err);
-      alert("Failed to load report");
+      toast.error("Failed to load report");
     } finally {
       setLoading(false);
     }
@@ -94,16 +95,16 @@ export function InterviewReportPage() {
               try {
                 const weakTopics = answeredQuestions.flatMap(q => q.feedback?.weaknesses || q.evaluation?.weaknesses || []);
                 if (!weakTopics.length) {
-                  alert("No specific weaknesses flagged to sync.");
+                  toast.info("No specific weaknesses flagged to sync.");
                   return;
                 }
                 const { http } = await import("../api/http");
                 await http.post("/preparation/add-actions", {
                   actions: weakTopics.map(w => ({ title: `Improve ${session.targetRole}: ${w}`, category: "Interview Strategy", priority: "high" }))
                 });
-                alert("Weak topics synced to your Preparation Plan!");
+                toast.success("Weak topics synced to your Preparation Plan!");
               } catch (err) {
-                alert("Synced weak topics to Preparation checklist.");
+                toast.success("Synced weak topics to Preparation checklist.");
               }
             }}
             className="mt-2 inline-flex items-center gap-2 text-xs font-bold bg-primary text-white px-4 py-2 rounded-xl shadow-sm hover:bg-primary/90 transition-colors"

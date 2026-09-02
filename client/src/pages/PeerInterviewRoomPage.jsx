@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { LiveKitRoom, RoomAudioRenderer, GridLayout, ParticipantTile, TrackToggle, useConnectionState, ConnectionState, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import "@livekit/components-styles";
+import { toast } from "../context/ToastContext";
 import CodeEditor from "../components/interview/CodeEditor/CodeEditor.jsx";
 import Whiteboard from "../components/interview/Whiteboard.jsx";
 import PreJoinLobby from "../components/interview/PreJoinLobby.jsx";
@@ -417,7 +418,7 @@ export default function PeerInterviewRoomPage() {
       setExecutionResult(data.data || data);
     } catch (err) {
       console.error("Run error:", err);
-      alert(err.response?.data?.message || "Failed to execute code");
+      toast.error(err.response?.data?.message || "Failed to execute code");
     } finally {
       setIsRunning(false);
     }
@@ -429,10 +430,14 @@ export default function PeerInterviewRoomPage() {
       const { executeCode } = await import("../api/peerInterview.js");
       const data = await executeCode(roomId, payload.questionId, payload.language, payload.code);
       setExecutionResult(data.data || data);
-      alert(data.data?.passedTests === data.data?.totalTests ? "Submission Successful! All test cases passed." : "Submission processed.");
+      if (data.data?.passedTests === data.data?.totalTests) {
+        toast.success("Submission Successful! All test cases passed.");
+      } else {
+        toast.info("Submission processed.");
+      }
     } catch (err) {
       console.error("Submit error:", err);
-      alert(err.response?.data?.message || "Failed to submit code");
+      toast.error(err.response?.data?.message || "Failed to submit code");
     } finally {
       setIsSubmitting(false);
     }
@@ -449,7 +454,7 @@ export default function PeerInterviewRoomPage() {
       navigate(`/peer-interview/${roomId}/report`);
     } catch (err) {
       console.error("Failed to end interview:", err);
-      alert("Failed to end interview.");
+      toast.error("Failed to end interview.");
       setLoading(false);
     }
   };
