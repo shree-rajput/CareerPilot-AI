@@ -114,10 +114,74 @@ export async function updateJob(jobId, updateData) {
 }
 
 /**
- * Soft delete or deactivate a job.
+ * Soft delete or remove a job opportunity for a specific user.
+ * Preserves Application history if the candidate has applied/interviewed.
  */
-export async function deactivateJob(jobId) {
-  return await updateJob(jobId, { isActive: false });
+export async function deleteUserJobOpportunity(jobId, userId) {
+  const { Application } = await import("../../models/Application.js");
+  const { AppError } = await import("../../utils/errors.js");
+
+  const job = await Job.findById(jobId);
+  if (!job) {
+    throw new AppError("Job not found.", 404, "JOB_NOT_FOUND");
+  }
+
+  const userIdStr = String(userId);
+  const isSavedByUser = job.savedBy.some(id => String(id) === userIdStr);
+  const application = await Application.findOne({ userId, jobId });
+
+  if (!isSavedByUser && !application) {
+    throw new AppError("Access denied: You do not have permission to delete this job.", 403, "FORBIDDEN");
+  }
+
+  // Determine if meaningful application activity exists
+  const hasActiveApplication = application && (
+    !["saved", "discovered", "draft"].includes(application.status) ||
+    (application.statusHistory && application.statusHistory.length > 1)
+  );
+
+  if (hasActiveApplication) {
+    // Preserve Application history while removing from Job Board / Saved list
+    job.savedBy = job.savedBy.filter(id => String(id) !== userIdStr);
+    await job.save();
+
+    return {
+      success: true,
+      message: "Opportunity removed from Job Board. Application history preserved.",
+      preservedApplication: true,
+      jobId: job._id
+    };
+  }
+
+  // Safe delete: Clean up draft application & remove from savedBy
+  if (application) {
+    await Application.deleteOne({ _id: application._id });
+  }
+
+  job.savedBy = job.savedBy.filter(id => String(id) !== userIdStr);
+  if (job.savedBy.length === 0) {
+    job.isActive = false;
+  }
+  await job.save();
+
+  return {
+    success: true,
+    message: "Job opportunity deleted successfully.",
+    preservedApplication: false,
+    jobId: job._id
+  };
+}
+
+/**
+ * Legacy deactivateJob wrapper.
+ */
+export async function deactivateJob(jobId, userId) {
+  if (userId) {
+    return await deleteUserJobOpportunity(jobId, userId);
+  }
+  const job = await Job.findByIdAndUpdate(jobId, { isActive: false }, { new: true });
+  if (!job) throw new Error("Job not found.");
+  return job;
 }
 
 /**
@@ -149,43 +213,54 @@ export async function toggleSaveJob(jobId, userId) {
  */
 export async function matchJobToProfile(jobId, userId) {
   const { Resume } = await import("../../models/Resume.js");
+  const { User } = await import("../../models/User.js");
+  const { UserSkill } = await import("../../models/UserSkill.js");
+  const { Project } = await import("../../models/Project.js");
   const { runMatchPipeline } = await import("../matching/matchEngine.js");
+  const { AppError } = await import("../../utils/errors.js");
 
-  // Get latest resume for user
-  const resume = await Resume.findOne({ userId, isActive: true })
-    .sort({ createdAt: -1 })
-    .lean();
+  const [user, resume, userSkills, projects, job] = await Promise.all([
+    User.findById(userId).lean(),
+    Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }).lean(),
+    UserSkill.find({ userId }).lean(),
+    Project.find({ userId }).lean(),
+    Job.findById(jobId).lean()
+  ]);
 
-  if (!resume) {
-    return {
-      hasResume: false,
-      overallScore: 0,
-      categoryScores: {},
-      matchedSkills: [],
-      partialSkills: [],
-      missingSkills: [],
-      explanation: "No resume found. Upload a resume to see your match score."
-    };
+  if (!job) throw new AppError("Job not found.", 404, "JOB_NOT_FOUND");
+
+  // Validate JD description length
+  if (!job.description || job.description.trim().length < 20) {
+    throw new AppError("There's not enough job description data to generate a reliable analysis.", 400, "JOB_DATA_INSUFFICIENT");
   }
 
-  const job = await Job.findById(jobId).lean();
-  if (!job) throw new Error("Job not found.");
+  const candidateContext = {
+    user,
+    userSkills,
+    projects,
+    careerProfile: {
+      targetRoles: user?.targetRoles || [],
+      experienceLevel: user?.experienceLevel || "student"
+    }
+  };
 
-  // Build a minimal extractedJd structure from job's stored skills
+  // Build structured extractedJd from stored Job fields
   const extractedJd = {
-    requiredSkills: job.requiredSkills.map(s => s.skillName),
-    preferredSkills: job.preferredSkills.map(s => s.skillName),
-    responsibilities: [],
-    educationRequirement: "",
+    title: job.title || job.role || "",
+    company: job.company || "",
+    requiredSkills: (job.requiredSkills || []).map(s => typeof s === "string" ? s : s.skillName || s.name || "").filter(Boolean),
+    preferredSkills: (job.preferredSkills || []).map(s => typeof s === "string" ? s : s.skillName || s.name || "").filter(Boolean),
+    responsibilities: job.description ? [job.description.substring(0, 300)] : [],
+    educationRequirement: job.experienceLevel || "",
     experienceYears: null
   };
 
-  const matchResult = await runMatchPipeline(resume.structuredData, extractedJd);
+  const matchResult = await runMatchPipeline(resume?.structuredData || {}, extractedJd, candidateContext);
 
   return {
-    hasResume: true,
-    resumeId: resume._id,
-    resumeName: resume.name,
+    hasResume: !!resume,
+    resumeId: resume?._id || null,
+    resumeName: resume?.name || "Career Profile",
     ...matchResult
   };
 }

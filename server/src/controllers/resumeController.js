@@ -195,14 +195,14 @@ import { extractEvidenceFromResume } from "../services/resume/evidenceService.js
 
 export const uploadResume = asyncHandler(async (req, res) => {
   // ============================================================
-  // 1. CHECK FILE
+  // 1. CHECK FILE & BUFFER (Prevent Empty File Uploads)
   // ============================================================
 
-  if (!req.file) {
+  if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
     throw new AppError(
-      "No file uploaded. Please attach a PDF, DOCX, or TXT file.",
+      "Uploaded file is empty. Please attach a valid PDF, DOCX, or TXT file.",
       400,
-      "NO_FILE",
+      "RESUME_FILE_EMPTY",
     );
   }
 
@@ -214,7 +214,7 @@ export const uploadResume = asyncHandler(async (req, res) => {
 
   const maxBytes = env.maxFileSizeMb * 1024 * 1024;
 
-  if (size > maxBytes) {
+  if (size > maxBytes || buffer.length > maxBytes) {
     throw new AppError(
       `File too large. Maximum allowed size is ${env.maxFileSizeMb} MB.`,
       413,
@@ -223,7 +223,7 @@ export const uploadResume = asyncHandler(async (req, res) => {
   }
 
   // ============================================================
-  // 3. DETECT FILE TYPE
+  // 3. DETECT FILE TYPE & MIME
   // ============================================================
 
   const filename = originalname.toLowerCase();
@@ -245,17 +245,57 @@ export const uploadResume = asyncHandler(async (req, res) => {
     );
   }
 
-  // ============================================================
-  // 4. DETERMINE NORMALIZED FILE TYPE
-  // ============================================================
-
   const fileType = isPdf ? "pdf" : isDocx ? "docx" : "txt";
 
   // ============================================================
-  // 5. EXTRACT TEXT
+  // 4. STORAGE FIRST — UPLOAD ORIGINAL FILE TO CLOUDINARY
   // ============================================================
 
-  let rawText;
+  let cloudinaryResult = null;
+  const warnings = [];
+
+  if (env.cloudinaryCloudName) {
+    try {
+      cloudinaryResult = await uploadBufferToCloudinary(
+        buffer,
+        "resumes",
+        "raw",
+        { filename_override: originalname }
+      );
+
+      if (!cloudinaryResult || !cloudinaryResult.secure_url || cloudinaryResult.bytes === 0) {
+        throw new Error("Cloudinary reported zero bytes or invalid response.");
+      }
+
+      console.log("CLOUDINARY UPLOAD DIAGNOSTICS:", {
+        filename: originalname,
+        mimeType: mimetype,
+        bufferBytes: buffer.length,
+        cloudinaryPublicId: cloudinaryResult.public_id,
+        cloudinaryResourceType: cloudinaryResult.resource_type,
+        cloudinaryBytes: cloudinaryResult.bytes,
+        cloudinaryFormat: cloudinaryResult.format
+      });
+    } catch (error) {
+      console.error("[ResumeController] Cloudinary upload error:", error.message);
+      throw new AppError(
+        "Failed to store original file in Cloudinary storage. Upload aborted.",
+        500,
+        "CLOUDINARY_UPLOAD_FAILED",
+      );
+    }
+  } else {
+    warnings.push(
+      "Cloudinary is not configured. Original binary file was not stored in Cloudinary.",
+    );
+  }
+
+  // ============================================================
+  // 5. PARSING SECOND — SEPARATED FROM STORAGE
+  // ============================================================
+
+  let rawText = "";
+  let parsingStatus = "completed";
 
   try {
     if (isPdf) {
@@ -265,105 +305,57 @@ export const uploadResume = asyncHandler(async (req, res) => {
     } else {
       rawText = extractTxtText(buffer);
     }
-  } catch (error) {
-    // Parsers already throw AppError with meaningful codes.
-    throw error;
-  }
 
-  // ============================================================
-  // 6. FINAL TEXT VALIDATION
-  // ============================================================
-
-  if (!rawText || rawText.trim().length < 50) {
-    throw new AppError(
-      "Could not extract enough readable text from this resume.",
-      422,
-      "INSUFFICIENT_RESUME_TEXT",
-    );
-  }
-
-  rawText = rawText.trim();
-
-  // ============================================================
-  // 7. UPLOAD ORIGINAL FILE TO CLOUDINARY
-  // ============================================================
-
-  let cloudinaryResult = null;
-
-  const warnings = [];
-
-  if (env.cloudinaryCloudName) {
-    try {
-      /*
-       * Use "raw" because resumes are documents rather than
-       * images that need Cloudinary image transformations.
-       */
-      cloudinaryResult = await uploadBufferToCloudinary(
-        buffer,
-        "resumes",
-        "raw",
-      );
-    } catch (error) {
-      console.error("Cloudinary upload error:", error.message);
-
-      warnings.push(
-        "Resume text was extracted, but the original file could not be stored in Cloudinary.",
-      );
+    if (!rawText || rawText.trim().length < 20) {
+      throw new Error("Could not extract sufficient text.");
     }
-  } else {
+    rawText = rawText.trim();
+  } catch (error) {
+    console.warn("[ResumeController] Text extraction warning:", error.message);
+    parsingStatus = "failed";
     warnings.push(
-      "Cloudinary is not configured, so the original file was not stored. Parsed resume data was saved.",
+      "Resume uploaded and stored successfully, but CareerPilot could not extract text from this document. You can still download your original file.",
     );
   }
 
   // ============================================================
-  // 8. LOCAL STRUCTURED DATA FALLBACK
+  // 6. STRUCTURED DATA (IF TEXT AVAILABLE)
   // ============================================================
 
-  let structuredData = structureResumeLocally(rawText);
+  let structuredData = rawText ? structureResumeLocally(rawText) : null;
   let aiStructured = false;
 
-  // ============================================================
-  // 9. CHECK AI USAGE LIMIT
-  // ============================================================
+  if (rawText) {
+    const { allowed, used, limit } = await checkAiLimit(
+      req.user._id,
+      "resume_analysis",
+      env.aiLimitResumeAnalysis,
+    );
 
-  const { allowed, used, limit } = await checkAiLimit(
-    req.user._id,
-    "resume_analysis",
-    env.aiLimitResumeAnalysis,
-  );
-
-  // ============================================================
-  // 10. AI STRUCTURED EXTRACTION
-  // ============================================================
-
-  try {
-    if (allowed) {
-      const aiResult = await structureResume(rawText);
-
-      structuredData = {
-        ...aiResult,
-        parserSource: "ai",
-      };
-
-      aiStructured = true;
-
-      await incrementAiUsage(req.user._id, "resume_analysis");
-    } else {
+    try {
+      if (allowed) {
+        const aiResult = await structureResume(rawText);
+        structuredData = {
+          ...aiResult,
+          parserSource: "ai",
+        };
+        aiStructured = true;
+        await incrementAiUsage(req.user._id, "resume_analysis");
+      } else {
+        warnings.push(
+          `Daily resume AI analysis limit reached (${used}/${limit}). Saved local structured data instead.`,
+        );
+      }
+    } catch (error) {
+      console.error("Resume structuring AI error:", error.message);
       warnings.push(
-        `Daily resume AI analysis limit reached (${used}/${limit}). Saved local structured data instead.`,
+        "AI extraction failed. Saved local structured data extracted directly from resume text.",
       );
     }
-  } catch (error) {
-    console.error("Resume structuring AI error:", error.message);
-
-    warnings.push(
-      "AI extraction failed. Saved local structured data extracted directly from the resume text.",
-    );
   }
 
   // ============================================================
-  // 11. BUILD RESUME NAME
+  // 7. BUILD NAME & VERSION
   // ============================================================
 
   const baseName = originalname
@@ -372,109 +364,73 @@ export const uploadResume = asyncHandler(async (req, res) => {
     .trim();
 
   const label = req.body.label?.trim() || "";
-
   const parentVersionId = req.body.parentVersionId || null;
 
-  // ============================================================
-  // 12. DETERMINE VERSION
-  // ============================================================
-
   let version = 1;
-
   if (parentVersionId) {
     const parent = await Resume.findOne({
       _id: parentVersionId,
       userId: req.user._id,
     });
-
-    if (parent) {
-      version = parent.version + 1;
-    }
+    if (parent) version = parent.version + 1;
   }
 
   // ============================================================
-  // 13. SAVE RESUME TO DATABASE
+  // 8. SAVE RESUME TO DATABASE
   // ============================================================
 
   const resume = await Resume.create({
     userId: req.user._id,
-
     name: baseName || "My Resume",
-
     label,
-
     originalFilename: originalname,
-
     fileType,
-
+    mimeType: mimetype || (isPdf ? "application/pdf" : isDocx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "text/plain"),
+    fileSize: size || buffer.length,
     cloudinaryUrl: cloudinaryResult?.secure_url || "",
-
     cloudinaryPublicId: cloudinaryResult?.public_id || "",
-
+    cloudinaryAssetId: cloudinaryResult?.asset_id || "",
+    cloudinaryResourceType: cloudinaryResult?.resource_type || "raw",
+    cloudinaryFormat: cloudinaryResult?.format || "",
+    parsingStatus,
     rawText,
-
     structuredData,
-
     version,
-
     parentVersionId: parentVersionId || null,
   });
 
-  // ============================================================
-  // 13.5 EXTRACT EVIDENCE
-  // ============================================================
-  
+  // Extract evidence to candidate profile if structured data exists
   if (structuredData) {
     try {
       await extractEvidenceFromResume(req.user._id, structuredData, resume.name);
     } catch (err) {
       console.error("Failed to extract evidence from resume:", err);
-      warnings.push("Resume was parsed, but there was an error extracting career evidence to your profile.");
+      warnings.push("Resume was parsed, but there was an error syncing evidence to profile.");
     }
   }
 
-  // ============================================================
-  // 14. RESPONSE
-  // ============================================================
-
   return res.status(201).json({
-    message: aiStructured
-      ? "Resume uploaded, parsed, and structured successfully."
-      : "Resume uploaded and parsed. Saved local structured data because AI structuring was unavailable.",
-
+    message: parsingStatus === "completed"
+      ? "Original resume stored and parsed successfully."
+      : "Original resume stored safely, but text extraction failed. You can still download your file.",
     resume: {
       _id: resume._id,
-
       name: resume.name,
-
       label: resume.label,
-
       originalFilename: resume.originalFilename,
-
       fileType: resume.fileType,
-
+      fileSize: resume.fileSize,
       version: resume.version,
-
       cloudinaryUrl: resume.cloudinaryUrl,
-
+      parsingStatus: resume.parsingStatus,
       hasRawText: Boolean(resume.rawText),
-
       hasStructuredData: Boolean(resume.structuredData),
-
-      parserSource: structuredData?.parserSource || "local",
-
       createdAt: resume.createdAt,
     },
-
     status: {
-      textExtracted: Boolean(rawText),
-
+      textExtracted: parsingStatus === "completed",
       originalStored: Boolean(cloudinaryResult),
-
       aiStructured,
-
-      parserSource: structuredData?.parserSource || "local",
-
       warnings,
     },
   });
@@ -749,9 +705,8 @@ export const diffResumeVersions = asyncHandler(async (req, res) => {
 /**
  * GET /api/resume/:id/download
  * Download the ORIGINAL uploaded resume file.
- * - If stored in Cloudinary: redirect to the original file URL.
- * - If no Cloudinary URL (local only): serve rawText as plain text.
- * NEVER serves structuredData/JSON as a resume file.
+ * Authenticated & authorized access only (resume.userId === req.user._id).
+ * Preserves original file content, extension, and filename.
  */
 export const downloadResume = asyncHandler(async (req, res) => {
   const resume = await Resume.findOne({
@@ -763,38 +718,65 @@ export const downloadResume = asyncHandler(async (req, res) => {
     throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
   }
 
-  // PRIMARY PATH: If Cloudinary URL exists, redirect to the original stored file
-  if (resume.cloudinaryUrl) {
-    // Use attachment_url pattern to force download with correct filename
-    const originalFilename = resume.originalFilename || `${(resume.name || "Resume").replace(/\s+/g, "_")}.${resume.fileType || "pdf"}`;
-    // Cloudinary supports fl_attachment for forced download
-    const downloadUrl = resume.cloudinaryUrl.includes('/upload/')
-      ? resume.cloudinaryUrl.replace('/upload/', `/upload/fl_attachment:${encodeURIComponent(originalFilename)}/`)
-      : resume.cloudinaryUrl;
-    return res.redirect(downloadUrl);
+  const extension = resume.fileType || (resume.originalFilename?.split(".").pop().toLowerCase()) || "pdf";
+  const filename = resume.originalFilename || `${(resume.name || "Resume").replace(/\s+/g, "_")}.${extension}`;
+
+  let mimeType = resume.mimeType;
+  if (!mimeType) {
+    if (extension === "docx") {
+      mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    } else if (extension === "txt") {
+      mimeType = "text/plain; charset=utf-8";
+    } else {
+      mimeType = "application/pdf";
+    }
   }
 
-  // FALLBACK PATH: No Cloudinary URL — serve rawText if available.
-  // NEVER serve structuredData (JSON) as a resume file.
+  // 1. If stored in Cloudinary, fetch original file buffer and stream directly
+  if (resume.cloudinaryUrl) {
+    try {
+      const response = await fetch(resume.cloudinaryUrl);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        console.log("DOWNLOAD DIAGNOSTICS:", {
+          resumeId: resume._id,
+          userId: req.user._id,
+          cloudinaryPublicId: resume.cloudinaryPublicId,
+          resourceType: resume.cloudinaryResourceType || "raw",
+          retrievedBytes: buffer.length,
+          contentType: mimeType
+        });
+
+        res.setHeader("Content-Type", mimeType);
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return res.send(buffer);
+      }
+    } catch (err) {
+      console.error("[ResumeController] Cloudinary download fetch failed, falling back to rawText:", err?.message || err);
+    }
+  }
+
+  // 2. Fallback: serve rawText as plain text download if original file binary unavailable
   if (!resume.rawText || resume.rawText.trim().length === 0) {
     throw new AppError(
-      "Original resume file is not available. Please re-upload your resume.",
+      "Original resume file is currently unavailable.",
       404,
       "RESUME_FILE_NOT_AVAILABLE"
     );
   }
 
-  const filename = `${(resume.name || "Resume").replace(/\s+/g, "_")}_v${resume.version || 1}.txt`;
+  const fallbackFilename = filename.endsWith(".txt") ? filename : `${filename.replace(/\.[^/.]+$/, "")}.txt`;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${fallbackFilename}"`);
   return res.send(resume.rawText);
 });
 
 /**
  * GET /api/resume/:id/view
- * View the original resume in-browser (not a download).
- * Returns a redirect to Cloudinary for PDF/DOCX,
- * or a text/plain response for rawText.
+ * View the original resume in-browser (inline stream).
+ * Authenticated & authorized access only (resume.userId === req.user._id).
  */
 export const viewResume = asyncHandler(async (req, res) => {
   const resume = await Resume.findOne({
@@ -806,12 +788,34 @@ export const viewResume = asyncHandler(async (req, res) => {
     throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
   }
 
-  // If Cloudinary URL exists, redirect for inline viewing
-  if (resume.cloudinaryUrl) {
-    return res.redirect(resume.cloudinaryUrl);
+  const extension = resume.fileType || (resume.originalFilename?.split(".").pop().toLowerCase()) || "pdf";
+  const filename = resume.originalFilename || `${(resume.name || "Resume").replace(/\s+/g, "_")}.${extension}`;
+
+  let mimeType = "application/pdf";
+  if (extension === "docx") {
+    mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  } else if (extension === "txt") {
+    mimeType = "text/plain; charset=utf-8";
   }
 
-  // Fallback: serve rawText inline (no download prompt)
+  // 1. If stored in Cloudinary, fetch original file buffer and stream inline
+  if (resume.cloudinaryUrl) {
+    try {
+      const response = await fetch(resume.cloudinaryUrl);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        res.setHeader("Content-Type", mimeType);
+        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+        return res.send(buffer);
+      }
+    } catch (err) {
+      console.error("[ResumeController] Cloudinary inline view fetch failed, falling back to rawText:", err?.message || err);
+    }
+  }
+
+  // 2. Fallback: serve rawText inline as text/plain
   if (!resume.rawText || resume.rawText.trim().length === 0) {
     throw new AppError(
       "Original resume file is not available.",
@@ -824,3 +828,174 @@ export const viewResume = asyncHandler(async (req, res) => {
   res.setHeader("Content-Disposition", "inline");
   return res.send(resume.rawText);
 });
+
+/**
+ * POST /api/resume/:id/parseability-check
+ * Run real PDF export -> text-extraction validation checklist.
+ * Passes ownership check (userId: req.user._id).
+ */
+export const runParseabilityCheck = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  });
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  const { validateResumeParseability } = await import("../services/parseabilityService.js");
+  const report = await validateResumeParseability(resume.structuredData || {}, resume.templateId || "classic");
+
+  resume.parseabilityReport = report;
+  await resume.save();
+
+  return res.json({
+    message: "Parseability verification complete.",
+    parseabilityReport: report,
+  });
+});
+
+/**
+ * GET /api/resume/:id/export/pdf
+ * Export structured resume as ATS-friendly PDF file.
+ */
+export const exportPdf = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  }).lean();
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  const { generatePdfBuffer } = await import("../services/pdfGeneratorService.js");
+  const buffer = await generatePdfBuffer(resume.structuredData || {}, resume.templateId || "classic");
+
+  const filename = `${(resume.name || "Resume").replace(/\s+/g, "_")}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.send(buffer);
+});
+
+/**
+ * GET /api/resume/:id/export/docx
+ * Export structured resume as DOCX file.
+ */
+export const exportDocx = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  }).lean();
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  const { generateDocxBuffer } = await import("../services/docxGeneratorService.js");
+  const buffer = await generateDocxBuffer(resume.structuredData || {});
+
+  const filename = `${(resume.name || "Resume").replace(/\s+/g, "_")}.docx`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.send(buffer);
+});
+
+/**
+ * GET /api/resume/:id/version-tree
+ * Retrieve lineage tree nodes for a given resume root family.
+ */
+export const getVersionTree = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  }).lean();
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  const rootId = resume.versionTreeRootId || resume._id;
+
+  const allNodes = await Resume.find({
+    userId: req.user._id,
+    $or: [{ _id: rootId }, { versionTreeRootId: rootId }, { parentVersionId: rootId }],
+  })
+    .select("_id name version parentVersionId versionTreeRootId createdFrom createdAt label templateId")
+    .sort({ version: 1 })
+    .lean();
+
+  // Helper to build nested tree
+  const nodeMap = {};
+  allNodes.forEach((node) => {
+    nodeMap[node._id.toString()] = { ...node, children: [] };
+  });
+
+  let tree = null;
+  allNodes.forEach((node) => {
+    const nodeObj = nodeMap[node._id.toString()];
+    if (node.parentVersionId && nodeMap[node.parentVersionId.toString()]) {
+      nodeMap[node.parentVersionId.toString()].children.push(nodeObj);
+    } else {
+      tree = nodeObj;
+    }
+  });
+
+  return res.json({
+    rootId,
+    currentId: resume._id,
+    nodes: allNodes,
+    tree,
+  });
+});
+
+/**
+ * POST /api/resume/:id/suggestions
+ * Generates actionable, evidence-grounded AI Resume Suggestions without modifying the user's resume.
+ */
+export const getResumeSuggestions = asyncHandler(async (req, res) => {
+  const resume = await Resume.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  });
+
+  if (!resume) {
+    throw new AppError("Resume not found.", 404, "RESUME_NOT_FOUND");
+  }
+
+  const { jobId, jobDescription } = req.body || {};
+
+  let job = null;
+  if (jobId) {
+    const { Job } = await import("../models/Job.js");
+    job = await Job.findOne({ _id: jobId, userId: req.user._id }).lean();
+  }
+
+  if (!job && jobDescription) {
+    job = {
+      title: "Target Role",
+      company: "Target Company",
+      description: jobDescription,
+    };
+  }
+
+  if (!job) {
+    job = {
+      title: "Target Role",
+      company: "Target Company",
+      description: "General software engineering role requiring strong technical fundamentals, system design, and problem solving skills.",
+    };
+  }
+
+  const { resumeSuggestionService } = await import("../services/resume/resumeSuggestionService.js");
+  const suggestionsResult = await resumeSuggestionService.generateSuggestions({
+    userId: req.user._id,
+    resume,
+    job,
+  });
+
+  return res.json(suggestionsResult);
+});
+
+
+

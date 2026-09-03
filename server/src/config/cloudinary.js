@@ -1,33 +1,57 @@
 import { v2 as cloudinary } from "cloudinary";
 import { env } from "./env.js";
 
-// Configure cloudinary only if variables are present, else it will throw later if used
-if (env.cloudinaryCloudName && env.cloudinaryApiKey && env.cloudinaryApiSecret) {
+const isCloudinaryConfigured = Boolean(
+  env.cloudinaryCloudName && env.cloudinaryApiKey && env.cloudinaryApiSecret
+);
+
+if (isCloudinaryConfigured) {
   cloudinary.config({
     cloud_name: env.cloudinaryCloudName,
     api_key: env.cloudinaryApiKey,
-    api_secret: env.cloudinaryApiSecret
+    api_secret: env.cloudinaryApiSecret,
   });
 }
+
+// Diagnostic startup log (safe: never logs secret value)
+console.log("CLOUDINARY CONFIGURATION:");
+console.log(`  ✓ Cloud Name: ${env.cloudinaryCloudName ? "configured" : "MISSING"}`);
+console.log(`  ✓ API Key: ${env.cloudinaryApiKey ? "configured" : "MISSING"}`);
+console.log(`  ✓ API Secret: ${env.cloudinaryApiSecret ? "configured" : "MISSING"}`);
 
 /**
  * Uploads a buffer to Cloudinary
  * @param {Buffer} buffer - The file buffer
  * @param {string} folder - The destination folder in Cloudinary
  * @param {string} resourceType - 'auto', 'raw', 'image', 'video'
+ * @param {object} options - Additional options (e.g. filename_override, format)
  * @returns {Promise<object>} - Cloudinary upload result
  */
-export const uploadBufferToCloudinary = (buffer, folder = "resumes", resourceType = "auto") => {
+export const uploadBufferToCloudinary = (
+  buffer,
+  folder = "resumes",
+  resourceType = "raw",
+  options = {}
+) => {
   return new Promise((resolve, reject) => {
     if (!env.cloudinaryCloudName) {
       return reject(new Error("Cloudinary configuration is missing."));
     }
 
+    if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+      return reject(new Error("Cannot upload empty or invalid buffer to Cloudinary."));
+    }
+
+    const uploadOptions = {
+      folder,
+      resource_type: resourceType,
+      use_filename: true,
+      unique_filename: true,
+      ...options,
+    };
+
     const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: folder,
-        resource_type: resourceType,
-      },
+      uploadOptions,
       (error, result) => {
         if (error) {
           reject(error);

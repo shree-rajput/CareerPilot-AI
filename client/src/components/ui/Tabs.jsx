@@ -10,19 +10,19 @@ export function Tabs({ tabs, defaultTab, onChange, className = '' }) {
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="flex space-x-1 bg-bg-secondary p-1 rounded-xl border border-border">
+      <div className="flex space-x-1 bg-bg-secondary p-1 rounded-lg border border-border shrink-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 text-sm font-bold rounded-lg transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-md transition-all ${
               activeTab === tab.id
-                ? 'bg-white text-text shadow-sm'
-                : 'text-text-secondary hover:text-text hover:bg-white/50'
+                ? 'bg-surface text-text shadow-2xs border border-border/40'
+                : 'text-text-secondary hover:text-text hover:bg-surface/50'
             }`}
           >
-            {tab.icon && <tab.icon size={16} />}
-            {tab.label}
+            {tab.icon && <tab.icon size={14} />}
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>

@@ -67,3 +67,13 @@ export const realityCheck = async (req, res, next) => {
     next(error);
   }
 };
+
+export const syncProjects = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const synced = await projectService.syncProjectsFromResume(userId);
+    res.status(200).json({ status: "success", data: synced });
+  } catch (error) {
+    next(error);
+  }
+};

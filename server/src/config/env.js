@@ -1,6 +1,12 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const required = ["MONGODB_URI", "JWT_ACCESS_SECRET"];
 
@@ -23,7 +29,7 @@ function sanitizeModel(raw, fallback) {
   return clean || fallback;
 }
 
-const GROQ_FALLBACK_MODEL = "openai/gpt-oss-20b";
+const GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile";
 
 const groqModel = sanitizeModel(process.env.GROQ_MODEL, GROQ_FALLBACK_MODEL);
 
@@ -38,9 +44,9 @@ export const env = {
 
   // AI provider — logical model roles
   groqApiKey: process.env.GROQ_API_KEY || "",
-  groqModelFast: sanitizeModel(process.env.GROQ_MODEL_FAST, "llama3-8b-8192"),
-  groqModelGeneral: sanitizeModel(process.env.GROQ_MODEL_GENERAL, "llama-3.3-70b-versatile"),
-  groqModelComplex: sanitizeModel(process.env.GROQ_MODEL_COMPLEX, "llama3-70b-8192"),
+  groqModelFast: sanitizeModel(process.env.GROQ_MODEL_FAST, "groq/compound-mini"),
+  groqModelGeneral: sanitizeModel(process.env.GROQ_MODEL_GENERAL, "groq/compound"),
+  groqModelComplex: sanitizeModel(process.env.GROQ_MODEL_COMPLEX, "groq/compound"),
   groqModel: groqModel, // legacy fallback
   aiRequestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS || 30000),
 

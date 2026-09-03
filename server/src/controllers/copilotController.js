@@ -4,7 +4,7 @@ import { AppError } from "../utils/errors.js";
 
 export const getConversations = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
     const conversations = await copilotService.getConversations(userId);
     res.status(200).json({ status: "success", data: conversations });
   } catch (error) {
@@ -14,7 +14,7 @@ export const getConversations = async (req, res, next) => {
 
 export const getConversation = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
     const conversation = await copilotService.getConversation(userId, req.params.id);
     res.status(200).json({ status: "success", data: conversation });
   } catch (error) {
@@ -24,7 +24,7 @@ export const getConversation = async (req, res, next) => {
 
 export const createConversation = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
     const { title } = req.body;
     const conversation = await copilotService.createConversation(userId, title);
     res.status(201).json({ status: "success", data: conversation });
@@ -35,10 +35,10 @@ export const createConversation = async (req, res, next) => {
 
 export const renameConversation = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
     const { title } = req.body;
-    if (!title) throw new AppError("Title is required", 400);
-    const conversation = await copilotService.renameConversation(userId, req.params.id, title);
+    if (!title || !title.trim()) throw new AppError("Title is required", 400, "INVALID_INPUT");
+    const conversation = await copilotService.renameConversation(userId, req.params.id, title.trim());
     res.status(200).json({ status: "success", data: conversation });
   } catch (error) {
     next(error);
@@ -47,7 +47,7 @@ export const renameConversation = async (req, res, next) => {
 
 export const deleteConversation = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
     await copilotService.deleteConversation(userId, req.params.id);
     res.status(200).json({ status: "success", message: "Conversation deleted" });
   } catch (error) {
@@ -57,7 +57,7 @@ export const deleteConversation = async (req, res, next) => {
 
 export const shareConversation = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
     const data = await copilotService.shareConversation(userId, req.params.id);
     res.status(200).json({ status: "success", data });
   } catch (error) {
@@ -77,26 +77,30 @@ export const getSharedConversation = async (req, res, next) => {
 
 export const sendMessage = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    const { query } = req.body;
+    const userId = req.user._id || req.user.id;
+    const { query, message, content } = req.body;
     const { id: conversationId } = req.params;
+
+    const userQuery = (query || message || content || "").toString().trim();
     
-    if (!query) {
-      throw new AppError("Message cannot be empty", 400);
+    if (!userQuery) {
+      throw new AppError("Message content cannot be empty", 400, "EMPTY_MESSAGE");
     }
 
-    const response = await copilotService.sendMessage(userId, conversationId, query);
+    console.log(`[CopilotController] REQUEST_RECEIVED | userId: ${userId} | convId: ${conversationId}`);
+
+    const response = await copilotService.sendMessage(userId, conversationId, userQuery);
+
+    console.log(`[CopilotController] RESPONSE_SENT | userId: ${userId} | mode: ${response?.mode || 'default'}`);
+
     res.status(200).json({ status: "success", data: response });
   } catch (error) {
     aiLogger.logError({
       task: "COPILOT_CONTROLLER_ERROR",
       error,
-      category: "CONTROLLER_FAILURE"
+      category: error.code || "CONTROLLER_FAILURE"
     });
     
-    res.status(error.statusCode || 500).json({
-      status: "error",
-      message: error.message || "CareerPilot Copilot is temporarily unavailable. Please try again later."
-    });
+    next(error);
   }
 };

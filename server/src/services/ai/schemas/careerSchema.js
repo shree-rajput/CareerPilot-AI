@@ -23,9 +23,18 @@ export const prepPlanSchema = z.object({
 });
 
 export const copilotChatSchema = z.object({
-  reply: z.string(),
-  suggestedActions: z.array(z.string())
-});
+  reply: z.any().optional().transform((val) => {
+    if (typeof val === "string") return val;
+    if (val && typeof val === "object") {
+      return val.reply || val.content || val.text || val.message || val.answer || val.response || JSON.stringify(val);
+    }
+    return "";
+  }),
+  suggestedActions: z.any().optional().transform((val) => {
+    if (!Array.isArray(val)) return [];
+    return val.map((item) => (typeof item === "string" ? item : item?.label || item?.text || item?.title || String(item || ""))).filter(Boolean);
+  })
+}).passthrough();
 
 export const mentorExplanationSchema = z.object({
   explanation: z.string()

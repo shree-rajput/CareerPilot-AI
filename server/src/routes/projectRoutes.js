@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.post("/", projectController.createProject);
+router.post("/sync", projectController.syncProjects);
 router.get("/", projectController.getProjects);
 router.get("/:id", projectController.getProjectById);
 router.post("/:id/interview-kit", projectController.generateInterviewKit);

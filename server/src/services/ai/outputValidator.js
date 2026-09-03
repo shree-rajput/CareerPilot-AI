@@ -65,17 +65,43 @@ export function extractJson(rawText) {
 
 /**
  * Validates the parsed JSON against a Zod schema.
+ * Handles plain text fallback for chat tasks gracefully without throwing 500 errors.
  */
-export function validateOutput(parsedJson, schema) {
+export function validateOutput(parsedJson, schema, rawText = "") {
   if (!parsedJson) {
+    if (rawText && typeof rawText === "string" && rawText.trim()) {
+      // If LLM returned clean plain text, wrap into copilotChat style object
+      return {
+        reply: rawText.trim(),
+        suggestedActions: []
+      };
+    }
     throw new AppError("Failed to extract JSON from AI output.", 500, "VALIDATION_ERROR");
   }
+
   if (!schema) {
     return parsedJson;
   }
+
   const result = schema.safeParse(parsedJson);
   if (!result.success) {
+    // If parsed object lacks 'reply' or 'suggestedActions', attempt graceful fallback for string content
+    if (parsedJson && typeof parsedJson === "object") {
+      const extractedReply = parsedJson.reply || parsedJson.content || parsedJson.text || parsedJson.message || parsedJson.answer || parsedJson.response;
+      if (extractedReply) {
+        let actions = [];
+        if (Array.isArray(parsedJson.suggestedActions)) actions = parsedJson.suggestedActions;
+        else if (Array.isArray(parsedJson.suggested_actions)) actions = parsedJson.suggested_actions;
+        else if (Array.isArray(parsedJson.actions)) actions = parsedJson.actions;
+
+        return {
+          reply: String(extractedReply),
+          suggestedActions: actions.map(a => typeof a === "string" ? a : a?.label || a?.text || a?.title || String(a || "")).filter(Boolean)
+        };
+      }
+    }
     throw new AppError(`Schema validation failed: ${result.error.message}`, 500, "SCHEMA_MISMATCH");
   }
+
   return result.data;
 }

@@ -177,3 +177,56 @@ Return ONLY a JSON array:
 ]
 `;
 }
+
+export const RESUME_SUGGESTIONS_SYSTEM = `
+You are an expert technical resume coach for CareerPilot AI.
+CareerPilot does NOT rewrite or replace candidate resumes automatically.
+Your role is to produce actionable, evidence-grounded RESUME SUGGESTIONS for the candidate to review and manually copy/apply in Word or Google Docs.
+
+CRITICAL RULES:
+1. Every suggestion must be backed by candidate evidence (Resume, Projects, or Verified Skills).
+2. NEVER invent experience, companies, projects, metrics, or technologies not present in candidate evidence.
+3. Missing evidence is NOT a candidate flaw: Frame missing requirements as "CareerPilot could not find sufficient evidence in your current resume/profile for X".
+4. Categories MUST be one of: HIGH_IMPACT, RESUME_WORDING, KEYWORD_OPPORTUNITIES, MISSING_EVIDENCE, PROJECT_EMPHASIS, EXPERIENCE_EMPHASIS.
+5. All text MUST be clean, professional English.
+
+Return valid JSON with key "suggestions" containing an array of suggestion objects.
+`;
+
+export function buildResumeSuggestionsPrompt({ jobTitle, company, jdText, resumeText, candidateEvidence }) {
+  return `
+Target Role: ${jobTitle} at ${company || "Target Company"}
+
+Candidate Evidence Summary:
+${JSON.stringify(candidateEvidence, null, 2)}
+
+Candidate Original Resume Text:
+${resumeText.slice(0, 5000)}
+
+Job Description Text:
+${jdText.slice(0, 3000)}
+
+Generate 4 to 7 actionable resume suggestions.
+For wording suggestions (category: RESUME_WORDING), provide the exact "originalText" from resume and improved "suggestedText".
+For missing evidence (category: MISSING_EVIDENCE), set "requiresConfirmation": true and explain what requirement is not evident in the current resume.
+
+Return JSON in this format:
+{
+  "suggestions": [
+    {
+      "id": "sug_1",
+      "category": "HIGH_IMPACT | RESUME_WORDING | KEYWORD_OPPORTUNITIES | MISSING_EVIDENCE | PROJECT_EMPHASIS | EXPERIENCE_EMPHASIS",
+      "priority": "high | medium | low",
+      "section": "Work Experience | Skills | Projects",
+      "title": "Short actionable title",
+      "evidenceSource": "Supported by Resume / Project / Verified Skill",
+      "requiresConfirmation": false,
+      "originalText": "exact text from original resume if applicable",
+      "suggestedText": "actionable suggestion text",
+      "reason": "why this change helps align with the job description"
+    }
+  ]
+}
+`;
+}
+

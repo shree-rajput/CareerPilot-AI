@@ -101,3 +101,28 @@ export const inlineSuggestionSchema = z.object({
   suggestion: z.string()
 });
 
+export const resumeSuggestionsSchema = z.object({
+  suggestions: z.array(
+    z.object({
+      id: z.string().optional(),
+      category: z.enum([
+        "HIGH_IMPACT",
+        "RESUME_WORDING",
+        "KEYWORD_OPPORTUNITIES",
+        "MISSING_EVIDENCE",
+        "PROJECT_EMPHASIS",
+        "EXPERIENCE_EMPHASIS"
+      ]).default("RESUME_WORDING"),
+      priority: z.enum(["high", "medium", "low"]).default("medium"),
+      section: z.string().default("Experience"),
+      title: z.string().default("Resume Suggestion"),
+      evidenceSource: z.string().default("Supported by Candidate Profile"),
+      requiresConfirmation: z.boolean().default(false),
+      originalText: z.string().default(""),
+      suggestedText: z.string().default(""),
+      reason: z.string().default("")
+    })
+  )
+});
+
+

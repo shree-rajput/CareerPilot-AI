@@ -225,6 +225,94 @@ export default function ResumeEditor({ data, onChange, resumeId }) {
           }}
         />
       </section>
+
+      {/* Coursework */}
+      <section className="bg-surface p-4 rounded-xl border border-border">
+        <h2 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Relevant Coursework (Comma separated)</h2>
+        <textarea 
+          className="w-full bg-bg-secondary border border-border rounded-lg p-3 text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary outline-none min-h-[70px]"
+          placeholder="E.g., Data Structures & Algorithms, Operating Systems, Database Management, Computer Networks"
+          value={(data.coursework || []).join(", ")}
+          onChange={(e) => {
+            const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+            handleArrayChange("coursework", arr);
+          }}
+        />
+      </section>
+
+      {/* Extracurriculars & Leadership */}
+      <section className="bg-surface p-4 rounded-xl border border-border">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-sm font-bold text-text uppercase tracking-wider">Extracurriculars & Leadership</h2>
+          <button 
+            onClick={() => {
+              const list = data.extracurriculars || [];
+              onChange({ ...data, extracurriculars: [{ role: "", organization: "", description: "" }, ...list] });
+            }}
+            className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+          >
+            <Plus size={13}/> Add Leadership Role
+          </button>
+        </div>
+        <div className="space-y-4">
+          {(data.extracurriculars || []).map((extra, idx) => (
+            <div key={idx} className="relative p-4 border border-border rounded-lg bg-bg-secondary">
+              <button 
+                onClick={() => {
+                  const list = [...data.extracurriculars];
+                  list.splice(idx, 1);
+                  onChange({ ...data, extracurriculars: list });
+                }} 
+                className="absolute top-2 right-2 text-danger opacity-50 hover:opacity-100 cursor-pointer"
+              >
+                <Trash2 size={16} />
+              </button>
+              <div className="grid grid-cols-2 gap-4 mb-2">
+                <Input label="Role / Title" value={extra.role || ""} onChange={(e) => handleChange("extracurriculars", "role", e.target.value, idx)} />
+                <Input label="Organization" value={extra.organization || ""} onChange={(e) => handleChange("extracurriculars", "organization", e.target.value, idx)} />
+              </div>
+              <Input label="Short Description" value={extra.description || ""} onChange={(e) => handleChange("extracurriculars", "description", e.target.value, idx)} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Achievements & Honors */}
+      <section className="bg-surface p-4 rounded-xl border border-border">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-sm font-bold text-text uppercase tracking-wider">Achievements & Honors</h2>
+          <button 
+            onClick={() => {
+              const list = data.achievements || [];
+              onChange({ ...data, achievements: [{ title: "", issuer: "", date: "" }, ...list] });
+            }}
+            className="px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+          >
+            <Plus size={13}/> Add Achievement
+          </button>
+        </div>
+        <div className="space-y-4">
+          {(data.achievements || []).map((ach, idx) => (
+            <div key={idx} className="relative p-4 border border-border rounded-lg bg-bg-secondary">
+              <button 
+                onClick={() => {
+                  const list = [...data.achievements];
+                  list.splice(idx, 1);
+                  onChange({ ...data, achievements: list });
+                }} 
+                className="absolute top-2 right-2 text-danger opacity-50 hover:opacity-100 cursor-pointer"
+              >
+                <Trash2 size={16} />
+              </button>
+              <div className="grid grid-cols-3 gap-4">
+                <Input label="Achievement Title" value={ach.title || ""} onChange={(e) => handleChange("achievements", "title", e.target.value, idx)} />
+                <Input label="Issuer / Organization" value={ach.issuer || ""} onChange={(e) => handleChange("achievements", "issuer", e.target.value, idx)} />
+                <Input label="Date / Year" value={ach.date || ""} onChange={(e) => handleChange("achievements", "date", e.target.value, idx)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

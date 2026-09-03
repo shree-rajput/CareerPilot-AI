@@ -4,6 +4,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import morgan from "morgan";
+import mongoose from "mongoose";
 import { env } from "./config/env.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
@@ -56,7 +57,17 @@ export function createApp() {
   );
 
   app.get("/api/health", (_req, res) => {
-    res.status(200).json({ status: "ok", service: "careerpilot-api" });
+    const dbConnected = mongoose.connection && mongoose.connection.readyState === 1;
+    res.status(200).json({
+      status: "ok",
+      service: "careerpilot-api",
+      database: dbConnected ? "connected" : "disconnected",
+      ai: {
+        configured: Boolean(env.groqApiKey),
+        provider: "Groq",
+        model: env.groqModelGeneral
+      }
+    });
   });
 
   // Register routes

@@ -22,9 +22,11 @@ export function errorHandler(error, _req, res, _next) {
   // Handle Mongoose Validation Errors
   if (error.name === "ValidationError") {
     statusCode = 400;
-    message = "Database Validation Error";
     code = "VALIDATION_ERROR";
     details = Object.values(error.errors).map(e => ({ path: e.path, message: e.message }));
+    const firstDetail = details.length > 0 ? `${details[0].path}: ${details[0].message}` : "";
+    message = firstDetail ? `Database Validation Error (${firstDetail})` : "Database Validation Error";
+    console.error("[errorHandler] Mongoose ValidationError details:", details);
   }
   
   if (error.name === "CastError") {

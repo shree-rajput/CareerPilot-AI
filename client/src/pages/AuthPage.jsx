@@ -1,5 +1,4 @@
-import React from "react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { Button } from "../components/ui/Button";
@@ -40,33 +39,28 @@ export function AuthPage({ mode }) {
   }
 
   return (
-    <main className="min-h-screen bg-bg flex items-center justify-center p-4 sm:p-8 relative overflow-hidden font-sans">
-      {/* Background decorations */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
-
-      <Card className="w-full max-w-md relative z-10 shadow-xl border-border animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <CardContent className="p-8 sm:p-10 flex flex-col gap-8">
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg shadow-sm overflow-hidden flex items-center justify-center bg-transparent">
-                <img src="/favicon.png" alt="CareerCopilot Logo" className="w-full h-full object-contain" />
+    <main className="min-h-screen bg-bg flex items-center justify-center p-4 font-sans">
+      <Card className="w-full max-w-md shadow-xs border-border">
+        <CardContent className="p-8 space-y-6">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center bg-primary-bg border border-primary-border">
+                <img src="/favicon.png" alt="CareerPilot Logo" className="w-4 h-4 object-contain" />
               </div>
-              <span className="text-primary font-bold text-xs uppercase tracking-widest block">CareerCopilot</span>
+              <span className="text-primary font-extrabold text-[11px] uppercase tracking-wider">CareerPilot AI</span>
             </div>
-            <h1 id="auth-title" className="text-3xl font-extrabold text-text tracking-tight mb-2">
-              {isSignup ? "Create workspace" : "Log in to workspace"}
+            <h1 id="auth-title" className="text-xl font-bold text-text tracking-tight m-0">
+              {isSignup ? "Create workspace account" : "Log in to workspace"}
             </h1>
-            <p className="text-text-secondary text-sm leading-relaxed">
-              Build your resume, application tracker, match engine, and interview practice loop from
-              one place.
+            <p className="text-xs text-text-secondary m-0 leading-relaxed font-medium">
+              Access your resume intelligence, application tracker, and AI interview practice loop.
             </p>
           </div>
 
-          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             {isSignup && (
               <Input
-                label="Name"
+                label="Full Name"
                 autoComplete="name"
                 name="name"
                 onChange={updateField}
@@ -77,7 +71,7 @@ export function AuthPage({ mode }) {
             )}
 
             <Input
-              label="Email"
+              label="Work Email"
               autoComplete="email"
               name="email"
               onChange={updateField}
@@ -98,20 +92,20 @@ export function AuthPage({ mode }) {
             />
 
             {error && (
-              <div className="flex items-start gap-3 rounded-lg bg-danger-bg p-4 border border-danger/20 text-danger">
-                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                <p className="text-sm font-medium">{error}</p>
+              <div className="flex items-center gap-2 rounded-lg bg-danger-bg p-3 border border-danger-border text-danger text-xs font-medium">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <p className="m-0">{error}</p>
               </div>
             )}
 
-            <Button className="w-full h-12 text-base mt-2" disabled={isSubmitting} type="submit" isLoading={isSubmitting}>
-              {isSignup ? "Sign up" : "Log in"}
+            <Button className="w-full h-10 mt-1" disabled={isSubmitting} type="submit" isLoading={isSubmitting}>
+              {isSignup ? "Create Account" : "Log In"}
             </Button>
           </form>
 
-          <p className="text-center text-text-secondary text-sm">
-            {isSignup ? "Already have an account?" : "New to CareerCopilot?"}{" "}
-            <Link to={isSignup ? "/login" : "/signup"} className="text-primary hover:text-primary-hover font-bold transition-colors">
+          <p className="text-center text-xs text-text-secondary m-0">
+            {isSignup ? "Already have an account?" : "New to CareerPilot?"}{" "}
+            <Link to={isSignup ? "/login" : "/signup"} className="text-primary hover:underline font-bold transition-colors">
               {isSignup ? "Log in" : "Create account"}
             </Link>
           </p>

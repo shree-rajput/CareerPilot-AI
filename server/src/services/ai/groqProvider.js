@@ -90,13 +90,23 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
 
   assertCleanModel(model);
 
-  // Sanitize and truncate messages to prevent 413 Request Entity Too Large errors
-  const sanitizedMessages = (messages || []).map((msg) => ({
-    role: msg.role,
-    content: typeof msg.content === "string" && msg.content.length > 1200
-      ? msg.content.slice(0, 1200) + "\n\n[Truncated to fit API limits]"
-      : msg.content
-  }));
+  // Sanitize and truncate messages safely to prevent token overload without destroying system prompts
+  const sanitizedMessages = (messages || []).map((msg) => {
+    const maxLen = msg.role === "system" ? 15000 : 8000;
+    return {
+      role: msg.role,
+      content: typeof msg.content === "string" && msg.content.length > maxLen
+        ? msg.content.slice(0, maxLen) + "\n\n[Truncated for context limits]"
+        : msg.content
+    };
+  });
+
+  const totalMsgLen = sanitizedMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+  const sysMsgLen = sanitizedMessages.find(m => m.role === "system")?.content?.length || 0;
+
+  console.log(`[AI_REQUEST] Provider: Groq | Model: ${model} | Role: ${modelRole || "default"} | TotalMsgLen: ${totalMsgLen} | SysMsgLen: ${sysMsgLen}`);
+
+  const callStartTime = Date.now();
 
   // Inner function: one attempt at the Groq API
   async function attempt() {
@@ -105,11 +115,6 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
       messages: sanitizedMessages,
       temperature
     };
-    
-    if (maxTokens) {
-      // only pass if explicitly desired and valid, but mostly we let the model decide
-      // request.max_tokens = maxTokens; 
-    }
 
     if (jsonMode) {
       request.response_format = { type: "json_object" };
@@ -125,12 +130,16 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
       throw new AppError("AI returned an empty response.", 502, "AI_EMPTY_RESPONSE");
     }
 
+    console.log(`[AI_RESPONSE] Provider: Groq | Model: ${model} | Status: 200 | LatencyMs: ${Date.now() - callStartTime} | ResponseLen: ${content.length}`);
+
     return content;
   }
 
   try {
     return await attempt();
   } catch (error) {
+    console.error(`[AI_ERROR] Provider: Groq | Model: ${model} | ErrorName: ${error.name || "Error"} | ErrorMsg: ${error.message} | StatusCode: ${error.status || error.statusCode || 500} | ErrorCode: ${error.code || "AI_REQUEST_FAILED"}`);
+
     // Pass through AppErrors as-is (already structured)
     if (error instanceof AppError) throw error;
 

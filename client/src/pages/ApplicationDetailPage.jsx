@@ -7,16 +7,25 @@ import { resumeApi } from "../api/resume";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
+import { ResumeSuggestionsPanel } from "../components/resume/ResumeSuggestionsPanel";
 import { toast } from "../context/ToastContext";
 import api from "../api/axios";
 
 const STATUSES = [
+  { id: "discovered", label: "Discovered" },
   { id: "saved", label: "Saved" },
+  { id: "preparing", label: "Preparing" },
+  { id: "ready_to_apply", label: "Ready to Apply" },
   { id: "applied", label: "Applied" },
+  { id: "shortlisted", label: "Shortlisted" },
   { id: "screening", label: "Screening" },
+  { id: "oa", label: "Online Assessment (OA)" },
   { id: "interview", label: "Interview" },
   { id: "offer", label: "Offer" },
-  { id: "rejected", label: "Rejected" }
+  { id: "rejected", label: "Rejected" },
+  { id: "withdrawn", label: "Withdrawn" },
+  { id: "on_hold", label: "On Hold" },
+  { id: "stale", label: "Stale" }
 ];
 
 export function ApplicationDetailPage() {
@@ -24,6 +33,7 @@ export function ApplicationDetailPage() {
   const [app, setApp] = useState(null);
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [confirmingApplied, setConfirmingApplied] = useState(false);
 
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [runningMatch, setRunningMatch] = useState(false);
@@ -87,11 +97,35 @@ export function ApplicationDetailPage() {
   async function handleStatusChange(e) {
     const newStatus = e.target.value;
     try {
-      const data = await applicationsApi.update(id, { status: newStatus });
+      const data = await applicationsApi.update(id, {
+        status: newStatus,
+        changedBy: "user_manual_update",
+        source: "user_manual_update"
+      });
       setApp(data.application);
       toast.success("Application status updated!");
     } catch (err) {
       toast.error("Failed to update status.");
+    }
+  }
+
+  async function handleConfirmApplied() {
+    setConfirmingApplied(true);
+    try {
+      const data = await applicationsApi.update(id, {
+        status: "applied",
+        dateApplied: new Date().toISOString(),
+        changedBy: "user_confirmation",
+        source: "user_confirmation",
+        evidence: "User explicitly confirmed submitting application on detail workspace",
+        statusNote: "Confirmed application submission"
+      });
+      setApp(data.application);
+      toast.success("Application confirmed as Applied!");
+    } catch (err) {
+      toast.error("Failed to confirm application status.");
+    } finally {
+      setConfirmingApplied(false);
     }
   }
 
@@ -249,11 +283,33 @@ export function ApplicationDetailPage() {
         </CardContent>
       </Card>
 
+      {/* SMART STATUS CONFIRMATION BANNER */}
+      {["saved", "discovered", "preparing", "ready_to_apply", "draft"].includes(app.status) && (
+        <Card className="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border-primary/30 shadow-sm">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                <CheckCircle size={20} />
+              </div>
+              <div>
+                <strong className="block text-sm font-bold text-text">Did you submit your application for this job?</strong>
+                <p className="text-xs text-text-secondary">Confirm when you've submitted so CareerPilot can record the submission date and track your progress.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button size="sm" onClick={handleConfirmApplied} isLoading={confirmingApplied}>
+                Yes, I Applied
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* TABS NAVIGATION */}
       <div className="flex overflow-x-auto border-b border-border mb-4 scrollbar-hide">
         {[
           { id: "overview", label: "Overview", icon: Target },
-          { id: "resume", label: "Resume Tailoring", icon: Sparkles },
+          { id: "resume", label: "Resume Suggestions", icon: Sparkles },
           { id: "match", label: "Match Engine", icon: CheckCircle },
           { id: "timeline", label: "Timeline", icon: History },
           { id: "notes", label: "Notes", icon: Edit3 },
@@ -427,87 +483,37 @@ export function ApplicationDetailPage() {
           </div>
         )}
 
-        {/* RESUME TAILORING TAB */}
+        {/* RESUME SUGGESTIONS TAB */}
         {activeTab === "resume" && (
-          <Card className="shadow-sm border-border border-l-4 border-l-primary">
-            <CardHeader className="bg-bg-secondary border-b border-border py-4 px-6 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-info-bg p-1.5 rounded-md text-primary border border-blue-200">
-                  <Sparkles size={18} />
-                </div>
-                <CardTitle className="text-lg m-0">Resume Tailoring & Versioning</CardTitle>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 bg-surface p-4 border border-border rounded-xl">
+              <label className="text-xs font-bold text-text-secondary uppercase">Active Resume:</label>
+              <select
+                value={selectedResumeId}
+                onChange={(e) => setSelectedResumeId(e.target.value)}
+                className="bg-bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs font-bold text-text"
+              >
+                <option value="">Select a resume...</option>
+                {resumes.map((r) => (
+                  <option key={r._id} value={r._id}>
+                    {r.name} (v{r.version})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedResumeId ? (
+              <ResumeSuggestionsPanel 
+                resume={{ _id: selectedResumeId }}
+                jobId={app.jobId?._id || app.jobId}
+                jobDescription={app.extractedJd?.rawText || app.extractedJd?.summary}
+              />
+            ) : (
+              <div className="p-8 bg-surface border border-border rounded-2xl text-center text-xs text-text-secondary">
+                Please select a resume above to generate AI suggestions for this application.
               </div>
-              {Array.isArray(tailoringData) && tailoringData.length > 0 && (
-                <Button onClick={handleSaveTailoredVersion} isLoading={isSavingVersion} size="sm">
-                  Save as New Resume Version
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent className="p-6">
-              {versionSavedSuccess && (
-                <div className="bg-success-bg border border-success/20 text-success p-4 rounded-xl text-sm font-medium mb-4 flex items-center justify-between">
-                  <span>{versionSavedSuccess}</span>
-                  <span className="text-xs font-bold underline cursor-pointer" onClick={() => setVersionSavedSuccess("")}>Dismiss</span>
-                </div>
-              )}
-
-              {!matchResult ? (
-                <div className="bg-surface border border-border p-5 rounded-xl text-center">
-                  <p className="text-text-secondary font-medium mb-4">Run the match engine first to generate specific tailoring recommendations for this job description.</p>
-                </div>
-              ) : !tailoringData ? (
-                <div className="text-center py-6">
-                  <p className="text-sm text-text-secondary mb-4">Analyze your resume against this JD to get section-by-section improvements without inventing fake data.</p>
-                  <Button onClick={fetchTailoring} isLoading={loadingTailoring} className="w-full sm:w-auto">
-                    {!loadingTailoring && <Sparkles size={16} className="mr-2" />} Generate Tailoring Suggestions
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-5">
-                  <div className="flex items-center justify-between bg-info-bg border border-blue-200 p-4 rounded-xl">
-                    <p className="text-xs font-bold text-primary">
-                      Review suggestions below. Save as a new version to create a tailored resume for {app.role} ({app.company}) without modifying your original resume.
-                    </p>
-                    <Button onClick={handleSaveTailoredVersion} isLoading={isSavingVersion} size="sm" className="shrink-0 ml-4">
-                      Create Tailored Version
-                    </Button>
-                  </div>
-
-                  {Array.isArray(tailoringData) ? tailoringData.map((rec, i) => (
-                    <div key={i} className="bg-surface border border-border p-5 rounded-xl shadow-sm flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-1 rounded">
-                          {rec.section || "General"} — {rec.type || "Improvement"}
-                        </span>
-                      </div>
-
-                      {rec.original && (
-                        <div className="bg-danger-bg/40 border border-danger/20 p-3 rounded-lg text-xs font-mono text-danger">
-                          <strong className="block text-[10px] uppercase font-bold text-danger mb-1">Current Resume Text:</strong>
-                          "{rec.original}"
-                        </div>
-                      )}
-
-                      <div className="bg-success-bg/40 border border-success/20 p-3 rounded-lg text-xs font-mono text-success">
-                        <strong className="block text-[10px] uppercase font-bold text-success mb-1">Recommended Rephrasing:</strong>
-                        "{rec.suggestion || rec.title || JSON.stringify(rec)}"
-                      </div>
-
-                      {rec.reason && (
-                        <p className="text-xs text-text-secondary leading-relaxed bg-bg-secondary p-3 rounded-lg border border-border">
-                          <strong className="text-text font-bold">Why: </strong>{rec.reason}
-                        </p>
-                      )}
-                    </div>
-                  )) : (
-                    <p className="whitespace-pre-wrap text-text-secondary text-sm p-4 bg-surface rounded-xl border border-border">
-                      {typeof tailoringData === 'string' ? tailoringData : JSON.stringify(tailoringData, null, 2)}
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            )}
+          </div>
         )}
 
 

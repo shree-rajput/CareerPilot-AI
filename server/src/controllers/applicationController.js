@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { Application } from "../models/Application.js";
+import { Application, STATUS_VALUES } from "../models/Application.js";
 import { Resume } from "../models/Resume.js";
 import { MatchResult } from "../models/MatchResult.js";
 import { extractJobDescription } from "../services/ai/aiService.js";
@@ -20,13 +20,16 @@ const createApplicationSchema = z.object({
 });
 
 const updateApplicationSchema = z.object({
-  status: z.enum(["saved", "applied", "screening", "interview", "offer", "rejected"]).optional(),
+  status: z.enum(STATUS_VALUES).optional(),
   notes: z.string().trim().max(2000).optional(),
   location: z.string().trim().max(100).optional().or(z.literal("")),
   dateApplied: z.string().datetime({ offset: true }).optional().nullable(),
   interviewDate: z.string().datetime({ offset: true }).optional().nullable(),
   resumeVersionId: z.string().optional().nullable(),
-  statusNote: z.string().trim().max(500).optional()
+  statusNote: z.string().trim().max(500).optional(),
+  source: z.string().optional(),
+  evidence: z.string().optional(),
+  changedBy: z.string().optional()
 });
 
 /**
@@ -393,3 +396,83 @@ export const getApplicationReadiness = asyncHandler(async (req, res) => {
     }
   });
 });
+
+/**
+ * POST /api/applications/confirm-suggestion
+ * Confirm or dismiss a status change suggestion.
+ */
+export const confirmStatusSuggestion = asyncHandler(async (req, res) => {
+  const { applicationId, suggestionId, action } = req.body;
+  if (!applicationId || !suggestionId || !action) {
+    throw new AppError(
+      "applicationId, suggestionId, and action ('confirm' | 'dismiss') are required.",
+      400,
+      "VALIDATION_ERROR"
+    );
+  }
+
+  const app = await Application.findOne({ _id: applicationId, userId: req.user._id });
+  if (!app) throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+
+  const suggestion = app.pendingStatusSuggestions.id(suggestionId);
+  if (!suggestion) throw new AppError("Status suggestion not found.", 404, "SUGGESTION_NOT_FOUND");
+
+  if (action === "confirm") {
+    const fromStatus = app.status;
+    app.status = suggestion.suggestedStatus;
+    app.statusHistory.push({
+      fromStatus,
+      toStatus: suggestion.suggestedStatus,
+      changedBy: suggestion.source || "auto_stale",
+      note: suggestion.reason,
+      timestamp: new Date(),
+    });
+    app.lastActivityAt = new Date();
+    suggestion.status = "confirmed";
+  } else {
+    suggestion.status = "dismissed";
+  }
+
+  await app.save();
+  return res.json({ message: `Suggestion ${action}ed successfully.`, application: app });
+});
+
+/**
+ * POST /api/applications/bulk-status
+ * Perform bulk status updates with strict ownership validation across all targets.
+ */
+export const bulkUpdateStatus = asyncHandler(async (req, res) => {
+  const { applicationIds, newStatus, note } = req.body;
+  if (!Array.isArray(applicationIds) || applicationIds.length === 0 || !newStatus) {
+    throw new AppError("applicationIds array and newStatus are required.", 400, "VALIDATION_ERROR");
+  }
+
+  const apps = await Application.find({
+    _id: { $in: applicationIds },
+    userId: req.user._id,
+  });
+
+  if (apps.length !== applicationIds.length) {
+    throw new AppError("Unauthorized access to one or more target applications.", 403, "FORBIDDEN");
+  }
+
+  for (const app of apps) {
+    const fromStatus = app.status;
+    app.status = newStatus;
+    app.statusHistory.push({
+      fromStatus,
+      toStatus: newStatus,
+      changedBy: "manual",
+      note: note || "Bulk status update",
+      timestamp: new Date(),
+    });
+    app.lastActivityAt = new Date();
+    await app.save();
+  }
+
+  return res.json({
+    message: `Successfully updated ${apps.length} applications to ${newStatus}.`,
+    updatedCount: apps.length,
+  });
+});
+

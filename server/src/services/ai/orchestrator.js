@@ -29,8 +29,8 @@ export async function executeAiTask(taskName, params) {
     // 3. Define Validation Pipeline
     const validateFn = (rawOutput) => {
       // 3a. JSON extraction and Schema validation
-      const parsed = extractJson(rawOutput) || rawOutput; // fallback to raw if not extractable (e.g. if LLM returned clean json object already)
-      let data = validateOutput(parsed, taskConfig.schema);
+      const parsed = extractJson(rawOutput) || (typeof rawOutput === "string" && rawOutput.trim().startsWith("{") ? null : rawOutput);
+      let data = validateOutput(parsed, taskConfig.schema, rawOutput);
 
       // 3b. Evidence validation (if applicable)
       // If the schema returns an array of evidence items, or has an evidence field, validate it.

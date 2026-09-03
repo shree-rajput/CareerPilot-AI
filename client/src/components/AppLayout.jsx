@@ -1,30 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  BarChart3,
-  BriefcaseBusiness,
-  FileText,
-  LayoutDashboard,
   LogOut,
-  Sparkles,
   Menu,
   X,
-  Users,
-  Target,
-  Award,
-  BookOpen,
-  FolderGit2,
   Search,
   Bell,
-  Command,
-  Code2,
-  GraduationCap
+  CheckCircle2,
+  Sparkles
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { Button } from "./ui/Button";
 import { CopilotChat } from "./CopilotChat";
 
-import { FEATURES, FEATURE_STATUS } from "../config/features";
+import { NAVIGATION_CATEGORIES, FEATURES, FEATURE_STATUS } from "../config/features";
 import api from "../api/axios";
 
 export function AppLayout() {
@@ -50,6 +39,24 @@ export function AppLayout() {
     return () => clearInterval(interval);
   }, []);
 
+  // Keyboard shortcut listener for Ctrl+K
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (commandPaletteOpen && paletteInputRef.current) {
+      setTimeout(() => paletteInputRef.current?.focus(), 50);
+    }
+  }, [commandPaletteOpen]);
+
   const fetchNotifications = async () => {
     try {
       const res = await api.get("/notifications");
@@ -57,7 +64,7 @@ export function AppLayout() {
       setNotifications(data.notifications || []);
       setUnreadCount(data.unreadCount || 0);
     } catch (err) {
-      console.error("Failed to fetch notifications:", err);
+      // Gracefully handle unauthenticated/unreachable notifications
     }
   };
 
@@ -94,76 +101,108 @@ export function AppLayout() {
     navigate("/login", { replace: true });
   }
 
+  const filteredFeatures = FEATURES.filter((item) =>
+    item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handlePaletteKeyDown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setPaletteIndex((prev) => (prev + 1) % Math.max(filteredFeatures.length, 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setPaletteIndex((prev) => (prev - 1 + filteredFeatures.length) % Math.max(filteredFeatures.length, 1));
+    } else if (e.key === "Enter" && filteredFeatures[paletteIndex]) {
+      e.preventDefault();
+      navigate(filteredFeatures[paletteIndex].to);
+      setCommandPaletteOpen(false);
+    } else if (e.key === "Escape") {
+      setCommandPaletteOpen(false);
+    }
+  };
+
   const SidebarContent = () => (
-    <>
-      <div className="flex items-center gap-3 px-6 py-6 mb-4">
-        <div className="w-8 h-8 rounded-lg shadow-sm overflow-hidden flex items-center justify-center bg-transparent">
-          <img src="/favicon.png" alt="CareerCopilot Logo" className="w-full h-full object-contain" />
+    <div className="flex flex-col h-full">
+      {/* Brand Header */}
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-border/60 shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-sm shadow-2xs">
+          C
         </div>
         <div className="flex flex-col">
-          <strong className="text-text font-bold text-lg leading-tight">CareerCopilot</strong>
-          <span className="text-text-secondary text-[11px] font-bold uppercase tracking-wider">Command Center</span>
+          <span className="text-sm font-bold text-text leading-tight tracking-tight">CareerPilot AI</span>
+          <span className="text-[10px] font-semibold text-text-muted tracking-wider uppercase">Career Operating System</span>
         </div>
       </div>
 
-      <nav className="flex-1 px-4 space-y-1 overflow-y-auto" aria-label="Primary navigation">
-        {FEATURES.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname.startsWith(item.to);
-          const isFuture = item.status !== FEATURE_STATUS.WORKING;
-          
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg font-bold text-sm transition-all ${isActive
-                  ? "bg-primary text-white shadow-md shadow-primary/20"
-                  : "text-text-secondary hover:bg-bg-secondary hover:text-text"
-                }`}
-            >
-              <div className="flex items-center gap-3">
-                <Icon size={18} aria-hidden="true" />
-                <span>{item.label}</span>
-              </div>
-              {isFuture && (
-                <span className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                  isActive ? "bg-white/20 text-white" : "bg-bg text-text-secondary border border-border"
-                }`}>
-                  {item.phaseLabel}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
+      {/* Navigation Links Grouped by Category */}
+      <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto" aria-label="Primary navigation">
+        {NAVIGATION_CATEGORIES.map((cat, catIdx) => (
+          <div key={cat.category || catIdx} className="space-y-1">
+            <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2.5 block mb-1">
+              {cat.category}
+            </span>
+            {cat.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.to || (item.to !== "/dashboard" && location.pathname.startsWith(item.to));
+              
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    isActive
+                      ? "bg-primary-bg text-primary font-bold shadow-2xs"
+                      : "text-text-secondary hover:bg-bg-secondary hover:text-text"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Icon size={16} className={isActive ? "text-primary" : "text-text-secondary"} aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.status !== FEATURE_STATUS.WORKING && (
+                    <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded ${
+                      isActive ? "bg-primary/10 text-primary" : "bg-bg-secondary text-text-muted"
+                    }`}>
+                      Soon
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      <div className="p-4 border-t border-border mt-auto">
+      {/* Logout Footer */}
+      <div className="p-3 border-t border-border/60 shrink-0">
         <button
-          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg font-bold text-sm text-danger hover:bg-danger-bg transition-colors"
+          className="flex items-center gap-2.5 px-2.5 py-2 w-full rounded-lg text-xs font-semibold text-text-secondary hover:text-danger hover:bg-danger-bg/50 transition-colors"
           type="button"
           onClick={handleLogout}
         >
-          <LogOut size={18} aria-hidden="true" />
+          <LogOut size={16} aria-hidden="true" />
           <span>Log out</span>
         </button>
       </div>
-    </>
+    </div>
   );
 
   return (
     <div className="flex h-screen w-full bg-bg font-sans overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-surface border-r border-border shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      <aside className="hidden md:flex flex-col w-60 bg-surface border-r border-border shrink-0 z-20 shadow-2xs">
         <SidebarContent />
       </aside>
 
       {/* Mobile Sidebar Overlay */}
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
-          <div className="fixed inset-0 bg-text/50 backdrop-blur-sm transition-opacity" onClick={() => setMobileMenuOpen(false)}></div>
-          <aside className="relative flex flex-col w-64 max-w-[80%] bg-surface h-full shadow-2xl animate-in slide-in-from-left-full duration-300">
-            <button className="absolute top-4 right-4 p-2 text-text-secondary hover:bg-bg-secondary rounded-full" onClick={() => setMobileMenuOpen(false)}>
-              <X size={20} />
+          <div className="fixed inset-0 bg-text/40 backdrop-blur-xs transition-opacity" onClick={() => setMobileMenuOpen(false)} />
+          <aside className="relative flex flex-col w-64 max-w-[80%] bg-surface h-full shadow-lg">
+            <button className="absolute top-4 right-4 p-1.5 text-text-secondary hover:bg-bg-secondary rounded-lg" onClick={() => setMobileMenuOpen(false)}>
+              <X size={18} />
             </button>
             <SidebarContent />
           </aside>
@@ -172,40 +211,37 @@ export function AppLayout() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-bg relative">
-        <header className="h-16 shrink-0 bg-surface border-b border-border flex items-center justify-between px-4 sm:px-8 z-10 sticky top-0 shadow-sm transition-all">
-          <div className="flex items-center gap-4">
+        {/* Top Header */}
+        <header className="h-14 shrink-0 bg-surface border-b border-border flex items-center justify-between px-4 sm:px-6 z-10 sticky top-0 shadow-2xs">
+          <div className="flex items-center gap-3">
             <button
-              className="md:hidden p-2 -ml-2 text-text-secondary hover:bg-bg-secondary rounded-lg"
+              className="md:hidden p-1.5 -ml-1 text-text-secondary hover:bg-bg-secondary rounded-lg"
               onClick={() => setMobileMenuOpen(true)}
             >
-              <Menu size={20} />
+              <Menu size={18} />
             </button>
-            <div className="hidden sm:block">
-              <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-0.5">Placement OS</span>
-              <h1 className="text-lg font-bold text-text m-0 leading-tight">Welcome back, {user?.name || "Candidate"}</h1>
-            </div>
 
             {/* Global Command Palette Trigger Button */}
             <button
               onClick={() => setCommandPaletteOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-secondary border border-border text-text-secondary hover:text-text text-xs font-semibold transition-all hover:bg-border/50 shadow-sm"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border text-text-secondary hover:text-text hover:border-border-hover text-xs font-medium transition-all shadow-2xs"
             >
-              <Search size={14} />
-              <span className="hidden md:inline">Command Palette...</span>
-              <span className="bg-surface px-1.5 py-0.5 rounded border border-border text-[9px] font-mono font-bold tracking-wider text-text-secondary shadow-sm">Ctrl+K</span>
+              <Search size={14} className="text-text-muted" />
+              <span className="hidden sm:inline">Search features...</span>
+              <span className="bg-surface px-1.5 py-0.5 rounded border border-border text-[10px] font-mono font-semibold text-text-muted">Ctrl+K</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {/* Notification Center Trigger */}
             <div className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="relative p-2 rounded-full hover:bg-bg-secondary text-text-secondary hover:text-text transition-colors border border-transparent hover:border-border"
+                className="relative p-2 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-text transition-colors border border-transparent hover:border-border"
               >
-                <Bell size={20} />
+                <Bell size={18} />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-danger text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+                  <span className="absolute top-1 right-1 h-3.5 min-w-[14px] px-1 rounded-full bg-danger text-white text-[9px] font-bold flex items-center justify-center">
                     {unreadCount}
                   </span>
                 )}
@@ -214,31 +250,31 @@ export function AppLayout() {
               {notificationsOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)}></div>
-                  <div className="absolute right-0 mt-2 w-80 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute right-0 mt-2 w-80 bg-surface border border-border rounded-xl shadow-md z-50 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-bg-secondary">
                       <span className="font-bold text-xs text-text flex items-center gap-1.5">
-                        <Bell size={14} className="text-primary" /> Notifications ({unreadCount} unread)
+                        <Bell size={14} className="text-primary" /> Notifications ({unreadCount})
                       </span>
                       <button
                         onClick={markAllNotificationsRead}
-                        className="text-[10px] font-bold text-primary hover:underline"
+                        className="text-[10px] font-semibold text-primary hover:underline"
                       >
                         Mark all read
                       </button>
                     </div>
                     <div className="max-h-72 overflow-y-auto divide-y divide-border">
                       {notifications.length === 0 ? (
-                        <div className="p-6 text-center text-xs text-text-secondary font-medium">No alerts registered.</div>
+                        <div className="p-6 text-center text-xs text-text-muted font-medium">No alerts registered.</div>
                       ) : (
                         notifications.map((n) => (
                           <div 
                             key={n._id || n.id} 
                             onClick={() => handleNotificationClick(n)}
-                            className={`p-3.5 transition-colors hover:bg-bg-secondary cursor-pointer ${n.read ? "opacity-70" : "bg-primary/5"}`}
+                            className={`p-3 transition-colors hover:bg-bg-secondary cursor-pointer ${n.read ? "opacity-60" : "bg-primary-bg/30"}`}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <strong className="text-xs font-bold text-text leading-tight">{n.title}</strong>
-                              <span className="text-[9px] text-text-secondary font-mono">
+                              <strong className="text-xs font-semibold text-text">{n.title}</strong>
+                              <span className="text-[9px] text-text-muted font-mono">
                                 {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Now"}
                               </span>
                             </div>
@@ -253,16 +289,19 @@ export function AppLayout() {
             </div>
 
             {/* Profile Widget */}
-            <div className="flex items-center gap-3 bg-bg-secondary px-3 py-1.5 rounded-full border border-border shadow-sm">
-              <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs">
+            <div className="flex items-center gap-2 bg-bg-secondary px-2.5 py-1 rounded-lg border border-border">
+              <div className="h-5.5 w-5.5 rounded-md bg-primary text-white flex items-center justify-center font-bold text-xs">
                 {user?.name?.[0]?.toUpperCase() || "U"}
               </div>
-              <span className="text-sm font-bold text-text hidden sm:inline-block truncate max-w-[150px]">{user?.email}</span>
+              <span className="text-xs font-semibold text-text hidden sm:inline-block truncate max-w-[140px]">
+                {user?.name || user?.email}
+              </span>
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
+        {/* Scrollable Main Content Container */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scroll-smooth">
           <div className="mx-auto max-w-7xl">
             <Outlet />
           </div>
@@ -272,34 +311,34 @@ export function AppLayout() {
         <CopilotChat />
       </main>
 
-      {/* Global Command Palette Modal Overlay */}
+      {/* Command Palette Modal */}
       {commandPaletteOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4">
-          <div className="fixed inset-0 bg-text/40 backdrop-blur-sm transition-opacity" onClick={() => setCommandPaletteOpen(false)}></div>
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4">
+          <div className="fixed inset-0 bg-text/30 backdrop-blur-xs transition-opacity" onClick={() => setCommandPaletteOpen(false)}></div>
           
-          <div className="relative w-full max-w-xl bg-surface border border-border rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[400px] animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center border-b border-border px-4 py-3 gap-3">
-              <Search size={18} className="text-text-secondary" />
+          <div className="relative w-full max-w-lg bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50 flex flex-col max-h-[380px]">
+            <div className="flex items-center border-b border-border px-4 py-3 gap-2.5">
+              <Search size={16} className="text-text-muted" />
               <input
                 ref={paletteInputRef}
                 type="text"
-                placeholder="Search command center features..."
-                className="flex-1 bg-transparent border-0 outline-none text-text text-sm placeholder-text-secondary font-medium w-full"
+                placeholder="Search features..."
+                className="flex-1 bg-transparent border-0 outline-none text-text text-xs placeholder-text-muted font-medium w-full"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handlePaletteKeyDown}
               />
               <button 
                 onClick={() => setCommandPaletteOpen(false)}
-                className="text-[10px] font-bold text-text-secondary border border-border px-1.5 py-0.5 rounded hover:bg-bg-secondary"
+                className="text-[10px] font-semibold text-text-muted border border-border px-1.5 py-0.5 rounded hover:bg-bg-secondary"
               >
                 ESC
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto py-2">
+            <div className="flex-1 overflow-y-auto py-1">
               {filteredFeatures.length === 0 ? (
-                <div className="p-8 text-center text-xs text-text-secondary font-medium">
+                <div className="p-6 text-center text-xs text-text-muted font-medium">
                   No matching features found.
                 </div>
               ) : (
@@ -313,26 +352,19 @@ export function AppLayout() {
                         navigate(item.to);
                         setCommandPaletteOpen(false);
                       }}
-                      className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                      className={`flex items-center justify-between px-4 py-2.5 cursor-pointer transition-colors ${
                         isSelected ? "bg-primary text-white" : "hover:bg-bg-secondary text-text-secondary"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <Icon size={16} />
-                        <span className={`text-xs font-bold ${isSelected ? "text-white" : "text-text"}`}>
+                      <div className="flex items-center gap-2.5">
+                        <Icon size={15} />
+                        <span className={`text-xs font-semibold ${isSelected ? "text-white" : "text-text"}`}>
                           {item.label}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {isSelected && (
-                          <span className="text-[9px] uppercase tracking-widest font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">
-                            Select
-                          </span>
-                        )}
-                        <span className={`text-[10px] ${isSelected ? "text-white/60" : "text-text-secondary"}`}>
-                          {item.to}
-                        </span>
-                      </div>
+                      <span className={`text-[10px] ${isSelected ? "text-white/70" : "text-text-muted"}`}>
+                        {item.to}
+                      </span>
                     </div>
                   );
                 })

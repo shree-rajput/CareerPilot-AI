@@ -1,17 +1,17 @@
-import React, { useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
-import { BriefcaseBusiness } from "lucide-react";
-import { applicationsApi } from "../../api/applications";
+import { BriefcaseBusiness, Calendar, Building2 } from "lucide-react";
 import { Card, CardContent } from "../ui/Card";
 import { Spinner } from "../ui/Spinner";
+import { Badge } from "../ui/Badge";
 
 const STATUSES = [
-  { id: "saved", label: "Saved", color: "bg-gray-100 text-gray-800 border-gray-200" },
-  { id: "applied", label: "Applied", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  { id: "screening", label: "Screening", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  { id: "interview", label: "Interview", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  { id: "offer", label: "Offer", color: "bg-green-50 text-green-700 border-green-200" },
-  { id: "rejected", label: "Rejected", color: "bg-red-50 text-red-700 border-red-200" }
+  { id: "saved", label: "Saved", headerBg: "bg-slate-100/80 text-slate-700 border-slate-200" },
+  { id: "applied", label: "Applied", headerBg: "bg-blue-50/80 text-blue-700 border-blue-200" },
+  { id: "screening", label: "Screening", headerBg: "bg-indigo-50/80 text-indigo-700 border-indigo-200" },
+  { id: "interview", label: "Interview", headerBg: "bg-amber-50/80 text-amber-700 border-amber-200" },
+  { id: "offer", label: "Offer", headerBg: "bg-emerald-50/80 text-emerald-700 border-emerald-200" },
+  { id: "rejected", label: "Rejected", headerBg: "bg-rose-50/80 text-rose-700 border-rose-200" }
 ];
 
 export function KanbanBoard({ applications, onStatusChange, loading }) {
@@ -45,9 +45,13 @@ export function KanbanBoard({ applications, onStatusChange, loading }) {
     return (
       <Card>
         <CardContent className="p-12 text-center text-text-secondary">
-          <BriefcaseBusiness className="mx-auto mb-3 h-10 w-10 text-border" />
-          <p className="font-medium text-base">No applications found.</p>
-          <p className="text-sm mt-1">Click 'Add Application' to get started.</p>
+          <div className="w-10 h-10 rounded-lg bg-bg-secondary text-text-muted flex items-center justify-center mx-auto mb-3">
+            <BriefcaseBusiness size={20} />
+          </div>
+          <h3 className="font-bold text-sm text-text m-0">No job applications found</h3>
+          <p className="text-xs text-text-muted mt-1 max-w-sm mx-auto">
+            Start tracking job opportunities to monitor interview progression, resume match scores, and application history.
+          </p>
         </CardContent>
       </Card>
     );
@@ -61,47 +65,59 @@ export function KanbanBoard({ applications, onStatusChange, loading }) {
         return (
           <div 
             key={status.id}
-            className="flex flex-col bg-surface border border-border rounded-xl w-72 shrink-0 max-h-[70vh]"
+            className="flex flex-col bg-surface border border-border rounded-xl w-72 shrink-0 max-h-[72vh] shadow-2xs"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, status.id)}
           >
-            <div className={`px-4 py-3 border-b border-border font-bold text-sm flex justify-between items-center ${status.color.replace('border-', 'border-b-')}`}>
+            {/* Column Header */}
+            <div className={`px-3.5 py-2.5 border-b border-border font-bold text-xs flex justify-between items-center ${status.headerBg}`}>
               <span>{status.label}</span>
-              <span className="bg-white/50 px-2 py-0.5 rounded-full text-xs">{columnApps.length}</span>
+              <span className="bg-surface/80 px-2 py-0.5 rounded text-[10px] font-mono border border-border/40">
+                {columnApps.length}
+              </span>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 min-h-[150px]">
-              {columnApps.map(app => {
-                const score = app.matchResultId?.overallScore;
-                let scoreColor = "text-text-secondary bg-bg-secondary";
-                if (score >= 75) scoreColor = "text-success bg-success-bg border-success/20";
-                else if (score >= 50) scoreColor = "text-warning bg-warning-bg border-warning/20";
-                else if (score) scoreColor = "text-danger bg-danger-bg border-danger/20";
+            {/* Column Cards */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[140px]">
+              {columnApps.length === 0 ? (
+                <div className="h-24 flex items-center justify-center text-[11px] text-text-muted italic border border-dashed border-border/60 rounded-lg">
+                  Drag items here
+                </div>
+              ) : (
+                columnApps.map(app => {
+                  const score = app.matchResultId?.overallScore;
 
-                return (
-                  <div
-                    key={app._id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, app._id)}
-                    onClick={() => navigate(`/applications/${app._id}`)}
-                    className="bg-bg border border-border p-3 rounded-lg shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/50 transition-colors group"
-                  >
-                    <div className="font-bold text-text text-sm mb-1 group-hover:text-primary transition-colors">{app.role}</div>
-                    <div className="text-xs text-text-secondary font-medium mb-3">{app.company}</div>
-                    
-                    <div className="flex justify-between items-center mt-auto">
-                      <span className="text-[10px] text-text-secondary">
-                        {app.dateApplied ? new Date(app.dateApplied).toLocaleDateString() : "No Date"}
-                      </span>
-                      {score ? (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${scoreColor}`}>
-                          {score}% Fit
+                  return (
+                    <div
+                      key={app._id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, app._id)}
+                      onClick={() => navigate(`/applications/${app._id}`)}
+                      className="bg-surface border border-border p-3 rounded-lg shadow-2xs cursor-grab active:cursor-grabbing hover:border-primary-border transition-all group"
+                    >
+                      <h4 className="font-bold text-text text-xs m-0 group-hover:text-primary transition-colors truncate">
+                        {app.role}
+                      </h4>
+                      <p className="text-[11px] text-text-secondary font-medium mt-0.5 mb-2 truncate">
+                        {app.company}
+                      </p>
+                      
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-border/40">
+                        <span className="text-[10px] text-text-muted flex items-center gap-1 font-mono">
+                          <Calendar size={10} />
+                          {app.dateApplied ? new Date(app.dateApplied).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : "Draft"}
                         </span>
-                      ) : null}
+
+                        {score ? (
+                          <Badge variant={score >= 75 ? "success" : score >= 50 ? "warning" : "danger"} size="xs">
+                            {score}% Match
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         );

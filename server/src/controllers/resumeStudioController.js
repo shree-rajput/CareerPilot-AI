@@ -8,19 +8,17 @@ import { analyzeResumeAgainstJob, getInlineResumeSuggestion } from "../services/
 export const saveDraft = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { structuredData } = req.body;
+    const { structuredData, templateId } = req.body;
+    const userId = req.user._id || req.user.id;
 
-    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
+    const resume = await Resume.findOne({ _id: id, userId });
     if (!resume) {
       return next(createError(404, "Resume not found."));
     }
 
-    // Basic analysis on fast save
-    const atsScore = calculateBasicATS(structuredData);
-
-    resume.structuredData = structuredData;
+    if (structuredData) resume.structuredData = structuredData;
+    if (templateId) resume.templateId = templateId;
     resume.isDraft = true;
-    resume.atsScore = atsScore;
     
     await resume.save();
 
@@ -138,6 +136,7 @@ export const improveBullet = async (req, res, next) => {
     }
 
     const { executeAiTask } = await import("../services/ai/orchestrator.js");
+    const { checkSetDifferenceGuardrail } = await import("../services/aiGuardrailService.js");
 
     const systemPrompt = `You are an expert resume writer specializing in strong, ATS-friendly bullet points.
 
@@ -170,24 +169,32 @@ Generate 3 progressively stronger rewrites.`;
       history: []
     });
 
-    // Parse the result — COPILOT_CHAT returns { reply: "..." }
-    let options = [];
+    let rawOptions = [];
     try {
       const parsed = typeof result?.reply === "string"
         ? JSON.parse(result.reply)
         : result;
-      options = parsed?.options || [];
+      rawOptions = parsed?.options || [];
     } catch (_) {
-      // Fallback: wrap reply as single option
-      options = [{ text: result?.reply || bullet, rationale: "AI rewrite" }];
+      rawOptions = [{ text: result?.reply || bullet, rationale: "AI rewrite" }];
     }
+
+    // Apply set-difference guardrail verification against original input bullet
+    const options = rawOptions.map((opt) => {
+      const guardrail = checkSetDifferenceGuardrail(bullet, opt.text);
+      return {
+        ...opt,
+        needsUserInput: guardrail.needsUserInput,
+        unverifiedEntities: guardrail.unverifiedEntities,
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: {
         original: bullet,
-        options
-      }
+        options,
+      },
     });
   } catch (error) {
     next(error);

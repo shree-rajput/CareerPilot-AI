@@ -127,7 +127,7 @@ function buildSkillGap({ userSkills, targetSkills, missingFromMatches, weakFromI
   const userSkillMap = new Map();
   for (const skill of userSkills) {
     if (typeof skill === 'string') {
-      userSkillMap.set(normalize(skill), { proficiency: 'emerging', evidence: 'Mentioned in profile' });
+      userSkillMap.set(normalize(skill), { name: skill, proficiency: 'emerging', evidence: 'Mentioned in profile' });
     } else if (skill && skill.name) {
       userSkillMap.set(normalize(skill.name), skill);
     }
@@ -142,32 +142,57 @@ function buildSkillGap({ userSkills, targetSkills, missingFromMatches, weakFromI
     const knownSkill = userSkillMap.get(key);
     const isKnown = !!knownSkill;
 
-    if (isKnown && matchMissingCount === 0 && interviewWeakCount === 0 && knownSkill.proficiency === 'strong') {
-      gaps.push({
-        skill,
-        status: "strong",
-        priority: "low",
-        whyItMatters: "This skill appears in your profile and has not repeatedly appeared as a gap.",
-        evidence: knownSkill.evidence || "Strong evidence in profile",
-        recommendedTopics: [],
-        practiceRecommendation: "Keep using this in projects and interview explanations."
-      });
-      continue;
-    }
+    let classification = "missing_evidence";
+    let status = "missing"; // Backwards compat: strong | needs_improvement | missing
+    let priority = "medium";
+    let evidenceText = "No evidence found in current CareerPilot profile or projects.";
+    let whyItMatters = `We don't currently have evidence of ${skill} experience in your CareerPilot profile, but it is required for your target roles.`;
 
-    const priorityScore = matchMissingCount * 2 + interviewWeakCount * 3 + (isKnown ? (knownSkill.proficiency === 'emerging' ? 1 : 0) : 2);
-    const priority = priorityScore >= 5 ? "high" : priorityScore >= 2 ? "medium" : "low";
-    
-    let evidence = knownSkill ? (knownSkill.evidence || `Detected as ${knownSkill.proficiency}`) : "No evidence found in resume or projects.";
+    if (isKnown) {
+      const prof = knownSkill.proficiency || "emerging";
+      const isVerified = knownSkill.status === "VERIFIED" || knownSkill.confidence >= 85 || prof === "strong" || prof >= 85;
+
+      if (isVerified && matchMissingCount === 0 && interviewWeakCount === 0) {
+        classification = "proven";
+        status = "strong";
+        priority = "low";
+        evidenceText = knownSkill.evidence || "Strong evidence verified across profile and projects.";
+        whyItMatters = `Proven competency. ${skill} appears in your profile with strong evidence.`;
+      } else if (interviewWeakCount > 0 || prof === "weak" || prof < 40) {
+        classification = "weak_evidence";
+        status = "needs_improvement";
+        priority = interviewWeakCount > 1 ? "high" : "medium";
+        evidenceText = knownSkill.evidence || `Mentioned in profile, but interview performance showed depth gaps.`;
+        whyItMatters = `Weak evidence detected. ${skill} is mentioned, but needs deeper interview or implementation practice.`;
+      } else if (knownSkill.source === "user_confirmed" || knownSkill.userConfirmed) {
+        classification = "user_confirmed";
+        status = "needs_improvement";
+        priority = "medium";
+        evidenceText = "User explicitly confirmed experience with this skill.";
+        whyItMatters = `User confirmed. Complete a practice quiz or project check to verify proficiency.`;
+      } else {
+        classification = "evidence_found";
+        status = "needs_improvement";
+        priority = matchMissingCount > 0 ? "high" : "medium";
+        evidenceText = knownSkill.evidence || `Evidence found in profile/projects.`;
+        whyItMatters = `Evidence found in your profile, but target applications require stronger proof.`;
+      }
+    } else {
+      classification = "missing_evidence";
+      status = "missing";
+      const priorityScore = matchMissingCount * 2 + 2;
+      priority = priorityScore >= 4 ? "high" : "medium";
+      evidenceText = "No evidence found in current CareerPilot data.";
+      whyItMatters = `We don't currently have evidence of ${skill} experience in your CareerPilot profile.`;
+    }
 
     gaps.push({
       skill,
-      status: isKnown ? "needs_improvement" : "missing",
+      status,
+      classification,
       priority,
-      evidence,
-      whyItMatters: isKnown
-        ? `Your data suggests this skill needs stronger evidence or interview depth.`
-        : `This skill is relevant to your target role but is not visible in your profile.`,
+      evidence: evidenceText,
+      whyItMatters,
       recommendedTopics: getRecommendedTopics(skill),
       practiceRecommendation: getPracticeRecommendation(skill)
     });

@@ -9,6 +9,16 @@ const projectSchema = new mongoose.Schema(
     description: { type: String, required: true },
     role: { type: String, default: "" },
     achievements: { type: [String], default: [] },
+    githubUrl: { type: String, default: "" },
+    evidenceSource: { type: String, enum: ["resume", "user", "github", "other"], default: "user" },
+    confidence: { type: Number, min: 0, max: 100, default: 80 },
+    
+    database: { type: String, default: "" },
+    apis: { type: String, default: "" },
+    deployment: { type: String, default: "" },
+    challenges: { type: String, default: "" },
+    measurableOutcomes: { type: [String], default: [] },
+    
     complexity: { type: String, enum: ["low", "medium", "high"], default: "medium" },
     relevance: { type: Number, min: 0, max: 100, default: 50 },
     
@@ -17,7 +27,9 @@ const projectSchema = new mongoose.Schema(
       type: [{
         question: String,
         category: String,
-        difficulty: String
+        difficulty: String,
+        relevanceReason: String,
+        targetJobRequirement: String
       }],
       default: []
     }

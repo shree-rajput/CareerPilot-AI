@@ -2,27 +2,27 @@
  * Semantic Match Engine — the core pipeline.
  *
  * Architecture:
- *   Resume structured data
- *     → Extract text per category (skills, projects, experience, etc.)
+ *   Candidate Profile Evidence (Resume + Target Roles + User Skills + Portfolio Projects)
+ *     → Extract text per category (skills, projects, experience, target roles, etc.)
  *     → Embed each item locally
  *
  *   JD extracted requirements
  *     → Extract requirements per category
  *     → Embed each requirement locally
  *
- *     → Cosine similarity & Token overlap for every (resume item, requirement) pair
+ *     → Cosine similarity & Token overlap for every (candidate item, requirement) pair
  *     → Best match per requirement
  *     → Classify: strong / partial / missing
- *     → Average per category
+ *     → Average per category (weighted only by categories present in the JD)
  *
- *   Scoring engine (weights) → overallScore 0–100
+ *   Scoring engine (weights) → overallScore 0–100 (normalized integer)
  *
  * The LLM is NOT involved in scoring. It only writes the explanation afterwards.
  */
 
 import { cosineSimilarity } from "./cosineSimilarity.js";
 import { embedTexts } from "./embeddingService.js";
-import { calculateScore, classifySimilarity } from "./scoringEngine.js";
+import { calculateScore, classifySimilarity, clampScore } from "./scoringEngine.js";
 
 /**
  * Deterministic token overlap fallback for string matching.
@@ -47,20 +47,48 @@ function computeTokenOverlap(itemA, itemB) {
 }
 
 /**
- * Extract a flat text representation per scoring category from resume structured data.
+ * Extract a flat text representation per scoring category from candidate profile & resume structured data.
  * @param {object} structuredData - Validated resumeStructureSchema output
- * @returns {object} { technicalSkills: string[], projects: string[], experience: string[], education: string[] }
+ * @param {object} [candidateContext] - Optional context containing userSkills, userProjects, targetRoles, experienceLevel
+ * @returns {object} { technicalSkills: string[], projects: string[], experience: string[], education: string[], targetRoles: string[] }
  */
-function extractResumeSegments(structuredData) {
+function extractResumeSegments(structuredData, candidateContext = null) {
   const sd = structuredData || {};
 
-  const skillsList = (sd.skills || []).map(s => typeof s === "string" ? s : s.canonicalName || s.name || s.skillName || "").filter(Boolean);
+  // Extract skills from resume
+  const resumeSkills = (sd.skills || [])
+    .map(s => typeof s === "string" ? s : s.canonicalName || s.name || s.skillName || "")
+    .filter(Boolean);
+
+  // Extract candidate profile declared/proven skills if available
+  const contextSkills = (candidateContext?.userSkills || [])
+    .map(s => typeof s === "string" ? s : s.name || s.skillName || "")
+    .filter(Boolean);
+
+  const contextTechStack = (candidateContext?.user?.primaryTechStack || [])
+    .concat(candidateContext?.user?.technicalSkills || []);
+
+  const combinedSkills = [...new Set([...resumeSkills, ...contextSkills, ...contextTechStack])];
+
+  // Extract projects from resume + candidate portfolio projects
+  const resumeProjects = (sd.projects || []).map(
+    (p) => `${p.name || ""}: ${p.description || ""} ${p.problemSolved || ""} Technologies: ${Array.isArray(p.technologies) ? p.technologies.join(", ") : p.technologies || ""}`
+  );
+
+  const contextProjects = (candidateContext?.projects || []).map(
+    (p) => `${p.title || p.name || ""}: ${p.description || ""} Tech Stack: ${Array.isArray(p.techStack) ? p.techStack.join(", ") : p.techStack || ""}`
+  );
+
+  const combinedProjects = [...new Set([...resumeProjects, ...contextProjects])];
+
+  // Extract target roles
+  const targetRoles = (candidateContext?.user?.targetRoles || candidateContext?.careerProfile?.targetRoles || [])
+    .map(r => typeof r === "string" ? r : r.title || "")
+    .filter(Boolean);
 
   return {
-    technicalSkills: skillsList,
-    projects: (sd.projects || []).map(
-      (p) => `${p.name || ""}: ${p.description || ""} ${p.problemSolved || ""} Technologies: ${Array.isArray(p.technologies) ? p.technologies.join(", ") : p.technologies || ""}`
-    ),
+    technicalSkills: combinedSkills,
+    projects: combinedProjects,
     experience: (sd.experience || []).map(
       (e) => `${e.role || ""} at ${e.company || ""}: ${e.description || ""}`
     ),
@@ -71,7 +99,8 @@ function extractResumeSegments(structuredData) {
       sd.summary || "",
       ...(sd.achievements || []),
       ...(sd.experience || []).map((e) => e.description || "")
-    ].filter(Boolean)
+    ].filter(Boolean),
+    targetRoles
   };
 }
 
@@ -86,13 +115,17 @@ function extractJdRequirements(extractedJd) {
     return list.map(s => typeof s === "string" ? s : s.skillName || s.name || s.canonicalName || "").filter(Boolean);
   };
 
+  const reqSkills = formatSkills(jd.requiredSkills);
+  const prefSkills = formatSkills(jd.preferredSkills);
+  const respList = Array.isArray(jd.responsibilities) ? jd.responsibilities : [];
+
   return {
-    technicalSkills: formatSkills(jd.requiredSkills),
-    projects: jd.responsibilities || [], 
-    experience: formatSkills(jd.requiredSkills), 
+    technicalSkills: reqSkills,
+    projects: respList.length > 0 ? respList : reqSkills, 
+    experience: reqSkills, 
     education: jd.educationRequirement ? [jd.educationRequirement] : [],
-    responsibilities: jd.responsibilities || [],
-    preferredSkills: formatSkills(jd.preferredSkills)
+    responsibilities: respList,
+    preferredSkills: prefSkills
   };
 }
 
@@ -155,15 +188,17 @@ async function matchCategory(requirements, resumeItems) {
  *
  * @param {object} resumeStructuredData - From resumeSchema (validated AI output)
  * @param {object} extractedJd - From jdSchema (validated AI output)
+ * @param {object} [candidateContext] - Optional user profile, skills, projects, target roles
  * @returns {Promise<MatchPipelineResult>}
  */
-export async function runMatchPipeline(resumeStructuredData, extractedJd) {
-  const resumeSegments = extractResumeSegments(resumeStructuredData);
+export async function runMatchPipeline(resumeStructuredData, extractedJd, candidateContext = null) {
+  const resumeSegments = extractResumeSegments(resumeStructuredData, candidateContext);
   const jdRequirements = extractJdRequirements(extractedJd);
 
   const categories = ["technicalSkills", "projects", "experience", "education", "responsibilities", "preferredSkills"];
 
   const categoryRawScores = {};
+  const categoryHasRequirements = {};
   const allEvidence = [];
   const matchedSkills = [];
   const partialSkills = [];
@@ -173,34 +208,57 @@ export async function runMatchPipeline(resumeStructuredData, extractedJd) {
     const requirements = jdRequirements[category] || [];
     const resumeItems = resumeSegments[category] || resumeSegments.responsibilities || [];
 
-    const { bestScores, evidence } = await matchCategory(requirements, resumeItems);
+    const hasReqs = requirements.length > 0;
+    categoryHasRequirements[category] = hasReqs;
 
-    const avgScore = bestScores.length > 0
-      ? bestScores.reduce((a, b) => a + b, 0) / bestScores.length
-      : 0;
+    if (hasReqs) {
+      const { bestScores, evidence } = await matchCategory(requirements, resumeItems);
 
-    categoryRawScores[category] = avgScore;
+      const avgScore = bestScores.length > 0
+        ? bestScores.reduce((a, b) => a + b, 0) / bestScores.length
+        : 0;
 
-    for (const ev of evidence) {
-      allEvidence.push({ ...ev, resumeSection: category });
+      categoryRawScores[category] = avgScore;
 
-      if (category === "technicalSkills" || category === "preferredSkills") {
-        if (ev.classification === "strong") matchedSkills.push(ev.requirement);
-        else if (ev.classification === "partial") partialSkills.push(ev.requirement);
-        else missingSkills.push(ev.requirement);
+      for (const ev of evidence) {
+        allEvidence.push({ ...ev, resumeSection: category });
+
+        if (category === "technicalSkills" || category === "preferredSkills") {
+          if (ev.classification === "strong") matchedSkills.push(ev.requirement);
+          else if (ev.classification === "partial") partialSkills.push(ev.requirement);
+          else missingSkills.push(ev.requirement);
+        }
+      }
+    } else {
+      categoryRawScores[category] = null; // Omitted category
+    }
+  }
+
+  const { overallScore, categoryScores } = calculateScore(categoryRawScores, categoryHasRequirements);
+
+  // Compute Target Role Alignment if target roles are specified
+  let targetRoleAlignmentScore = null;
+  let targetRoleMatchName = "";
+  if (resumeSegments.targetRoles.length > 0 && (extractedJd?.title || extractedJd?.role)) {
+    const jdJobTitle = extractedJd.title || extractedJd.role || "";
+    for (const targetRole of resumeSegments.targetRoles) {
+      const tokSim = computeTokenOverlap(targetRole, jdJobTitle);
+      if (targetRoleAlignmentScore === null || tokSim > targetRoleAlignmentScore) {
+        targetRoleAlignmentScore = tokSim;
+        targetRoleMatchName = targetRole;
       }
     }
   }
 
-  const { overallScore, categoryScores } = calculateScore(categoryRawScores);
-
   // Compute fit breakdown corresponding to product requirements
   const fitBreakdown = {
     technicalFit: categoryScores.technicalSkills || 0,
-    experienceFit: categoryScores.experience || 0,
-    skillFit: Math.round(((categoryScores.technicalSkills || 0) + (categoryScores.preferredSkills || 0)) / 2),
-    projectFit: categoryScores.projects || 0,
-    educationFit: categoryScores.education || 0
+    experienceFit: categoryScores.experience || (categoryScores.technicalSkills || 0),
+    skillFit: Math.round(((categoryScores.technicalSkills || 0) + (categoryScores.preferredSkills || categoryScores.technicalSkills || 0)) / 2),
+    projectFit: categoryScores.projects || (categoryScores.technicalSkills || 0),
+    educationFit: categoryScores.education || 70,
+    targetRoleAlignment: targetRoleAlignmentScore !== null ? Math.round(targetRoleAlignmentScore * 100) : null,
+    targetRoleMatchName
   };
 
   // Categorize gaps
@@ -226,27 +284,27 @@ export async function runMatchPipeline(resumeStructuredData, extractedJd) {
   const uniqueImportant = [...new Set(importantGaps)];
   const uniqueNiceToHave = [...new Set(niceToHaveGaps)];
 
-  // Generate actionable next steps per gap (without inventing fake evidence)
+  // Generate actionable next steps per gap
   const actionPlan = [
     ...uniqueCritical.slice(0, 4).map(gap => ({
       gap,
       severity: "critical",
-      action: `${gap} is listed as a critical requirement. It is not currently evidenced in your resume. Consider building or deploying one project using ${gap} and adding the experience only after you actually gain it.`
+      action: `${gap} is listed as a critical requirement. It is not currently evidenced in your profile. Consider building a targeted project using ${gap} to demonstrate hands-on experience.`
     })),
     ...uniqueImportant.slice(0, 3).map(gap => ({
       gap,
       severity: "important",
-      action: `${gap} is an important requirement. Highlight relevant hands-on coursework or project components in your resume.`
+      action: `${gap} is an important requirement. Highlight relevant hands-on coursework, projects, or practice modules.`
     })),
     ...uniqueNiceToHave.slice(0, 3).map(gap => ({
       gap,
       severity: "nice_to_have",
-      action: `${gap} is a preferred skill. Mention basic familiarity or plan to explore it if time permits.`
+      action: `${gap} is a preferred skill. Mention basic familiarity or explore it in upcoming practice.`
     }))
   ];
 
   return {
-    overallScore,
+    overallScore: clampScore(overallScore),
     categoryScores,
     fitBreakdown,
     matchedSkills: [...new Set(matchedSkills)],
@@ -259,4 +317,3 @@ export async function runMatchPipeline(resumeStructuredData, extractedJd) {
     evidence: allEvidence
   };
 }
-

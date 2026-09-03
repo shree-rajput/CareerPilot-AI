@@ -24,6 +24,7 @@ import TechDiscussionReportPage from "./pages/TechDiscussionReportPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { JobBoardPage } from "./pages/JobBoardPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
+import { JobInboxPage } from "./pages/JobInboxPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { PreparationPage } from "./pages/PreparationPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -33,6 +34,7 @@ import { BecomeAMentorPage } from "./pages/BecomeAMentorPage";
 import { MentorSessionRoomPage } from "./pages/MentorSessionRoomPage";
 import { CodingPracticePage } from "./pages/CodingPracticePage";
 import { CopilotPage } from "./pages/CopilotPage";
+import { ExtensionAuthorizePage } from "./pages/ExtensionAuthorizePage";
 
 export function App() {
   return (
@@ -43,10 +45,13 @@ export function App() {
         <Route path="/signup" element={<AuthPage mode="signup" />} />
 
         <Route element={<ProtectedRoute />}>
+          {/* Extension Connect Page (Standalone layout) */}
+          <Route path="/extension/connect" element={<ExtensionAuthorizePage />} />
+
           {/* Standalone Route for Copilot */}
           <Route path="/copilot" element={<CopilotPage />} />
           <Route path="/copilot/shared/:token" element={<CopilotPage />} />
-          
+
           {/* Main Application Routes */}
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
@@ -59,10 +64,11 @@ export function App() {
               path="/applications/:id"
               element={<ApplicationDetailPage />}
             />
-            
+
             <Route path="/jobs" element={<JobBoardPage />} />
+            <Route path="/jobs/inbox" element={<JobInboxPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
-            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/skills" element={<Navigate to="/preparation" replace />} />
             <Route path="/preparation" element={<PreparationPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
 
@@ -107,8 +113,8 @@ export function App() {
             />
 
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/coding" element={<CodingPracticePage />} />
-            <Route path="/coding/:id" element={<CodingPracticePage />} />
+            <Route path="/coding" element={<Navigate to="/preparation" replace />} />
+            <Route path="/coding/:id" element={<Navigate to="/preparation" replace />} />
             <Route path="/mentorship" element={<MentorshipPage />} />
             <Route path="/become-a-mentor" element={<BecomeAMentorPage />} />
             <Route path="/mentor" element={<Navigate to="/mentor/dashboard" replace />} />

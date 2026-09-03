@@ -32,7 +32,15 @@ const jobSchema = new mongoose.Schema(
     employmentType: { type: String, trim: true, default: "" },
     experienceLevel: { type: String, trim: true, default: "" },
     source: { type: String, trim: true, default: "manual" },
+    sourceType: {
+      type: String,
+      enum: ["extension", "pdf", "url", "manual"],
+      default: "manual"
+    },
     url: { type: String, trim: true, default: "" },
+    canonicalUrl: { type: String, trim: true, default: "" },
+    externalJobId: { type: String, trim: true, default: "" },
+    normalizedTitle: { type: String, trim: true, default: "" },
 
     // Salary information
     salaryMin: { type: Number, default: null },
@@ -62,6 +70,28 @@ const jobSchema = new mongoose.Schema(
     }],
     
     // Extracted Intelligence
+    responsibilities: [{ type: String }],
+    qualifications: [{ type: String }],
+    technologies: [{ type: String }],
+    experienceRequirement: { type: String, default: "" },
+    educationRequirement: { type: String, default: "" },
+    extractionConfidence: {
+      type: Number,
+      default: 100,
+      set: (val) => {
+        if (typeof val === "number") return val;
+        if (typeof val === "string") {
+          const u = val.toUpperCase();
+          if (u === "HIGH") return 90;
+          if (u === "MEDIUM") return 70;
+          if (u === "LOW") return 40;
+          const p = parseInt(val, 10);
+          return isNaN(p) ? 100 : p;
+        }
+        return 100;
+      }
+    },
+
     requiredSkills: { 
       type: [requiredSkillSchema], 
       default: [],
@@ -84,6 +114,9 @@ const jobSchema = new mongoose.Schema(
 );
 
 jobSchema.index({ company: 1, title: 1 });
+jobSchema.index({ canonicalUrl: 1 });
+jobSchema.index({ externalJobId: 1 });
+jobSchema.index({ company: 1, normalizedTitle: 1 });
 jobSchema.index({ savedBy: 1 });
 jobSchema.index({ createdAt: -1 });
 

@@ -14,10 +14,13 @@ export async function getNotifications(req, res, next) {
     const unreadOnly = req.query.unreadOnly === "true";
     const limit = Number(req.query.limit) || 20;
 
-    // First trigger notification engine check for user
-    await runNotificationEngine();
+    // Trigger notification engine check for user in background without blocking
+    runNotificationEngine().catch((err) => {
+      console.warn("[NotificationEngine] Background check error:", err?.message || err);
+    });
 
-    const data = await getUserNotifications(req.user.id, { limit, unreadOnly });
+    const userId = req.user._id || req.user.id;
+    const data = await getUserNotifications(userId, { limit, unreadOnly });
     res.status(200).json({
       success: true,
       data

@@ -1,87 +1,117 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  ArrowLeft, Building2, MapPin, BriefcaseBusiness, ExternalLink,
+  ArrowLeft, Building2, MapPin, ExternalLink,
   Calendar, Trash2, CheckCircle2, XCircle, AlertCircle, Target,
   Sparkles, Bookmark, BookmarkPlus, Zap, TrendingUp, Loader2,
-  ChevronRight, Clock, DollarSign, Wifi, WifiOff, MonitorSmartphone,
-  ArrowRight, Copy, Check
+  Copy, Check
 } from "lucide-react";
 import { jobApi } from "../api/career";
 import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { Badge } from "../components/ui/Badge";
+import { DeleteJobModal } from "../components/jobs/DeleteJobModal";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getMatchColor(score) {
-  if (score >= 80) return { ring: "ring-emerald-500/30", bg: "from-emerald-50", bar: "bg-emerald-500", text: "text-emerald-600" };
-  if (score >= 60) return { ring: "ring-amber-500/30", bg: "from-amber-50", bar: "bg-amber-500", text: "text-amber-600" };
-  return { ring: "ring-rose-500/30", bg: "from-rose-50", bar: "bg-rose-500", text: "text-rose-500" };
+export function normalizeScore(val) {
+  if (val === null || val === undefined || Number.isNaN(val)) return 0;
+  const num = Number(val);
+  if (num <= 1 && num > 0) return Math.round(num * 100);
+  return Math.min(100, Math.max(0, Math.round(num)));
 }
 
 function RemoteBadge({ status }) {
   const map = {
-    remote: { label: "Remote", cls: "bg-sky-100 text-sky-700 border-sky-200" },
-    hybrid: { label: "Hybrid", cls: "bg-violet-100 text-violet-700 border-violet-200" },
-    onsite: { label: "On-site", cls: "bg-slate-100 text-slate-600 border-slate-200" }
+    remote: { label: "Remote", variant: "primary" },
+    hybrid: { label: "Hybrid", variant: "info" },
+    onsite: { label: "On-site", variant: "secondary" }
   };
   const s = map[status];
   if (!s) return null;
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${s.cls}`}>
-      {status === "remote" ? <Wifi size={11} /> : status === "hybrid" ? <MonitorSmartphone size={11} /> : <WifiOff size={11} />}
+    <Badge variant={s.variant} size="xs">
       {s.label}
-    </span>
+    </Badge>
   );
 }
 
 function VerdictCard({ verdict, reasoning, effort, tailoringRecommended, matchScore }) {
+  const normScore = matchScore != null ? normalizeScore(matchScore) : null;
+
   const styles = {
-    APPLY: { bg: "bg-emerald-600", badge: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: <CheckCircle2 size={18} />, label: "Strong Fit — Apply" },
-    MAYBE: { bg: "bg-amber-500", badge: "bg-amber-100 text-amber-800 border-amber-300", icon: <AlertCircle size={18} />, label: "Possible Fit — Prepare First" },
-    LOW_PRIORITY: { bg: "bg-slate-500", badge: "bg-slate-100 text-slate-700 border-slate-300", icon: <XCircle size={18} />, label: "Low Priority" },
-    UNKNOWN: { bg: "bg-blue-500", badge: "bg-blue-100 text-blue-800 border-blue-200", icon: <Sparkles size={18} />, label: "Add Resume to Get Verdict" }
+    APPLY: {
+      border: "border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20",
+      badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300",
+      icon: <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />,
+      label: "Strong Fit — Recommended to Apply"
+    },
+    MAYBE: {
+      border: "border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20",
+      badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300",
+      icon: <AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />,
+      label: "Possible Fit — Resume Tailoring Advised"
+    },
+    LOW_PRIORITY: {
+      border: "border-border bg-bg-secondary/40",
+      badge: "bg-bg-secondary text-text-secondary",
+      icon: <XCircle size={16} className="text-text-muted" />,
+      label: "Low Priority — Address Skill Gaps First"
+    },
+    UNKNOWN: {
+      border: "border-border bg-bg-secondary/30",
+      badge: "bg-bg-secondary text-text-secondary",
+      icon: <Sparkles size={16} className="text-primary" />,
+      label: "Upload Resume to Get Verdict"
+    }
   };
   const s = styles[verdict] || styles.UNKNOWN;
 
   return (
-    <div className={`rounded-2xl overflow-hidden border border-white/20 shadow-lg ${s.bg}`}>
-      <div className="p-4 flex items-center gap-3">
-        <span className="text-white">{s.icon}</span>
-        <div>
-          <p className="text-white font-black text-base">{s.label}</p>
-          <p className="text-white/70 text-xs font-semibold">{matchScore != null ? `${matchScore}% profile match` : ""}</p>
+    <div className={`rounded-xl border p-4 space-y-2.5 transition-all ${s.border}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {s.icon}
+          <span className="text-xs font-bold text-text">{s.label}</span>
         </div>
+        {normScore != null && (
+          <span className="text-xs font-bold text-text-muted">
+            {normScore}% fit
+          </span>
+        )}
       </div>
+
       {reasoning && (
-        <div className="bg-white/10 px-4 py-3">
-          <p className="text-white/90 text-xs leading-relaxed">{reasoning}</p>
-          <div className="flex items-center gap-3 mt-2">
-            <span className="text-[10px] font-bold text-white/60 uppercase">Effort: <span className="text-white">{effort}</span></span>
-            {tailoringRecommended && (
-              <span className="text-[10px] font-bold text-amber-200 flex items-center gap-1">
-                <Sparkles size={9} /> Tailoring Recommended
-              </span>
-            )}
-          </div>
+        <p className="text-xs text-text-secondary leading-relaxed m-0">
+          {reasoning}
+        </p>
+      )}
+
+      {(effort || tailoringRecommended) && (
+        <div className="flex items-center gap-3 pt-1 text-[10px] font-semibold text-text-muted">
+          {effort && <span>Preparation Effort: <strong className="text-text">{effort}</strong></span>}
+          {tailoringRecommended && (
+            <span className="text-primary font-bold flex items-center gap-1">
+              <Sparkles size={10} /> Tailoring Recommended
+            </span>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function ScoreRing({ score, size = 100, strokeWidth = 8 }) {
+function ScoreRing({ score, size = 64, strokeWidth = 6 }) {
+  const normScore = normalizeScore(score);
   const r = (size - strokeWidth) / 2;
   const circ = 2 * Math.PI * r;
-  const c = getMatchColor(score);
-  const fill = (score / 100) * circ;
+  const fill = (normScore / 100) * circ;
+
+  const strokeColor = normScore >= 80 ? "#059669" : normScore >= 60 ? "#d97706" : "#dc2626";
 
   return (
     <svg width={size} height={size} className="-rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border-color, #e2e8f0)" strokeWidth={strokeWidth} />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={score >= 80 ? "#10b981" : score >= 60 ? "#f59e0b" : "#ef4444"}
+        stroke={strokeColor}
         strokeWidth={strokeWidth}
         strokeDasharray={`${fill} ${circ}`}
         strokeLinecap="round" />
@@ -89,22 +119,23 @@ function ScoreRing({ score, size = 100, strokeWidth = 8 }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 export function JobDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // AI feature states
   const [matchData, setMatchData] = useState(null);
   const [loadingMatch, setLoadingMatch] = useState(false);
+  const [matchError, setMatchError] = useState(null);
+
   const [shouldApplyData, setShouldApplyData] = useState(null);
   const [loadingShouldApply, setLoadingShouldApply] = useState(false);
+  const [shouldApplyError, setShouldApplyError] = useState(null);
+
   const [savingJob, setSavingJob] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
   const [copiedJD, setCopiedJD] = useState(false);
 
   useEffect(() => { loadJob(); }, [id]);
@@ -114,21 +145,21 @@ export function JobDetailPage() {
       const res = await jobApi.getJobById(id);
       setJob(res.data || res);
     } catch (err) {
-      console.error(err);
+      console.error("[JobDetailPage] Load job error:", err);
       navigate("/jobs");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleDelete() {
-    if (!window.confirm("Remove this tracked job?")) return;
-    setDeleting(true);
+  async function handleConfirmDelete() {
     try {
-      await jobApi.deactivateJob(id);
+      await jobApi.deleteJob(id);
+      setShowDeleteModal(false);
       navigate("/jobs");
-    } catch {
-      setDeleting(false);
+    } catch (err) {
+      console.error("[JobDetailPage] Delete error:", err);
+      alert(err?.response?.data?.message || "Failed to delete job.");
     }
   }
 
@@ -144,11 +175,13 @@ export function JobDetailPage() {
 
   async function runMatch() {
     setLoadingMatch(true);
+    setMatchError(null);
     try {
       const res = await jobApi.matchJob(id);
       setMatchData(res.data);
     } catch (e) {
-      console.error(e);
+      console.error("[JobDetailPage] Run match error:", e);
+      setMatchError(e?.response?.data?.message || "AI analysis is temporarily unavailable.");
     } finally {
       setLoadingMatch(false);
     }
@@ -156,6 +189,7 @@ export function JobDetailPage() {
 
   async function runShouldApply() {
     setLoadingShouldApply(true);
+    setShouldApplyError(null);
     try {
       const res = await jobApi.shouldApply(id);
       setShouldApplyData(res.data);
@@ -164,7 +198,8 @@ export function JobDetailPage() {
         setMatchData(matchRes.data);
       }
     } catch (e) {
-      console.error(e);
+      console.error("[JobDetailPage] Should apply error:", e);
+      setShouldApplyError(e?.response?.data?.message || "AI analysis is temporarily unavailable.");
     } finally {
       setLoadingShouldApply(false);
     }
@@ -184,55 +219,49 @@ export function JobDetailPage() {
 
   if (!job) return null;
 
-  const matchColor = matchData ? getMatchColor(matchData.overallScore) : null;
+  const normScore = matchData?.overallScore != null ? normalizeScore(matchData.overallScore) : null;
 
   return (
-    <div className="max-w-6xl mx-auto pb-16 px-4 sm:px-6">
-      {/* Back */}
-      <div className="py-4">
-        <Link to="/jobs" className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">
-          <ArrowLeft size={15} /> Back to Job Board
+    <div className="max-w-6xl mx-auto pb-16 px-4 sm:px-6 space-y-6">
+      {/* Navigation */}
+      <div className="py-2">
+        <Link to="/jobs" className="inline-flex items-center gap-1.5 text-xs font-bold text-text-secondary hover:text-primary transition-colors">
+          <ArrowLeft size={14} /> Back to Job Board
         </Link>
       </div>
 
-      {/* ── Hero Header ── */}
-      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-2xl p-6 mb-6 shadow-xl relative overflow-hidden">
-        {/* bg texture */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/30 -translate-y-24 translate-x-24" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/20 translate-y-16 -translate-x-16" />
-        </div>
-
-        <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Building2 size={18} className="text-white" />
+      {/* Header Banner */}
+      <div className="bg-surface rounded-xl border border-border p-6 shadow-xs relative overflow-hidden">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-lg bg-bg-secondary border border-border flex items-center justify-center shrink-0">
+                <Building2 size={18} className="text-text-secondary" />
               </div>
-              <span className="text-sm font-bold text-blue-200">{job.company}</span>
+              <span className="text-sm font-bold text-text-secondary">{job.company}</span>
             </div>
 
-            <h1 className="text-2xl font-black text-white leading-tight mb-3">{job.title}</h1>
+            <h1 className="text-2xl font-bold text-text leading-tight m-0">{job.title}</h1>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
               {job.location && (
-                <span className="text-sm text-blue-100 flex items-center gap-1.5 font-semibold">
-                  <MapPin size={13} /> {job.location}
+                <span className="text-xs text-text-muted flex items-center gap-1 font-medium">
+                  <MapPin size={12} /> {job.location}
                 </span>
               )}
               {job.remoteStatus && <RemoteBadge status={job.remoteStatus} />}
               {job.employmentType && (
-                <span className="text-xs font-bold text-blue-100 bg-white/15 px-2.5 py-1 rounded-lg">
+                <Badge variant="secondary" size="xs font-semibold">
                   {job.employmentType}
-                </span>
+                </Badge>
               )}
               {job.salaryDisplay && (
-                <span className="text-xs font-bold text-emerald-300 bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50">
                   {job.salaryDisplay}
                 </span>
               )}
-              <span className="text-xs text-blue-200 flex items-center gap-1">
-                <Calendar size={11} /> Added {new Date(job.createdAt).toLocaleDateString()}
+              <span className="text-xs text-text-muted flex items-center gap-1">
+                <Calendar size={12} /> Added {new Date(job.createdAt).toLocaleDateString()}
               </span>
             </div>
           </div>
@@ -240,228 +269,203 @@ export function JobDetailPage() {
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             {job.url && (
               <a href={job.url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-sm font-bold px-3 py-2 rounded-xl transition-all border border-white/20">
-                <ExternalLink size={14} /> View Posting
+                className="flex items-center gap-1.5 bg-bg-secondary hover:bg-border/60 text-text text-xs font-bold px-3 py-2 rounded-lg transition-colors border border-border">
+                <ExternalLink size={13} /> View Posting
               </a>
             )}
-            <button onClick={handleSave} disabled={savingJob}
-              className={`flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-xl transition-all border ${job.isSaved
-                  ? "bg-blue-900/50 text-white border-white/20"
-                  : "bg-white/15 hover:bg-white/25 text-white border-white/20"
-                }`}>
-              {job.isSaved ? <Bookmark size={14} fill="currentColor" /> : <BookmarkPlus size={14} />}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSave}
+              isLoading={savingJob}
+            >
+              {job.isSaved ? <Bookmark size={13} fill="currentColor" className="text-primary" /> : <BookmarkPlus size={13} />}
               {job.isSaved ? "Saved" : "Save"}
-            </button>
-            <button onClick={handleDelete} disabled={deleting}
-              className="flex items-center gap-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 text-sm font-bold px-3 py-2 rounded-xl transition-all border border-rose-500/30">
-              <Trash2 size={14} /> {deleting ? "Removing..." : "Remove"}
-            </button>
+            </Button>
+
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setShowDeleteModal(true)}
+            >
+              <Trash2 size={13} /> Delete Job
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* ── Content Grid ── */}
+      {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Left column — AI Intelligence */}
+        {/* Left column — AI Fit Analysis */}
         <div className="lg:col-span-1 flex flex-col gap-5">
 
-          {/* Should I Apply? Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Zap size={15} className="text-amber-500" /> Should I Apply?
+          {/* Verdict Card */}
+          <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
+              <h3 className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5 m-0">
+                <Zap size={14} className="text-amber-500" /> Should I Apply?
               </h3>
               {shouldApplyData && (
-                <button onClick={runShouldApply} className="text-[10px] font-bold text-blue-500 hover:text-blue-700">
+                <button onClick={runShouldApply} className="text-[10px] font-semibold text-primary hover:underline">
                   Refresh
                 </button>
               )}
             </div>
 
-            <div className="p-4">
-              {!shouldApplyData && !loadingShouldApply && (
-                <div className="flex flex-col items-center gap-3 py-3">
-                  <p className="text-xs text-slate-500 text-center leading-relaxed">
-                    AI analyzes your resume against this role's requirements and gives you a verdict.
-                  </p>
-                  <button
-                    onClick={runShouldApply}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm transition-all shadow-sm"
-                  >
-                    <Sparkles size={14} /> Analyze My Fit
-                  </button>
-                </div>
-              )}
-
-              {loadingShouldApply && (
-                <div className="flex items-center justify-center gap-2 py-6 text-slate-400 text-xs">
-                  <Loader2 size={16} className="animate-spin text-blue-500" />
-                  <span className="font-semibold">Analyzing your profile...</span>
-                </div>
-              )}
-
-              {shouldApplyData && (
-                <VerdictCard {...shouldApplyData} />
-              )}
-            </div>
-          </div>
-
-          {/* AI Match Score Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Target size={15} className="text-blue-500" /> Match Analysis
-              </h3>
-            </div>
-
-            <div className="p-4">
-              {!matchData && !loadingMatch && (
-                <button
-                  onClick={runMatch}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-sm transition-all"
-                >
-                  <TrendingUp size={14} /> Run Match Analysis
-                </button>
-              )}
-
-              {loadingMatch && (
-                <div className="flex items-center justify-center gap-2 py-6 text-slate-400 text-xs">
-                  <Loader2 size={16} className="animate-spin" />
-                  <span className="font-semibold">Running semantic pipeline...</span>
-                </div>
-              )}
-
-              {matchData && (
-                <div className="flex flex-col gap-4">
-                  {/* Score ring */}
-                  <div className="flex items-center gap-4">
-                    <div className="relative shrink-0" style={{ width: 72, height: 72 }}>
-                      <ScoreRing score={matchData.overallScore} size={72} strokeWidth={7} />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className={`text-sm font-black ${matchColor.text}`}>
-                          {matchData.overallScore}%
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900">Overall Match</p>
-                      <p className="text-xs text-slate-500">
-                        {matchData.matchedSkills?.length || 0} matched · {matchData.missingSkills?.length || 0} missing
-                      </p>
-                      {matchData.resumeName && (
-                        <p className="text-[10px] text-blue-600 font-semibold mt-1">vs. {matchData.resumeName}</p>
-                      )}
-                    </div>
+            {!shouldApplyData && !loadingShouldApply && (
+              <div className="space-y-3 py-1">
+                <p className="text-xs text-text-secondary leading-relaxed m-0">
+                  AI analyzes your candidate profile against this job description to provide a clear verdict.
+                </p>
+                {shouldApplyError ? (
+                  <div className="p-2.5 rounded-lg text-xs bg-danger-bg text-danger border border-danger-border">
+                    {shouldApplyError}
+                    <button onClick={runShouldApply} className="block mt-1 font-bold underline">Retry</button>
                   </div>
+                ) : (
+                  <Button onClick={runShouldApply} size="sm" className="w-full">
+                    <Sparkles size={14} /> Analyze Fit Verdict
+                  </Button>
+                )}
+              </div>
+            )}
 
-                  {/* Category bars */}
-                  {matchData.categoryScores && (
-                    <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
-                      {Object.entries(matchData.categoryScores).map(([cat, val]) => {
-                        const pct = Math.round((val || 0) * 100);
-                        return (
-                          <div key={cat}>
-                            <div className="flex justify-between text-[10px] mb-0.5">
-                              <span className="font-semibold text-slate-600 capitalize">
-                                {cat.replace(/([A-Z])/g, " $1")}
-                              </span>
-                              <span className="font-bold text-slate-900">{pct}%</span>
-                            </div>
-                            <div className="h-1.5 bg-slate-100 rounded-full">
-                              <div
-                                className={`h-full rounded-full transition-all duration-700 ${pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-rose-400"}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            {loadingShouldApply && (
+              <div className="flex items-center justify-center gap-2 py-6 text-text-muted text-xs">
+                <Loader2 size={15} className="animate-spin text-primary" />
+                <span className="font-medium">Evaluating profile fit...</span>
+              </div>
+            )}
+
+            {shouldApplyData && (
+              <VerdictCard {...shouldApplyData} />
+            )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col gap-2">
-            <Link to="/applications"
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-sm">
-              Track Application <ArrowRight size={14} />
-            </Link>
-            <Link to="/resume"
-              className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold py-3 rounded-xl text-sm transition-all">
-              <Sparkles size={14} className="text-blue-500" /> Tailor Resume for This Role
-            </Link>
-          </div>
-        </div>
-
-        {/* Right column — Skills + JD */}
-        <div className="lg:col-span-2 flex flex-col gap-5">
-
-          {/* Skills Intelligence */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <CheckCircle2 size={15} className="text-blue-500" /> Skills Intelligence
+          {/* Match Analysis Card */}
+          <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
+              <h3 className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5 m-0">
+                <Target size={14} className="text-primary" /> Match Breakdown
               </h3>
             </div>
 
-            <div className="p-5 flex flex-col gap-5">
-              {/* Required Skills with match status */}
-              <div>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2.5">Required Skills</h4>
-                <div className="flex flex-wrap gap-2">
-                  {job.requiredSkills?.length > 0 ? job.requiredSkills.map(s => {
-                    const isMatched = matchData?.matchedSkills?.includes(s.skillName);
-                    const isPartial = matchData?.partialSkills?.includes(s.skillName);
-                    const isMissing = matchData?.missingSkills?.includes(s.skillName);
-                    return (
-                      <span key={s.skillName}
-                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl border transition-all ${isMatched ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : isPartial ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : isMissing ? "bg-rose-50 text-rose-600 border-rose-200"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
-                          }`}>
-                        {isMatched ? <CheckCircle2 size={10} /> : isPartial ? <AlertCircle size={10} /> : isMissing ? <XCircle size={10} /> : null}
-                        {s.skillName}
-                      </span>
-                    );
-                  }) : <span className="text-sm text-slate-400 italic">No required skills extracted</span>}
+            {!matchData && !loadingMatch && (
+              <div className="space-y-2">
+                {matchError ? (
+                  <div className="p-2.5 rounded-lg text-xs bg-danger-bg text-danger border border-danger-border">
+                    {matchError}
+                    <button onClick={runMatch} className="block mt-1 font-bold underline">Retry</button>
+                  </div>
+                ) : (
+                  <Button onClick={runMatch} variant="outline" size="sm" className="w-full">
+                    <TrendingUp size={14} /> Run Match Engine
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {loadingMatch && (
+              <div className="flex items-center justify-center gap-2 py-6 text-text-muted text-xs">
+                <Loader2 size={15} className="animate-spin text-primary" />
+                <span className="font-medium">Running semantic match...</span>
+              </div>
+            )}
+
+            {matchData && normScore != null && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="relative shrink-0 flex items-center justify-center" style={{ width: 64, height: 64 }}>
+                    <ScoreRing score={normScore} size={64} strokeWidth={6} />
+                    <span className="absolute text-xs font-bold text-text">
+                      {normScore}%
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-text m-0">Overall Match Score</p>
+                    <p className="text-[11px] text-text-muted m-0">
+                      {matchData.matchedSkills?.length || 0} matched · {matchData.missingSkills?.length || 0} missing
+                    </p>
+                  </div>
                 </div>
-                {matchData && (
-                  <div className="flex items-center gap-4 mt-2.5 text-[10px] font-bold text-slate-400">
-                    <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 size={9} /> {matchData.matchedSkills?.length || 0} matched</span>
-                    <span className="text-amber-600 flex items-center gap-1"><AlertCircle size={9} /> {matchData.partialSkills?.length || 0} partial</span>
-                    <span className="text-rose-500 flex items-center gap-1"><XCircle size={9} /> {matchData.missingSkills?.length || 0} missing</span>
+
+                {matchData.categoryScores && (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    {Object.entries(matchData.categoryScores).map(([cat, val]) => {
+                      const pct = normalizeScore(val);
+                      return (
+                        <div key={cat}>
+                          <div className="flex justify-between text-[10px] mb-0.5">
+                            <span className="font-medium text-text-secondary capitalize">
+                              {cat.replace(/([A-Z])/g, " $1")}
+                            </span>
+                            <span className="font-bold text-text">{pct}%</span>
+                          </div>
+                          <div className="h-1.5 bg-bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${pct >= 80 ? "bg-success" : pct >= 60 ? "bg-warning" : "bg-danger"}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
+            )}
+          </div>
+        </div>
 
-              {/* Preferred Skills */}
-              {job.preferredSkills?.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2.5">Preferred Skills</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {job.preferredSkills.map(s => (
-                      <span key={s.skillName}
-                        className="inline-flex items-center gap-1 text-xs font-semibold bg-slate-50 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-xl">
+        {/* Right column — Required Skills & JD */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
+
+          {/* Required Skills */}
+          <div className="bg-surface rounded-xl border border-border p-4 space-y-4">
+            <div className="border-b border-border pb-2.5">
+              <h3 className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5 m-0">
+                <CheckCircle2 size={14} className="text-primary" /> Extracted Skill Intelligence
+              </h3>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Required Skills</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {job.requiredSkills?.length > 0 ? job.requiredSkills.map(s => {
+                    const skillLower = (s.skillName || "").toLowerCase().trim();
+                    const isMatched = matchData?.matchedSkills?.some(m => (m || "").toLowerCase().trim() === skillLower);
+                    const isPartial = !isMatched && matchData?.partialSkills?.some(m => (m || "").toLowerCase().trim() === skillLower);
+                    const isMissing = !isMatched && !isPartial && matchData?.missingSkills?.some(m => (m || "").toLowerCase().trim() === skillLower);
+
+                    return (
+                      <span
+                        key={s.skillName}
+                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-md border ${
+                          isMatched ? "bg-success-bg text-success border-success-border"
+                          : isPartial ? "bg-warning-bg text-warning border-warning-border"
+                          : isMissing ? "bg-danger-bg text-danger border-danger-border"
+                          : "bg-bg-secondary text-text-secondary border-border"
+                        }`}
+                      >
+                        {isMatched ? <CheckCircle2 size={11} /> : isPartial ? <AlertCircle size={11} /> : isMissing ? <XCircle size={11} /> : null}
                         {s.skillName}
                       </span>
-                    ))}
-                  </div>
+                    );
+                  }) : (
+                    <span className="text-xs text-text-muted italic">No required skills extracted</span>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Soft Skills */}
-              {job.softSkills?.length > 0 && (
+              {job.preferredSkills?.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2.5">Soft Skills</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {job.softSkills.map(s => (
-                      <span key={s.skillName}
-                        className="inline-flex items-center text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-xl">
+                  <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Preferred Skills</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {job.preferredSkills.map(s => (
+                      <span key={s.skillName} className="text-xs font-medium bg-bg-secondary text-text-secondary border border-border px-2.5 py-0.5 rounded-md">
                         {s.skillName}
                       </span>
                     ))}
@@ -472,21 +476,31 @@ export function JobDetailPage() {
           </div>
 
           {/* Job Description */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900">Job Description</h3>
-              <button onClick={copyJD}
-                className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
-                {copiedJD ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                {copiedJD ? "Copied!" : "Copy"}
+          <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
+              <h3 className="text-xs font-bold text-text uppercase tracking-wider m-0">Job Description</h3>
+              <button
+                onClick={copyJD}
+                className="flex items-center gap-1 text-xs font-medium text-text-muted hover:text-text transition-colors"
+              >
+                {copiedJD ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                {copiedJD ? "Copied" : "Copy JD"}
               </button>
             </div>
-            <div className="p-5 text-sm text-slate-600 whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto custom-scrollbar">
+
+            <div className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
               {job.description || "No description provided."}
             </div>
           </div>
         </div>
       </div>
+
+      <DeleteJobModal
+        job={job}
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

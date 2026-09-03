@@ -7,62 +7,75 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       colors: {
         primary: {
-          DEFAULT: '#3B82F6', // Premium blue
-          hover: '#2563EB',
-          active: '#1D4ED8',
+          DEFAULT: '#2563EB', // Clean, professional SaaS blue
+          hover: '#1D4ED8',
+          active: '#1E40AF',
           bg: '#EFF6FF',
+          border: '#BFDBFE',
         },
         success: {
-          DEFAULT: '#10B981',
-          bg: '#D1FAE5',
+          DEFAULT: '#059669', // Muted emerald green
+          hover: '#047857',
+          bg: '#ECFDF5',
+          border: '#A7F3D0',
         },
         warning: {
-          DEFAULT: '#F59E0B',
-          bg: '#FEF3C7',
+          DEFAULT: '#D97706', // Muted amber
+          hover: '#B45309',
+          bg: '#FFFBEB',
+          border: '#FDE68A',
         },
         danger: {
-          DEFAULT: '#EF4444',
-          bg: '#FEE2E2',
+          DEFAULT: '#DC2626', // Professional red
+          hover: '#B91C1C',
+          bg: '#FEF2F2',
+          border: '#FECACA',
         },
         info: {
-          DEFAULT: '#3B82F6',
-          bg: '#DBEAFE',
+          DEFAULT: '#2563EB',
+          bg: '#EFF6FF',
+          border: '#BFDBFE',
         },
         text: {
-          DEFAULT: '#0F172A', // Darker slate for readability
-          secondary: '#475569', // Muted slate
-          muted: '#94A3B8',
+          DEFAULT: '#0F172A', // Deep slate primary text
+          secondary: '#475569', // Muted slate body text
+          muted: '#94A3B8', // Subdued metadata
         },
         border: {
-          DEFAULT: '#E2E8F0', // Subtle cool gray
+          DEFAULT: '#E2E8F0', // Subtle slate border
+          subtle: '#F1F5F9',
           hover: '#CBD5E1',
         },
         bg: {
-          DEFAULT: '#F8FAFC', // Near-white background
-          secondary: '#F1F5F9', // Very light gray for sidebars/panels
+          DEFAULT: '#F8FAFC', // Warm near-white background
+          secondary: '#F1F5F9', // Crisp secondary background for navigation/cards
+          tertiary: '#E2E8F0',
         },
         surface: {
-          DEFAULT: '#FFFFFF', // White for cards
-          secondary: '#F8FAFC', 
+          DEFAULT: '#FFFFFF', // Pure white card surfaces
+          secondary: '#F8FAFC',
           elevated: '#FFFFFF',
         },
       },
       boxShadow: {
-        sm: '0 1px 2px 0 rgba(0, 0, 0, 0.02)',
-        DEFAULT: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
-        md: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025)',
-        lg: '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
+        '2xs': '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
+        'xs': '0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.03)',
+        'sm': '0 2px 4px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.03)',
+        'md': '0 4px 8px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.03)',
+        'lg': '0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.03)',
       },
       borderRadius: {
-        sm: '0.25rem',
+        'sm': '0.375rem',
         DEFAULT: '0.5rem',
-        md: '0.75rem',
-        lg: '1rem',
-        xl: '1.5rem',
+        'md': '0.5rem',
+        'lg': '0.75rem',
+        'xl': '1rem',
+        '2xl': '1.25rem',
       },
     },
   },

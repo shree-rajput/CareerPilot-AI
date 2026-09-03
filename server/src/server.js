@@ -6,10 +6,12 @@ import { Server } from "socket.io";
 
 import { registerPeerInterviewSocket } from "./sockets/peerInterview.socket.js";
 import { seedDefaultMentors } from "./scripts/seedMentors.js";
+import { initStaleScheduler } from "./services/staleScheduler.js";
 
 async function bootstrap() {
   await connectDatabase();
   await seedDefaultMentors();
+  initStaleScheduler();
 
   const app = createApp();
 

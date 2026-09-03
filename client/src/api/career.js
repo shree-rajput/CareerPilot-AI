@@ -7,6 +7,7 @@ export const jobApi = {
   createJob: (data) => http.post("/jobs", data).then((res) => res.data),
   updateJob: (id, data) => http.patch(`/jobs/${id}`, data).then((res) => res.data),
   deactivateJob: (id) => http.delete(`/jobs/${id}`).then((res) => res.data),
+  deleteJob: (id) => http.delete(`/jobs/${id}`).then((res) => res.data),
   // New AI-powered endpoints
   saveJob: (id) => http.post(`/jobs/${id}/save`).then((res) => res.data),
   matchJob: (id) => http.post(`/jobs/${id}/match`).then((res) => res.data),
@@ -28,6 +29,7 @@ export const projectApi = {
   getProjectById: (id) => http.get(`/projects/${id}`).then((res) => res.data),
   createProject: (data) => http.post("/projects", data).then((res) => res.data),
   generateInterviewKit: (id) => http.post(`/projects/${id}/interview-kit`).then((res) => res.data),
+  syncProjects: () => http.post("/projects/sync").then((res) => res.data),
 };
 
 // --- Preparation API ---

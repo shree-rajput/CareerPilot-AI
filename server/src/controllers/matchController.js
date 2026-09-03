@@ -77,10 +77,31 @@ export const runMatch = asyncHandler(async (req, res) => {
     return res.json({ matchResult: cached, cached: true });
   }
 
+  const { User } = await import("../models/User.js");
+  const { UserSkill } = await import("../models/UserSkill.js");
+  const { Project } = await import("../models/Project.js");
+
+  const [user, userSkills, projects] = await Promise.all([
+    User.findById(req.user._id).lean(),
+    UserSkill.find({ userId: req.user._id }).lean(),
+    Project.find({ userId: req.user._id }).lean(),
+  ]);
+
+  const candidateContext = {
+    user,
+    userSkills,
+    projects,
+    careerProfile: {
+      targetRoles: user?.targetRoles || [],
+      experienceLevel: user?.experienceLevel || "student"
+    }
+  };
+
   // Run the semantic match pipeline (embedding + cosine similarity + scoring)
   const pipelineResult = await runMatchPipeline(
     resume.structuredData,
     application.extractedJd,
+    candidateContext
   );
 
   // Get AI explanation (non-fatal — score already calculated)

@@ -16,25 +16,26 @@ import { getNextBestActions } from "./nextBestActionService.js";
  * @returns {Promise<Object>} Candidate Intelligence Context Object
  */
 export async function getCandidateIntelligenceContext(userId, intent = "career") {
-  const [
-    user,
-    latestResume,
-    activeApplications,
-    matchResults,
-    interviewSessions,
-    activePlan,
-    careerIntel,
-    nextBestActions
-  ] = await Promise.all([
-    User.findById(userId).lean(),
-    Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }).lean(),
-    Application.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
-    MatchResult.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
-    InterviewSession.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
-    PreparationPlan.findOne({ userId, isActive: true }).lean(),
-    getCareerIntelligence(userId).catch(() => null),
-    getNextBestActions(userId).catch(() => [])
-  ]);
+  try {
+    const [
+      user,
+      latestResume,
+      activeApplications,
+      matchResults,
+      interviewSessions,
+      activePlan,
+      careerIntel,
+      nextBestActions
+    ] = await Promise.all([
+      User.findById(userId).catch(() => null),
+      Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }).catch(() => null),
+      Application.find({ userId }).sort({ createdAt: -1 }).limit(5).catch(() => []),
+      MatchResult.find({ userId }).sort({ createdAt: -1 }).limit(5).catch(() => []),
+      InterviewSession.find({ userId }).sort({ createdAt: -1 }).limit(5).catch(() => []),
+      PreparationPlan.findOne({ userId, isActive: true }).catch(() => null),
+      getCareerIntelligence(userId).catch(() => null),
+      getNextBestActions(userId).catch(() => [])
+    ]);
 
   // Fetch interview question details if sessions exist
   let interviewWeaknesses = [];
@@ -118,6 +119,7 @@ export async function getCandidateIntelligenceContext(userId, intent = "career")
   const skillGaps = (careerIntel?.skillGaps || []).map(g => ({
     skill: g.skill,
     status: g.status, // strong | needs_improvement | missing
+    classification: g.classification || (g.status === 'strong' ? 'proven' : g.status === 'missing' ? 'missing_evidence' : 'evidence_found'),
     priority: g.priority, // high | medium | low
     evidence: g.evidence || "",
     whyItMatters: g.whyItMatters || "",
@@ -208,6 +210,19 @@ export async function getCandidateIntelligenceContext(userId, intent = "career")
     nextBestActions: topNextBestActions,
     intent
   };
+  } catch (err) {
+    console.warn("[CandidateIntelligenceService] Context build fallback triggered:", err.message);
+    return {
+      careerProfile: { name: "Candidate", targetRoles: [], targetCompanies: [] },
+      resumeIntelligence: null,
+      skillGaps: [],
+      applications: [],
+      interviewIntelligence: { totalSessions: 0, weaknesses: [] },
+      preparationIntelligence: null,
+      nextBestActions: [],
+      intent
+    };
+  }
 }
 
 /**

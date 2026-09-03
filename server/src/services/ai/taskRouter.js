@@ -1,16 +1,15 @@
 import { MODEL_ROLES } from "./modelRouter.js";
 import { jdStructureSchema } from "./schemas/jdSchema.js";
-import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema } from "./schemas/resumeSchema.js";
+import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema, resumeSuggestionsSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
 import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema } from "./schemas/interviewSchema.js";
 import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema, coverLetterSchema, recruiterMessageSchema } from "./schemas/careerSchema.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
-import { TAILORING_SYSTEM, buildTailoringPrompt } from "./prompts/resumeTailoring.js";
+import { TAILORING_SYSTEM, buildTailoringPrompt, RESUME_SUGGESTIONS_SYSTEM, buildResumeSuggestionsPrompt } from "./prompts/resumeTailoring.js";
 import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt, generateInterviewChallengePrompt, interviewerReactionPrompt, codingFollowUpPrompt } from "./prompts/interviewPrompts.js";
 import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt, PROJECT_REALITY_CHECK_SYSTEM, buildRealityCheckPrompt, GENERATE_COVER_LETTER_SYSTEM, buildCoverLetterPrompt, GENERATE_RECRUITER_MESSAGE_SYSTEM, buildRecruiterMessagePrompt } from "./prompts/careerPrompts.js";
-
-
+import { buildMatchExplanationPrompt } from "./prompts/matchExplanation.js";
 import {
   buildInterviewEvaluationContext,
   buildInterviewQuestionContext,
@@ -124,7 +123,7 @@ export const AI_TASKS = {
   EXPLAIN_MATCH_RESULT: {
     featureName: "match explanation",
     modelRole: MODEL_ROLES.GENERAL_REASONING,
-    systemPrompt: "You are a career advisor explaining an AI-generated semantic match score.", // Usually from MATCH_EXPLANATION_SYSTEM
+    systemPrompt: "You are a career advisor. Given structured match data between a resume and job description, write a clear, honest, evidence-based explanation of why the candidate scored what they scored. Be specific and actionable. Return plain text only.",
     buildPrompt: (context) => buildMatchExplanationPrompt(context),
     schema: null, // Since explainMatchResult isn't jsonMode
     buildContext: buildMatchContext,
@@ -137,6 +136,15 @@ export const AI_TASKS = {
     buildPrompt: (context) => buildTailoringPrompt(context),
     schema: tailoringSchema,
     buildContext: buildTailoringContext,
+    jsonMode: true
+  },
+  GENERATE_RESUME_SUGGESTIONS: {
+    featureName: "resume suggestions",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: RESUME_SUGGESTIONS_SYSTEM,
+    buildPrompt: (context) => buildResumeSuggestionsPrompt(context),
+    schema: resumeSuggestionsSchema,
+    buildContext: (params) => params,
     jsonMode: true
   },
   GENERATE_INTERVIEW_PLAN: {

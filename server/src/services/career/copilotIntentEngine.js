@@ -301,7 +301,15 @@ export function validateResponseRelevance(responsePayload, query, intent, contex
     return { isValid: false, reason: "Response payload is null or non-object" };
   }
 
-  const reply = String(responsePayload.reply || "").trim();
+  const reply = String(
+    responsePayload.reply ||
+    responsePayload.content ||
+    responsePayload.message ||
+    responsePayload.text ||
+    responsePayload.answer ||
+    responsePayload.response ||
+    ""
+  ).trim();
   if (!reply || reply.length < 10) {
     return { isValid: false, reason: "Response reply is empty or too short" };
   }

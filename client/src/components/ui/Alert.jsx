@@ -3,10 +3,10 @@ import { CheckCircle2, AlertCircle, Info, XCircle } from 'lucide-react';
 
 export function Alert({ variant = 'info', title, children, className = '' }) {
   const variants = {
-    info: 'bg-info-bg border-info/20 text-info',
-    success: 'bg-success-bg border-success/20 text-success',
-    warning: 'bg-warning-bg border-warning/20 text-warning',
-    danger: 'bg-danger-bg border-danger/20 text-danger'
+    info: 'bg-info-bg border-info-border/60 text-info',
+    success: 'bg-success-bg border-success-border/60 text-success',
+    warning: 'bg-warning-bg border-warning-border/60 text-warning',
+    danger: 'bg-danger-bg border-danger-border/60 text-danger'
   };
 
   const icons = {
@@ -19,11 +19,11 @@ export function Alert({ variant = 'info', title, children, className = '' }) {
   const Icon = icons[variant];
 
   return (
-    <div className={`p-4 rounded-xl border flex gap-3 ${variants[variant]} ${className}`}>
-      <Icon className="w-5 h-5 shrink-0 mt-0.5" />
-      <div className="flex flex-col gap-1 text-sm">
-        {title && <strong className="font-bold">{title}</strong>}
-        {children && <div className="opacity-90 leading-relaxed">{children}</div>}
+    <div className={`p-3.5 rounded-lg border flex items-start gap-2.5 text-xs ${variants[variant] || variants.info} ${className}`}>
+      <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+      <div className="flex flex-col gap-0.5 min-w-0">
+        {title && <strong className="font-semibold text-text">{title}</strong>}
+        {children && <div className="leading-relaxed opacity-90 font-medium">{children}</div>}
       </div>
     </div>
   );
