@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareerPilot AI Job Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <img src="../assets/logo.png" alt="CareerPilot AI Logo" class="brand-logo" />
+        <div class="brand-text">
+          <h1 class="brand-title">CareerPilot AI</h1>
+          <p class="brand-sub">Universal Job Capture</p>
+        </div>
+      </div>
+      <div id="connectionBadge" class="badge badge-neutral">● Checking...</div>
+    </header>
+
+    <!-- Sub-header bar -->
+    <div class="supported-bar">
+      <span id="userStatusText">Universal Capture: <strong>LinkedIn, Indeed &amp; Any Career Site</strong></span>
+      <button id="disconnectBtn" class="btn-link hidden">Disconnect</button>
+    </div>
+
+    <!-- Main Content Area -->
+    <main id="mainContent" class="content">
+      <!-- Loading State -->
+      <div id="stateLoading" class="state-card">
+        <div class="spinner"></div>
+        <p class="state-loading-text">Detecting job intelligence...</p>
+      </div>
+
+      <!-- Injection Failure State -->
+      <div id="stateInjectionFailed" class="state-card hidden">
+        <div class="state-icon icon-warning">⚠️</div>
+        <h3>Page Access Required</h3>
+        <p id="injectionErrorMsg">CareerPilot couldn't access this page tab.</p>
+        <p class="hint" id="injectionErrorDetail"></p>
+        <button id="retryInjectionBtn" class="btn btn-secondary mt-12">Retry Page Inspection</button>
+      </div>
+
+      <!-- Not A Job Page State -->
+      <div id="stateNotJob" class="state-card hidden">
+        <div class="state-icon icon-info">ℹ️</div>
+        <h3>Page Not a Job Posting</h3>
+        <p id="notJobMsg">This page doesn't appear to contain an active job posting.</p>
+        <p class="hint">Open a job posting page on any career site (LinkedIn, Indeed, Greenhouse, Lever, Workday, etc.) to capture.</p>
+      </div>
+
+      <!-- Restricted Page State -->
+      <div id="stateRestricted" class="state-card hidden">
+        <div class="state-icon icon-lock">🔒</div>
+        <h3>Internal Page</h3>
+        <p>CareerPilot cannot run on browser settings or restricted tabs.</p>
+        <p class="hint">Open a regular job website tab to capture opportunities.</p>
+      </div>
+
+      <!-- Unauthenticated State (1-Click Connect, NO manual tokens!) -->
+      <div id="stateAuth" class="state-card hidden">
+        <div class="state-icon icon-lock">🔐</div>
+        <h3>Connect CareerPilot</h3>
+        <p class="state-desc">Connect your account with 1-click to save jobs directly into your pipeline and calculate instant match scores.</p>
+        <button id="connectAppBtn" class="btn btn-primary mt-12">Connect CareerPilot</button>
+      </div>
+
+      <!-- Preview State (High / Medium / Low Confidence) -->
+      <div id="statePreview" class="state-card hidden">
+        <div class="job-card">
+          <div class="job-card-header">
+            <span class="job-source-badge" id="previewSource">LINKEDIN</span>
+            <span class="workplace-badge hidden" id="previewWorkplace">Remote</span>
+          </div>
+          <h2 id="previewTitle" class="job-title">Software Developer</h2>
+          <p id="previewCompany" class="job-company">Soranova Technologies</p>
+          <div class="meta-row">
+            <span id="previewLocation" class="job-location">Remote · Indore</span>
+            <span id="previewSalary" class="job-salary hidden">₹4L–₹7L/year</span>
+          </div>
+        </div>
+
+        <div id="confidenceBanner" class="confidence-banner hidden">
+          <span>⚠️ Low extraction confidence. Please review job details below.</span>
+        </div>
+
+        <!-- Editable Form (Visible if Low Confidence or User Clicks Edit) -->
+        <form id="reviewForm" class="review-form hidden">
+          <div class="form-group">
+            <label for="editTitle">Job Title</label>
+            <input type="text" id="editTitle" class="input">
+          </div>
+          <div class="form-group">
+            <label for="editCompany">Company</label>
+            <input type="text" id="editCompany" class="input">
+          </div>
+          <div class="form-group">
+            <label for="editLocation">Location</label>
+            <input type="text" id="editLocation" class="input">
+          </div>
+          <div class="form-group">
+            <label for="editDescription">Job Description</label>
+            <textarea id="editDescription" class="textarea" rows="3"></textarea>
+          </div>
+        </form>
+
+        <div class="action-bar">
+          <button id="toggleEditBtn" class="btn btn-ghost">Edit Details</button>
+          <button id="saveJobBtn" class="btn btn-primary">Save to CareerPilot</button>
+        </div>
+      </div>
+
+      <!-- Duplicate / Already Saved State -->
+      <div id="stateDuplicate" class="state-card hidden">
+        <div class="status-badge badge-info">Already in Pipeline</div>
+        <h3 id="dupTitle" class="job-title mt-8">Software Engineer</h3>
+        <p id="dupCompany" class="job-company">Meta</p>
+        <div class="dup-details">
+          <p><strong>Pipeline Status:</strong> <span id="dupStatus" class="status-pill">SAVED</span></p>
+          <p id="dupMatchContainer"><strong>Match Score:</strong> <span id="dupMatch">--%</span></p>
+        </div>
+        <button id="openAppBtn" class="btn btn-primary mt-12">Open Application Workspace</button>
+      </div>
+
+      <!-- Success State -->
+      <div id="stateSuccess" class="state-card hidden">
+        <div class="success-header">
+          <div class="check-icon">✓</div>
+          <h3>Saved to CareerPilot</h3>
+        </div>
+        
+        <div class="match-summary">
+          <div class="match-score-card">
+            <span class="match-val" id="resMatchScore">--%</span>
+            <span class="match-lbl">Match Score</span>
+          </div>
+          <div class="resume-rec-card">
+            <p class="rec-title">Recommended Resume:</p>
+            <p id="resResumeVersion" class="rec-name">Primary Resume</p>
+          </div>
+        </div>
+
+        <div class="action-bar mt-12">
+          <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Application Workspace</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CareerPilot AI Extension Settings</title>
+  <style>
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 32px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    h2 { margin-bottom: 6px; color: #3b82f6; font-size: 20px; font-weight: 800; }
+    p.sub { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+    .card {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #cbd5e1; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      background-color: #0f172a;
+      border: 1px solid #334155;
+      color: #fff;
+      border-radius: 8px;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    .btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background-color: #334155;
+      color: #f8fafc;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .badge-connected { background-color: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-disconnected { background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; }
+    .msg { margin-top: 12px; font-size: 13px; color: #10b981; }
+  </style>
+</head>
+<body>
+  <h2>CareerPilot AI Settings</h2>
+  <p class="sub">Configure your CareerPilot AI extension environment and account linking.</p>
+
+  <div class="card">
+    <div class="flex-between" style="margin-bottom: 12px;">
+      <span style="font-size: 13px; font-weight: 700;">Account Connection</span>
+      <div id="accountBadge" class="status-badge badge-disconnected">Checking...</div>
+    </div>
+    <p id="accountDetail" style="font-size: 13px; color: #94a3b8; margin: 0 0 14px 0;">
+      Not connected to a CareerPilot account.
+    </p>
+    <div id="authActionArea">
+      <button id="connectBtn" class="btn">Connect CareerPilot</button>
+      <button id="disconnectBtn" class="btn btn-secondary" style="display: none;">Disconnect Account</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="optionsForm">
+      <div class="form-group">
+        <label>API Endpoint Server URL</label>
+        <input type="text" id="apiUrl" value="http://localhost:5000/api">
+      </div>
+      <div class="form-group">
+        <label>Web Application Host URL</label>
+        <input type="text" id="appUrl" value="http://localhost:5173">
+      </div>
+      <button type="submit" class="btn">Save Server Settings</button>
+    </form>
+    <div id="status" class="msg"></div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

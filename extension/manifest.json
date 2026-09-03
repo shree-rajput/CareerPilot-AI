@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "CareerPilot AI — Universal Job Capture",
+  "version": "1.0.0",
+  "description": "Capture jobs from any career site (LinkedIn, Indeed, Greenhouse, Lever, Workday, etc.) directly into your CareerPilot AI workspace with one click.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:5173/*",
+      "https://*.careerpilot.ai/*"
+    ]
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service_worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/content_script.js"
+      ],
+      "type": "module",
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options/options.html"
+}
