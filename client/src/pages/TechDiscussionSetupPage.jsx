@@ -58,6 +58,7 @@ export default function TechDiscussionSetupPage() {
   // Setup Form State
   const [category, setCategory] = useState("architecture");
   const [problemType, setProblemType] = useState("ai_recommended"); // "ai_recommended" | "custom_problem"
+  const [experienceLevel, setExperienceLevel] = useState("junior"); // "fresher" | "junior" | "intermediate" | "experienced"
   const [difficulty, setDifficulty] = useState("medium");
   const [language, setLanguage] = useState("javascript");
   const [durationMinutes, setDurationMinutes] = useState(45);
@@ -69,6 +70,7 @@ export default function TechDiscussionSetupPage() {
   // AI Recommendation preview
   const [aiRecLoading, setAiRecLoading] = useState(false);
   const [aiRecommendation, setAiRecommendation] = useState(null);
+  const [excludedIds, setExcludedIds] = useState([]);
 
   // Join State
   const [joinRoomCode, setJoinRoomCode] = useState("");
@@ -78,12 +80,13 @@ export default function TechDiscussionSetupPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Fetch Deterministic Scenario Preview when category or difficulty changes
+  // Fetch Deterministic Scenario Preview when category, experience level, or difficulty changes
   useEffect(() => {
     if (problemType === "ai_recommended" && mode === "create") {
       let isMounted = true;
       setAiRecLoading(true);
-      getAIProblemRecommendation(category, difficulty)
+      const excludeIdParam = excludedIds.length > 0 ? excludedIds[excludedIds.length - 1] : "";
+      getAIProblemRecommendation(category, difficulty, experienceLevel, excludeIdParam)
         .then((res) => {
           if (isMounted && res?.data) {
             setAiRecommendation(res.data);
@@ -100,7 +103,13 @@ export default function TechDiscussionSetupPage() {
         isMounted = false;
       };
     }
-  }, [category, difficulty, problemType, mode]);
+  }, [category, difficulty, experienceLevel, problemType, mode, excludedIds]);
+
+  const handleRotateQuestion = () => {
+    if (aiRecommendation?.question?.id) {
+      setExcludedIds((prev) => [...prev, aiRecommendation.question.id]);
+    }
+  };
 
   async function handleCreateRoom() {
     try {
@@ -389,12 +398,27 @@ export default function TechDiscussionSetupPage() {
                       <span className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-1">
                         <Sparkles className="w-3 h-3" /> Recommended Scenario & Rationale
                       </span>
-                      {aiRecLoading && <span className="text-xs text-text-secondary animate-pulse">Filtering intelligence...</span>}
+                      <div className="flex items-center gap-2">
+                        {aiRecLoading && <span className="text-xs text-text-secondary animate-pulse">Filtering intelligence...</span>}
+                        <button
+                          type="button"
+                          onClick={handleRotateQuestion}
+                          disabled={aiRecLoading}
+                          className="text-xs font-bold text-primary hover:underline bg-surface border border-primary/20 px-2.5 py-1 rounded-lg transition-colors"
+                        >
+                          Rotate Scenario
+                        </button>
+                      </div>
                     </div>
 
                     {aiRecommendation?.question ? (
                       <div>
-                        <h4 className="text-sm font-bold text-text">{aiRecommendation.question.title}</h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-bold text-text">{aiRecommendation.question.title}</h4>
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                            {aiRecommendation.question.difficulty}
+                          </span>
+                        </div>
                         <p className="text-xs text-blue-900 mt-1 leading-relaxed font-medium">{aiRecommendation.rationale}</p>
                       </div>
                     ) : (
@@ -425,10 +449,24 @@ export default function TechDiscussionSetupPage() {
                   </div>
                 )}
 
-                {/* Difficulty & Language & Duration */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Candidate Experience Level, Difficulty & Language & Duration */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm font-bold text-text mb-1">Difficulty</label>
+                    <label className="block text-sm font-bold text-text mb-1">Candidate Maturity</label>
+                    <select
+                      value={experienceLevel}
+                      onChange={(e) => setExperienceLevel(e.target.value)}
+                      className="w-full bg-bg border border-border rounded-xl h-11 px-3 text-sm text-text focus:border-primary focus:ring-4 focus:ring-primary/15 focus:outline-none"
+                    >
+                      <option value="fresher">Fresher / Beginner</option>
+                      <option value="junior">Junior Developer</option>
+                      <option value="intermediate">Intermediate / Mid</option>
+                      <option value="experienced">Experienced / Senior</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-text mb-1">Target Difficulty</label>
                     <select
                       value={difficulty}
                       onChange={(e) => setDifficulty(e.target.value)}
@@ -436,12 +474,13 @@ export default function TechDiscussionSetupPage() {
                     >
                       <option value="easy">Easy</option>
                       <option value="medium">Medium</option>
+                      <option value="medium_hard">Medium-Hard</option>
                       <option value="hard">Hard</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-text mb-1">Primary Code Language</label>
+                    <label className="block text-sm font-bold text-text mb-1">Code Language</label>
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value)}
@@ -455,7 +494,7 @@ export default function TechDiscussionSetupPage() {
 
                   <div>
                     <label className="block text-sm font-bold text-text mb-1 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-text-secondary" /> Session Duration
+                      <Clock className="w-3.5 h-3.5 text-text-secondary" /> Duration
                     </label>
                     <select
                       value={durationMinutes}

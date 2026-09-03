@@ -47,14 +47,25 @@ async function runTest() {
 
     console.log("✅ Test users verified:", userA.name, userB.name);
 
-    // 2. Test Deterministic Scenario Selection
-    console.log("\nTesting Deterministic Scenario Selection...");
-    const recResult = await getDeterministicScenarioRecommendation(userA._id, {
+    // 2. Test Maturity Adaptation (Fresher vs Experienced)
+    console.log("\nTesting Candidate Maturity Adaptation...");
+    const fresherRec = await getDeterministicScenarioRecommendation(userA._id, {
       category: "architecture",
-      difficulty: "medium"
+      experienceLevel: "fresher"
     });
-    console.log("✅ Deterministic scenario title:", recResult.scenario.title);
-    console.log("✅ Selection Rationale:", recResult.rationale);
+    console.log("   Fresher Scenario Title:", fresherRec.scenario.title);
+    console.log("   Fresher Difficulty:", fresherRec.difficulty);
+
+    const experiencedRec = await getDeterministicScenarioRecommendation(userA._id, {
+      category: "architecture",
+      experienceLevel: "experienced"
+    });
+    console.log("   Experienced Scenario Title:", experiencedRec.scenario.title);
+    console.log("   Experienced Difficulty:", experiencedRec.difficulty);
+
+    if (fresherRec.scenario.title !== experiencedRec.scenario.title) {
+      console.log("✅ Candidate Maturity Adaptation Verified: Fresher and Experienced receive distinct tailored scenarios.");
+    }
 
     // 3. Create Tech Discussion Room for Architecture
     console.log("\nCreating Tech Discussion Room (Architecture focus)...");
@@ -71,7 +82,18 @@ async function runTest() {
     console.log("   Room Code:", roomResult.roomCode);
     console.log("   Scenario Title:", roomResult.problem?.title);
 
-    // 4. User B joins room
+    // 4. Test Anti-Repetition Exclusion
+    console.log("\nTesting Anti-Repetition Exclusion...");
+    const nextRec = await getDeterministicScenarioRecommendation(userA._id, {
+      category: "architecture",
+      excludeIds: [roomResult.problem.id]
+    });
+    console.log("   Rotated Scenario Title:", nextRec.scenario.title);
+    if (nextRec.scenario.scenarioId !== roomResult.problem.id) {
+      console.log("✅ Anti-Repetition Verified: Rotated scenario excludes recently selected ID.");
+    }
+
+    // 5. User B joins room
     console.log("\nUser B joining room...");
     const joinResult = await joinTechDiscussionRoom({
       roomId: roomResult.roomId,
@@ -81,7 +103,7 @@ async function runTest() {
     console.log("✅ User B joined room. Room Status:", joinResult.status);
     console.log("   Active Participants:", joinResult.participants.length);
 
-    // 5. Test AI Progressive Nudges (Levels 1 to 4)
+    // 6. Test AI Progressive Nudges (Levels 1 to 4)
     console.log("\nTesting AI Progressive Nudges...");
     const nudgeL1 = await getAIProgressiveNudge({
       roomId: roomResult.roomId,
@@ -91,7 +113,7 @@ async function runTest() {
     });
     console.log("✅ Nudge Level 1:", nudgeL1.nudgeText?.slice(0, 80) + "...");
 
-    // 6. Test Context Action (Challenge & Complexity)
+    // 7. Test Context Action (Challenge & Complexity)
     console.log("\nTesting Context Action (Challenge & Complexity)...");
     const actionRes = await executeContextAction({
       actionType: "challenge",
@@ -100,7 +122,7 @@ async function runTest() {
     });
     console.log("✅ Context Action Response:", actionRes.response?.slice(0, 80) + "...");
 
-    // 7. Complete Session & Generate Individual 6-Competency Reports
+    // 8. Complete Session & Generate Individual 6-Competency Reports
     console.log("\nEnding Session & Generating 6-Competency Reports...");
     const endRes = await endTechDiscussionSession({
       roomId: roomResult.roomId,
@@ -109,7 +131,7 @@ async function runTest() {
     console.log("✅ Room status after completion:", endRes.status);
     console.log("✅ Individual Reports Generated:", endRes.reports.length);
 
-    // 8. Fetch Individual Report for User A
+    // 9. Fetch Individual Report for User A
     const reportA = await getIndividualTechDiscussionReport({
       roomId: roomResult.roomId,
       userId: userA._id.toString()

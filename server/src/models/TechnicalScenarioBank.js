@@ -27,8 +27,14 @@ const technicalScenarioSchema = new mongoose.Schema(
     },
     difficulty: {
       type: String,
-      enum: ["easy", "medium", "hard"],
+      enum: ["easy", "medium", "medium_hard", "hard"],
       default: "medium",
+      index: true,
+    },
+    experienceLevel: {
+      type: String,
+      enum: ["fresher", "junior", "intermediate", "advanced", "experienced"],
+      default: "junior",
       index: true,
     },
     targetRoles: {

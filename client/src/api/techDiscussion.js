@@ -5,8 +5,15 @@ export async function createTechDiscussionRoom(params = {}) {
   return response.data;
 }
 
-export async function getAIProblemRecommendation(topic = "DSA", difficulty = "medium") {
-  const response = await http.get(`/tech-discussion/ai-recommendation?topic=${encodeURIComponent(topic)}&difficulty=${encodeURIComponent(difficulty)}`);
+export async function getAIProblemRecommendation(topic = "architecture", difficulty = "medium", experienceLevel = "junior", excludeId = "") {
+  const query = new URLSearchParams({
+    topic,
+    category: topic,
+    difficulty,
+    experienceLevel,
+    ...(excludeId ? { excludeId } : {})
+  }).toString();
+  const response = await http.get(`/tech-discussion/ai-recommendation?${query}`);
   return response.data;
 }
 

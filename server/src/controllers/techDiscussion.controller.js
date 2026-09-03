@@ -94,8 +94,9 @@ export async function getAIRecommendationController(req, res) {
       return res.status(401).json({ success: false, code: "UNAUTHORIZED", message: "Authentication required" });
     }
 
-    const { topic, difficulty } = req.query;
-    const result = await getAIProblemRecommendation(userId, { topic, difficulty });
+    const { topic, category, difficulty, experienceLevel, excludeId } = req.query;
+    const excludeIds = excludeId ? [excludeId] : [];
+    const result = await getAIProblemRecommendation(userId, { topic, category, difficulty, experienceLevel, excludeIds });
 
     return res.status(200).json({ success: true, data: result });
   } catch (error) {

@@ -12,16 +12,17 @@ import { getDeterministicScenarioRecommendation } from "./deterministicSelection
 /**
  * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
  */
-export async function getAIProblemRecommendation(userId, { topic = "architecture", category = "architecture", difficulty = "medium" } = {}) {
+export async function getAIProblemRecommendation(userId, { topic = "architecture", category = "architecture", difficulty = null, experienceLevel = null, excludeIds = [] } = {}) {
   const cat = category || (topic ? topic.toLowerCase().replace(/ /g, "_") : "architecture");
-  const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty });
+  const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty, experienceLevel, excludeIds });
   
   return {
     question: {
       id: result.scenario.scenarioId || `scenario-${Date.now()}`,
       title: result.scenario.title,
       description: result.scenario.openingPrompt,
-      difficulty: result.scenario.difficulty || difficulty,
+      difficulty: result.scenario.difficulty || difficulty || result.difficulty,
+      experienceLevel: result.scenario.experienceLevel || result.experienceLevel,
       topics: result.scenario.expectedConcepts || [topic],
       supportedLanguages: ["javascript", "python", "java", "cpp", "typescript"],
       defaultLanguage: "javascript",
@@ -33,6 +34,7 @@ export async function getAIProblemRecommendation(userId, { topic = "architecture
     },
     rationale: result.rationale,
     targetRole: result.targetRole,
+    experienceLevel: result.experienceLevel,
     matchedSkill: result.matchedSkill
   };
 }
@@ -346,7 +348,7 @@ Return JSON:
  */
 export async function executeContextAction({ actionType, selectedCode, currentCode, problem, userQuestion }) {
   const rawText = selectedCode?.trim() ? selectedCode : currentCode;
-  const textToAnalyze = (rawText || "").slice(0, 1500);
+  const textToAnalyze = (rawText || "").slice(0, 500);
   const problemTitle = typeof problem === "string" ? problem : (problem?.title || "Technical Topic");
 
   const prompts = {
