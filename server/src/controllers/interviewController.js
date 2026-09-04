@@ -13,7 +13,8 @@ import {
   adaptiveNextAction,
   generateCoachingReport,
   generateInterviewerReaction,
-  generateCodingFollowUp
+  generateCodingFollowUp,
+  generatePersonalizedGreeting
 } from "../services/ai/aiService.js";
 import { Application } from "../models/Application.js";
 import { Resume } from "../models/Resume.js";
@@ -195,6 +196,8 @@ export async function createSession(req, res, next) {
       console.error("Failed to generate interview plan", err);
     }
 
+    const greeting = generatePersonalizedGreeting(req.user, finalTargetRole);
+
     const session = new InterviewSession({
       userId: req.user._id,
       applicationId: applicationId || null,
@@ -210,6 +213,7 @@ export async function createSession(req, res, next) {
       candidateContext,
       resumeSnapshot,
       interviewSeed: crypto.randomUUID(),
+      greeting,
       interviewPlan
     });
 
@@ -255,7 +259,11 @@ export async function getNextQuestion(req, res, next) {
     if (lastQuestion && lastQuestion.status === "asked") {
       return res.status(200).json({
         success: true,
-        data: { type: "question", data: lastQuestion }
+        data: {
+          type: "question",
+          data: lastQuestion,
+          greeting: completedQuestions.length === 1 ? session.greeting : undefined
+        }
       });
     }
 
@@ -552,13 +560,30 @@ export async function getNextQuestion(req, res, next) {
       stub.status = "asked";
       await stub.save();
 
+      // Persist question fingerprint and concepts on session for novelty tracking
+      if (stub.fingerprint && !session.askedQuestionFingerprints.includes(stub.fingerprint)) {
+        session.askedQuestionFingerprints.push(stub.fingerprint);
+      }
+      if (stub.expectedConcepts && stub.expectedConcepts.length > 0) {
+        for (const c of stub.expectedConcepts) {
+          if (!session.askedConcepts.includes(c)) {
+            session.askedConcepts.push(c);
+          }
+        }
+      }
+      await session.save();
+
       if (stub.generationSource === "ai") {
         await incrementAiUsage(req.user._id, "mock_question");
       }
 
       return res.status(201).json({
         success: true,
-        data: { type: "question", data: stub }
+        data: {
+          type: "question",
+          data: stub,
+          greeting: completedQuestions.length === 0 ? session.greeting : undefined
+        }
       });
     } catch (err) {
       await InterviewQuestion.deleteOne({ _id: stub._id });
@@ -583,29 +608,74 @@ export async function submitAnswer(req, res, next) {
       throw new AppError("Question not found", 404);
     }
 
-    const limitCheck = await checkAiLimit(req.user._id, "mock_evaluation", env.aiLimitMockEvaluations);
+    const rawClean = (transcript || "").trim().toLowerCase().replace(/[^a-z0-9\s]/g, "");
+    const nonAnswerPhrases = [
+      "no", "no idea", "idk", "dont know", "i dont know", "i do not know",
+      "not sure", "no clue", "none", "pass", "skip", "n a", "na", "dunno",
+      "have no idea", "i have no idea", "sorry no idea", "no answer", "dont know answer",
+      "nothing", "cant answer", "i cant answer", "i cannot answer"
+    ];
 
-    const evaluationContext = {
-      questionText: question.questionText,
-      category: question.category,
-      difficulty: question.difficulty,
-      expectedConcepts: question.expectedConcepts,
-      transcript,
-      metrics
-    };
+    const isNonAnswer = !rawClean || rawClean.length < 3 || nonAnswerPhrases.some(p => rawClean === p || rawClean.startsWith("i dont know") || rawClean.startsWith("i do not know") || rawClean.startsWith("no idea"));
 
-    const evaluation = limitCheck.allowed
-      ? await evaluateInterviewAnswer(evaluationContext)
-      : buildFallbackInterviewEvaluation(evaluationContext, `Daily mock evaluation AI limit reached.`);
+    let evaluation = null;
+
+    if (isNonAnswer) {
+      console.log(`[Interview] Non-answer detected for question ${questionId}: "${transcript}". Assigning 0 score deterministically.`);
+      evaluation = {
+        answerStatus: "NO_ANSWER",
+        correctnessScore: 0,
+        relevance: "Low",
+        correctness: "Low",
+        depth: "Low",
+        specificity: "Low",
+        structure: "Low",
+        communication: {
+          score: 0,
+          clarity: 0,
+          relevance: 0,
+          structure: 0,
+          conciseness: 0,
+          fillerUsage: 100,
+          evidence: ["Candidate stated they do not know the answer or declined to answer."]
+        },
+        evidenceCollected: ["Candidate gave a non-answer."],
+        strengths: [],
+        weaknesses: ["Unable to answer the question or demonstrate knowledge on this concept."],
+        missingConcepts: question.expectedConcepts || [],
+        confidence: "HIGH",
+        idealAnswer: {
+          text: "A complete answer would cover: " + (question.expectedConcepts || []).join(", "),
+          explanation: "Key concepts expected for this question."
+        },
+        analysisSource: "deterministic_non_answer",
+        fallbackReason: "Candidate provided a non-answer."
+      };
+    } else {
+      const limitCheck = await checkAiLimit(req.user._id, "mock_evaluation", env.aiLimitMockEvaluations);
+      const evaluationContext = {
+        questionText: question.questionText,
+        category: question.category,
+        difficulty: question.difficulty,
+        expectedConcepts: question.expectedConcepts,
+        transcript,
+        metrics
+      };
+      evaluation = limitCheck.allowed
+        ? await evaluateInterviewAnswer(evaluationContext)
+        : buildFallbackInterviewEvaluation(evaluationContext, `Daily mock evaluation AI limit reached.`);
+    }
 
     question.transcript = transcript;
     question.communicationMetrics = metrics;
     question.evaluation = {
-      relevance: evaluation.relevance || "Medium",
-      correctness: evaluation.correctness || "Medium",
-      depth: evaluation.depth || "Medium",
-      specificity: evaluation.specificity || "Medium",
-      structure: evaluation.structure || "Medium",
+      answerStatus: evaluation.answerStatus || (isNonAnswer ? "NO_ANSWER" : "CORRECT"),
+      correctnessScore: typeof evaluation.correctnessScore === "number" ? evaluation.correctnessScore : (isNonAnswer ? 0 : 75),
+      relevance: evaluation.relevance || (isNonAnswer ? "Low" : "Medium"),
+      correctness: evaluation.correctness || (isNonAnswer ? "Low" : "Medium"),
+      depth: evaluation.depth || (isNonAnswer ? "Low" : "Medium"),
+      specificity: evaluation.specificity || (isNonAnswer ? "Low" : "Medium"),
+      structure: evaluation.structure || (isNonAnswer ? "Low" : "Medium"),
       evidenceCollected: evaluation.evidenceCollected || [],
       strengths: evaluation.strengths || [],
       weaknesses: evaluation.weaknesses || [],
@@ -613,7 +683,7 @@ export async function submitAnswer(req, res, next) {
     };
     question.confidence = evaluation.confidence || "MEDIUM";
     question.idealAnswer = evaluation.idealAnswer;
-    question.analysisSource = evaluation.analysisSource || "ai";
+    question.analysisSource = evaluation.analysisSource || (isNonAnswer ? "deterministic_non_answer" : "ai");
     question.analysisFallbackReason = evaluation.fallbackReason || "";
     question.status = "answered";
 

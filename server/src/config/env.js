@@ -29,7 +29,7 @@ function sanitizeModel(raw, fallback) {
   return clean || fallback;
 }
 
-const GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile";
+const GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b";
 
 const groqModel = sanitizeModel(process.env.GROQ_MODEL, GROQ_FALLBACK_MODEL);
 
@@ -44,9 +44,9 @@ export const env = {
 
   // AI provider — logical model roles
   groqApiKey: process.env.GROQ_API_KEY || "",
-  groqModelFast: sanitizeModel(process.env.GROQ_MODEL_FAST, "groq/compound-mini"),
-  groqModelGeneral: sanitizeModel(process.env.GROQ_MODEL_GENERAL, "groq/compound"),
-  groqModelComplex: sanitizeModel(process.env.GROQ_MODEL_COMPLEX, "groq/compound"),
+  groqModelFast: sanitizeModel(process.env.GROQ_MODEL_FAST, "openai/gpt-oss-20b"),
+  groqModelGeneral: sanitizeModel(process.env.GROQ_MODEL_GENERAL, "openai/gpt-oss-120b"),
+  groqModelComplex: sanitizeModel(process.env.GROQ_MODEL_COMPLEX, "openai/gpt-oss-120b"),
   groqModel: groqModel, // legacy fallback
   aiRequestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS || 30000),
 

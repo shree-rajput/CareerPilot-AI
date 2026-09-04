@@ -1,6 +1,16 @@
 import { AppError } from "../../utils/errors.js";
 
 /**
+ * Creates a standardized INSUFFICIENT_DATA object when required context is missing.
+ */
+export function buildInsufficientDataResponse(message = "I don't have enough verified information to answer this.") {
+  return {
+    status: "INSUFFICIENT_DATA",
+    message
+  };
+}
+
+/**
  * Extracts JSON from a raw string that might contain markdown fences or extra text.
  */
 export function extractJson(rawText) {
@@ -72,8 +82,12 @@ export function validateOutput(parsedJson, schema, rawText = "") {
     if (rawText && typeof rawText === "string" && rawText.trim()) {
       // If LLM returned clean plain text, wrap into copilotChat style object
       return {
+        answer: rawText.trim(),
         reply: rawText.trim(),
-        suggestedActions: []
+        suggestedActions: [],
+        keyPoints: [],
+        actionItems: [],
+        data: null
       };
     }
     throw new AppError("Failed to extract JSON from AI output.", 500, "VALIDATION_ERROR");
@@ -85,18 +99,21 @@ export function validateOutput(parsedJson, schema, rawText = "") {
 
   const result = schema.safeParse(parsedJson);
   if (!result.success) {
-    // If parsed object lacks 'reply' or 'suggestedActions', attempt graceful fallback for string content
+    // If parsed object lacks standard keys, attempt graceful key mapping
     if (parsedJson && typeof parsedJson === "object") {
-      const extractedReply = parsedJson.reply || parsedJson.content || parsedJson.text || parsedJson.message || parsedJson.answer || parsedJson.response;
-      if (extractedReply) {
+      const extractedAnswer = parsedJson.answer || parsedJson.reply || parsedJson.content || parsedJson.text || parsedJson.message || parsedJson.response;
+      if (extractedAnswer) {
         let actions = [];
         if (Array.isArray(parsedJson.suggestedActions)) actions = parsedJson.suggestedActions;
-        else if (Array.isArray(parsedJson.suggested_actions)) actions = parsedJson.suggested_actions;
         else if (Array.isArray(parsedJson.actions)) actions = parsedJson.actions;
 
         return {
-          reply: String(extractedReply),
-          suggestedActions: actions.map(a => typeof a === "string" ? a : a?.label || a?.text || a?.title || String(a || "")).filter(Boolean)
+          answer: String(extractedAnswer),
+          reply: String(extractedAnswer),
+          keyPoints: Array.isArray(parsedJson.keyPoints) ? parsedJson.keyPoints : [],
+          actionItems: Array.isArray(parsedJson.actionItems) ? parsedJson.actionItems : [],
+          suggestedActions: actions.map(a => typeof a === "string" ? a : a?.label || a?.text || a?.title || String(a || "")).filter(Boolean),
+          data: parsedJson.data || null
         };
       }
     }

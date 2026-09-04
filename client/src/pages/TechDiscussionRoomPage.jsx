@@ -6,8 +6,6 @@ import {
   GridLayout,
   ParticipantTile,
   TrackToggle,
-  useConnectionState,
-  ConnectionState,
   useTracks
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
@@ -41,7 +39,8 @@ import {
   FileText
 } from "lucide-react";
 import { useSocket } from "../hooks/useSocket.js";
-import { getLiveKitToken, endTechDiscussionSession } from "../api/techDiscussion";
+import { YjsSocketProvider } from "../services/yjsProvider.js";
+import { getLiveKitToken, endTechDiscussionSession, getNextQuestion } from "../api/techDiscussion";
 import { executeCode } from "../api/peerInterview";
 
 class LiveKitErrorBoundary extends React.Component {
@@ -64,15 +63,15 @@ class LiveKitErrorBoundary extends React.Component {
         <div className="flex h-full w-full items-center justify-center p-6 text-center">
           <div className="max-w-md bg-surface p-6 rounded-xl border border-danger/30 shadow-md">
             <AlertCircle className="mx-auto mb-4 h-10 w-10 text-danger" />
-            <h3 className="text-lg font-bold mb-1 text-text">Media Bridge Notice</h3>
+            <h3 className="text-lg font-bold mb-1 text-text">Media Stream Notice</h3>
             <p className="text-text-secondary mb-4 text-xs">
-              {this.state.error?.message || "Video stream container experienced a minor issue."}
+              {this.state.error?.message || "Media container noticed a device change. Continuing practice session."}
             </p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
               className="rounded-lg bg-primary px-4 py-2 text-white font-bold text-xs transition-colors"
             >
-              Reload Media
+              Reset Media Container
             </button>
           </div>
         </div>
@@ -87,6 +86,7 @@ export default function TechDiscussionRoomPage() {
   const navigate = useNavigate();
 
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
+  const [mediaPermissions, setMediaPermissions] = useState({ hasCamera: true, hasMic: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -101,18 +101,27 @@ export default function TechDiscussionRoomPage() {
 
   // Multi-tool Workspace Mode: "code" | "canvas" | "spec"
   const [activeWorkspace, setActiveWorkspace] = useState("code");
+  const [isFullscreenWorkspace, setIsFullscreenWorkspace] = useState(false);
 
   // Code Execution State
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
 
-  // Layout Ratios & Panels Visibility
+  // Resizable Layout Proportions & Panels Visibility
   const [isProblemCollapsed, setIsProblemCollapsed] = useState(false);
   const [isDiscussionCollapsed, setIsDiscussionCollapsed] = useState(false);
-  const [isVideoMinimized, setIsVideoMinimized] = useState(true); // Video minimized by default to prioritize code & canvas!
-  const [problemWidth, setProblemWidth] = useState(320); // px
-  const [discussionWidth, setDiscussionWidth] = useState(340); // px
+  const [isVideoMinimized, setIsVideoMinimized] = useState(true);
+
+  const [problemWidth, setProblemWidth] = useState(() => {
+    return Number(localStorage.getItem("tech_discussion_problem_width")) || 320;
+  });
+  const [discussionWidth, setDiscussionWidth] = useState(() => {
+    return Number(localStorage.getItem("tech_discussion_discussion_width")) || 340;
+  });
+
+  const isResizingProblem = useRef(false);
+  const isResizingDiscussion = useRef(false);
 
   // Room Code Copy State
   const [copiedCode, setCopiedCode] = useState(false);
@@ -120,8 +129,38 @@ export default function TechDiscussionRoomPage() {
   // Timer State
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(45 * 60);
 
-  // Real-time socket hook
-  const { socket, socketConnected } = useSocket(roomId, hasJoinedLobby);
+  // Real-time socket & presence hook
+  const { socket, socketConnected, connectionStatus, peerPresence } = useSocket(
+    roomId,
+    hasJoinedLobby,
+    { hasCamera: mediaPermissions.hasCamera, hasMic: mediaPermissions.hasMic }
+  );
+
+  // Sync workspace activity over Socket.IO
+  useEffect(() => {
+    if (!socket || !socketConnected) return;
+    const activityMap = {
+      code: "coding",
+      canvas: "canvas_editing",
+      spec: "notes_editing"
+    };
+    socket.emit("activity:change", { activity: activityMap[activeWorkspace] || "idle" });
+  }, [activeWorkspace, socket, socketConnected]);
+
+  // Yjs CRDT Provider State
+  const [yjsProvider, setYjsProvider] = useState(null);
+
+  useEffect(() => {
+    if (!roomId || !socket || !socketConnected) return;
+
+    const provider = new YjsSocketProvider(roomId, socket);
+    setYjsProvider(provider);
+
+    return () => {
+      provider.destroy();
+      setYjsProvider(null);
+    };
+  }, [roomId, socket, socketConnected]);
 
   // Fetch LiveKit Token & Room Data
   useEffect(() => {
@@ -137,7 +176,6 @@ export default function TechDiscussionRoomPage() {
         if (data.problem) {
           setProblem(data.problem);
           setCurrentLanguage(data.problem.defaultLanguage || "javascript");
-          // If category is architecture, default workspace to canvas!
           if (data.category === "architecture") {
             setActiveWorkspace("canvas");
           }
@@ -169,7 +207,22 @@ export default function TechDiscussionRoomPage() {
     return () => {
       isMounted = false;
     };
-  }, [roomId, hasJoinedLobby]);
+  // Real-time listener for question change from peer/host
+  useEffect(() => {
+    if (!socket) return;
+    const handleQuestionChange = (data) => {
+      if (data?.problem) {
+        setProblem(data.problem);
+        if (data.code) {
+          setCurrentCode(data.code);
+        }
+        setExecutionResult(null);
+        toast.info(`Room advanced to Question #${data.sequence || ""}`);
+      }
+    };
+    socket.on("question:change", handleQuestionChange);
+    return () => socket.off("question:change", handleQuestionChange);
+  }, [socket]);
 
   // Server-authoritative timer countdown
   useEffect(() => {
@@ -189,6 +242,40 @@ export default function TechDiscussionRoomPage() {
 
     return () => clearInterval(timer);
   }, [hasJoinedLobby, loading, error, timeRemainingSeconds]);
+
+  // Resizable panel mouse handlers
+  const handleMouseDownProblemResize = (e) => {
+    e.preventDefault();
+    isResizingProblem.current = true;
+    document.addEventListener("mousemove", handleMouseMoveResize);
+    document.addEventListener("mouseup", handleMouseUpResize);
+  };
+
+  const handleMouseDownDiscussionResize = (e) => {
+    e.preventDefault();
+    isResizingDiscussion.current = true;
+    document.addEventListener("mousemove", handleMouseMoveResize);
+    document.addEventListener("mouseup", handleMouseUpResize);
+  };
+
+  const handleMouseMoveResize = (e) => {
+    if (isResizingProblem.current) {
+      const newWidth = Math.max(220, Math.min(e.clientX, 600));
+      setProblemWidth(newWidth);
+      localStorage.setItem("tech_discussion_problem_width", newWidth);
+    } else if (isResizingDiscussion.current) {
+      const newWidth = Math.max(240, Math.min(window.innerWidth - e.clientX, 600));
+      setDiscussionWidth(newWidth);
+      localStorage.setItem("tech_discussion_discussion_width", newWidth);
+    }
+  };
+
+  const handleMouseUpResize = () => {
+    isResizingProblem.current = false;
+    isResizingDiscussion.current = false;
+    document.removeEventListener("mousemove", handleMouseMoveResize);
+    document.removeEventListener("mouseup", handleMouseUpResize);
+  };
 
   const formatTimer = (totalSec) => {
     const mins = Math.floor(totalSec / 60);
@@ -227,6 +314,39 @@ export default function TechDiscussionRoomPage() {
     }
   };
 
+  const [loadingNext, setLoadingNext] = useState(false);
+
+  const handleNextQuestion = async () => {
+    try {
+      setLoadingNext(true);
+      const res = await getNextQuestion(roomId);
+      const payload = res?.data || res;
+      const problemData = payload?.problem;
+      if (problemData) {
+        setProblem(problemData);
+        let starter = "";
+        if (typeof problemData.starterCode === "object" && problemData.starterCode[currentLanguage]) {
+          starter = problemData.starterCode[currentLanguage];
+        } else if (typeof problemData.starterCode === "string") {
+          starter = problemData.starterCode;
+        } else if (payload?.codeState?.code) {
+          starter = payload.codeState.code;
+        }
+        setCurrentCode(starter);
+        setExecutionResult(null);
+        if (socket) {
+          socket.emit("question:change", { roomId, problem: problemData, code: starter, sequence: payload?.questionSequence });
+        }
+        toast.success(`Advanced to Question #${payload?.questionSequence || ""}`);
+      }
+    } catch (err) {
+      console.error("Next Question error:", err);
+      toast.error(err.response?.data?.message || "Failed to load next question");
+    } finally {
+      setLoadingNext(false);
+    }
+  };
+
   const handleEndSession = async () => {
     try {
       setLoading(true);
@@ -247,7 +367,14 @@ export default function TechDiscussionRoomPage() {
   };
 
   if (!hasJoinedLobby) {
-    return <PreJoinLobby onJoin={() => setHasJoinedLobby(true)} />;
+    return (
+      <PreJoinLobby
+        onJoin={(devices) => {
+          if (devices) setMediaPermissions(devices);
+          setHasJoinedLobby(true);
+        }}
+      />
+    );
   }
 
   if (loading) {
@@ -261,10 +388,10 @@ export default function TechDiscussionRoomPage() {
 
   if (error || !roomData) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-bg text-text">
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-bg text-text p-6">
         <AlertCircle className="mb-4 h-12 w-12 text-danger" />
         <h2 className="text-xl font-bold text-danger">Practice Room Unavailable</h2>
-        <p className="mt-2 text-text-secondary font-medium">{error || "Invalid room session"}</p>
+        <p className="mt-2 text-text-secondary font-medium text-sm text-center max-w-md">{error || "Invalid room session"}</p>
         <button
           onClick={() => navigate("/tech-discussion")}
           className="mt-6 flex items-center rounded-xl bg-surface border border-border px-4 py-2 hover:bg-bg text-text font-bold shadow-sm transition-all"
@@ -284,6 +411,7 @@ export default function TechDiscussionRoomPage() {
           <button
             onClick={() => navigate("/tech-discussion")}
             className="p-1.5 hover:bg-bg-secondary rounded-lg text-text-secondary hover:text-text transition-colors"
+            title="Exit Room"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -291,27 +419,40 @@ export default function TechDiscussionRoomPage() {
           <div className="flex items-center gap-2">
             <Code2 className="w-5 h-5 text-primary" />
             <h1 className="text-sm font-bold text-text flex items-center gap-2">
-              Tech Discussion <span className="text-text-secondary font-normal">/ {problem?.title || "Workspace"}</span>
+              Tech Discussion <span className="text-text-secondary font-normal truncate max-w-xs">/ {problem?.title || "Workspace"}</span>
             </h1>
           </div>
         </div>
 
         {/* Center: Timer & Room Code & Connection */}
-        <div className="hidden md:flex items-center gap-6">
+        <div className="hidden md:flex items-center gap-4 sm:gap-6">
           {/* Room Code */}
           <button
             onClick={handleCopyCode}
             className="flex items-center gap-1.5 bg-bg-secondary hover:bg-border/50 px-2.5 py-1 rounded-lg border border-border transition-colors text-xs font-mono font-bold"
+            title="Click to copy Room Code"
           >
             <span>{roomId.slice(0, 8).toUpperCase()}</span>
             {copiedCode ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3 text-text-secondary" />}
           </button>
 
-          {/* Socket Connection */}
+          {/* Connection Status Pill */}
           <div className="flex items-center gap-2 bg-bg-secondary px-3 py-1 rounded-full border border-border">
-            <div className={`h-2 w-2 rounded-full ${socketConnected ? "bg-success shadow-sm" : "bg-warning animate-pulse"}`} />
-            <span className="text-[11px] text-text-secondary font-bold">
-              {socketConnected ? "Peer Connected" : "Connecting..."}
+            <div
+              className={`h-2 w-2 rounded-full ${
+                connectionStatus === "joined"
+                  ? "bg-success shadow-sm"
+                  : connectionStatus === "reconnecting"
+                  ? "bg-warning animate-pulse"
+                  : "bg-danger"
+              }`}
+            />
+            <span className="text-[11px] text-text-secondary font-bold uppercase tracking-wider">
+              {connectionStatus === "joined"
+                ? "Realtime Sync Active"
+                : connectionStatus === "reconnecting"
+                ? "Reconnecting..."
+                : "Connecting..."}
             </span>
           </div>
 
@@ -324,6 +465,16 @@ export default function TechDiscussionRoomPage() {
 
         {/* Right: Controls & End Session */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleNextQuestion}
+            disabled={loadingNext}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-xs transition-all shadow-sm disabled:opacity-50"
+            title="Advance to next question in this practice mode"
+          >
+            {loadingNext ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            Next Question
+          </button>
+
           <button
             onClick={() => setIsVideoMinimized(!isVideoMinimized)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border text-xs font-bold text-text hover:bg-border/40 transition-colors"
@@ -341,13 +492,55 @@ export default function TechDiscussionRoomPage() {
         </div>
       </header>
 
+      {/* REAL-TIME PRESENCE & STATUS SUB-HEADER BAR */}
+      <div className="flex items-center justify-between px-4 py-1.5 bg-bg border-b border-border text-xs shrink-0 z-10 overflow-x-auto">
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-text-secondary uppercase text-[10px] tracking-wider flex items-center gap-1">
+            <Users className="w-3 h-3 text-primary" /> Active Room Peers ({peerPresence.length || 1})
+          </span>
+          <div className="flex items-center gap-2">
+            {peerPresence.map((p, idx) => {
+              const actLabels = {
+                coding: "💻 Coding",
+                canvas_editing: "🎨 Editing Diagram",
+                notes_editing: "📝 Spec Notes",
+                idle: "⏳ Idle"
+              };
+              return (
+                <div
+                  key={p.socketId || idx}
+                  className="flex items-center gap-1.5 bg-surface border border-border px-2.5 py-0.5 rounded-full text-[11px] font-medium shadow-2xs"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                  <span className="font-bold text-text">{p.userName || "Peer Candidate"}</span>
+                  <span className="text-[10px] text-primary font-semibold bg-primary/10 px-1.5 py-0.2 rounded-md">
+                    {actLabels[p.activity] || "💻 Coding"}
+                  </span>
+                  <div className="flex items-center gap-1 ml-1 border-l border-border pl-1.5 text-text-secondary">
+                    {p.hasMic ? <Mic className="w-3 h-3 text-success" /> : <MicOff className="w-3 h-3 text-text-secondary" />}
+                    {p.hasCamera ? <Video className="w-3 h-3 text-success" /> : <VideoOff className="w-3 h-3 text-text-secondary" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Reconnection / Connection Status Alert */}
+        {connectionStatus === "reconnecting" && (
+          <div className="flex items-center gap-1.5 text-warning font-semibold text-[11px] bg-warning-bg px-2.5 py-0.5 rounded-md border border-warning/30">
+            <Loader2 className="w-3 h-3 animate-spin" /> Connection lost. Reconnecting socket...
+          </div>
+        )}
+      </div>
+
       {/* MAIN WORKSPACE BODY */}
       <LiveKitRoom
         token={roomData.token}
         serverUrl={import.meta.env.VITE_LIVEKIT_URL || roomData.livekitUrl}
-        connect={true}
-        audio={true}
-        video={true}
+        connect={Boolean(roomData.token)}
+        audio={mediaPermissions.hasMic}
+        video={mediaPermissions.hasCamera}
         className="flex flex-1 overflow-hidden relative bg-bg"
       >
         <LiveKitErrorBoundary>
@@ -356,7 +549,7 @@ export default function TechDiscussionRoomPage() {
           {!isVideoMinimized && (
             <div className="absolute top-3 right-4 z-30 w-72 bg-surface/95 backdrop-blur border border-border rounded-2xl shadow-2xl p-2 space-y-2 fade-in">
               <div className="flex items-center justify-between px-2 py-1 border-b border-border text-xs font-bold text-text-secondary">
-                <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> Peers Video (2)</span>
+                <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> Peer Stream</span>
                 <button onClick={() => setIsVideoMinimized(true)} className="p-1 hover:bg-bg rounded text-text">
                   <Minimize2 className="w-3.5 h-3.5" />
                 </button>
@@ -376,41 +569,51 @@ export default function TechDiscussionRoomPage() {
           )}
 
           {/* THREE-COLUMN RESIZABLE WORKSPACE */}
-          <div className="flex flex-1 w-full h-full overflow-hidden">
+          <div className="flex flex-1 w-full h-full overflow-hidden relative">
             
             {/* LEFT COLUMN: SCENARIO / PROBLEM PANEL */}
-            <section
-              style={{ width: isProblemCollapsed ? "44px" : `${problemWidth}px` }}
-              className="flex flex-col bg-surface border-r border-border shrink-0 transition-all duration-200 relative overflow-hidden"
-            >
-              {isProblemCollapsed ? (
-                <button
-                  onClick={() => setIsProblemCollapsed(false)}
-                  className="flex flex-col items-center py-4 gap-4 text-text-secondary hover:text-text h-full"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                  <span className="writing-mode-vertical text-xs font-bold tracking-widest uppercase text-primary">Scenario Prompt</span>
-                </button>
-              ) : (
-                <div className="flex flex-col h-full overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-bg-secondary shrink-0">
-                    <span className="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-1.5">
-                      <Code2 className="w-3.5 h-3.5 text-primary" /> Scenario Prompt
-                    </span>
-                    <button onClick={() => setIsProblemCollapsed(true)} className="p-1 hover:bg-border rounded text-text-secondary">
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
+            {!isFullscreenWorkspace && (
+              <section
+                style={{ width: isProblemCollapsed ? "44px" : `${problemWidth}px` }}
+                className="flex flex-col bg-surface border-r border-border shrink-0 transition-all duration-75 relative overflow-hidden"
+              >
+                {isProblemCollapsed ? (
+                  <button
+                    onClick={() => setIsProblemCollapsed(false)}
+                    className="flex flex-col items-center py-4 gap-4 text-text-secondary hover:text-text h-full"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                    <span className="writing-mode-vertical text-xs font-bold tracking-widest uppercase text-primary">Scenario Prompt</span>
+                  </button>
+                ) : (
+                  <div className="flex flex-col h-full overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-bg-secondary shrink-0">
+                      <span className="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-1.5">
+                        <Code2 className="w-3.5 h-3.5 text-primary" /> Scenario Prompt
+                      </span>
+                      <button onClick={() => setIsProblemCollapsed(true)} className="p-1 hover:bg-border rounded text-text-secondary">
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                      {problem ? (
+                        <QuestionPanel question={problem} />
+                      ) : (
+                        <div className="p-4 text-xs text-text-secondary">Loading scenario prompt...</div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                    {problem ? (
-                      <QuestionPanel question={problem} />
-                    ) : (
-                      <div className="p-4 text-xs text-text-secondary">Loading scenario prompt...</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </section>
+                )}
+              </section>
+            )}
+
+            {/* RESIZABLE DIVIDER 1 */}
+            {!isFullscreenWorkspace && !isProblemCollapsed && (
+              <div
+                onMouseDown={handleMouseDownProblemResize}
+                className="w-1 hover:w-1.5 bg-border hover:bg-primary cursor-col-resize z-10 transition-all shrink-0"
+              />
+            )}
 
             {/* MIDDLE COLUMN: MULTI-TOOL WORKSPACE */}
             <section className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden relative">
@@ -446,8 +649,18 @@ export default function TechDiscussionRoomPage() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-text-secondary">
-                  <span className="w-2 h-2 rounded-full bg-success animate-pulse" /> Realtime Peer Sync
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsFullscreenWorkspace(!isFullscreenWorkspace)}
+                    className="p-1 hover:bg-bg rounded text-text-secondary hover:text-text transition-colors"
+                    title={isFullscreenWorkspace ? "Exit Fullscreen" : "Fullscreen Workspace"}
+                  >
+                    {isFullscreenWorkspace ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+
+                  <div className="flex items-center gap-2 text-xs text-text-secondary border-l border-border pl-3">
+                    <span className="w-2 h-2 rounded-full bg-success animate-pulse" /> Yjs CRDT Sync
+                  </div>
                 </div>
               </div>
 
@@ -459,6 +672,7 @@ export default function TechDiscussionRoomPage() {
                     sessionId={roomId}
                     mode="peer"
                     socket={socket}
+                    yjsProvider={yjsProvider}
                     value={currentCode}
                     initialLanguage={currentLanguage}
                     onChange={(code, metadata) => {
@@ -476,6 +690,7 @@ export default function TechDiscussionRoomPage() {
                   <div className="h-full w-full absolute inset-0">
                     <ArchitecturalCanvas
                       socket={socket}
+                      yjsProvider={yjsProvider}
                       initialElements={problem?.starterCanvasElements || []}
                       isReadOnly={false}
                     />
@@ -494,42 +709,52 @@ export default function TechDiscussionRoomPage() {
               </div>
             </section>
 
+            {/* RESIZABLE DIVIDER 2 */}
+            {!isFullscreenWorkspace && !isDiscussionCollapsed && (
+              <div
+                onMouseDown={handleMouseDownDiscussionResize}
+                className="w-1 hover:w-1.5 bg-border hover:bg-primary cursor-col-resize z-10 transition-all shrink-0"
+              />
+            )}
+
             {/* RIGHT COLUMN: DISCUSSION & AI FACILITATOR PANEL */}
-            <section
-              style={{ width: isDiscussionCollapsed ? "44px" : `${discussionWidth}px` }}
-              className="flex flex-col bg-surface border-l border-border shrink-0 transition-all duration-200 relative overflow-hidden"
-            >
-              {isDiscussionCollapsed ? (
-                <button
-                  onClick={() => setIsDiscussionCollapsed(false)}
-                  className="flex flex-col items-center py-4 gap-4 text-text-secondary hover:text-text h-full"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                  <span className="writing-mode-vertical text-xs font-bold tracking-widest uppercase text-primary">Discussion & AI</span>
-                </button>
-              ) : (
-                <div className="flex flex-col h-full overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary shrink-0">
-                    <span className="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-warning" /> AI Facilitator
-                    </span>
-                    <button onClick={() => setIsDiscussionCollapsed(true)} className="p-1 hover:bg-border rounded text-text-secondary">
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+            {!isFullscreenWorkspace && (
+              <section
+                style={{ width: isDiscussionCollapsed ? "44px" : `${discussionWidth}px` }}
+                className="flex flex-col bg-surface border-l border-border shrink-0 transition-all duration-75 relative overflow-hidden"
+              >
+                {isDiscussionCollapsed ? (
+                  <button
+                    onClick={() => setIsDiscussionCollapsed(false)}
+                    className="flex flex-col items-center py-4 gap-4 text-text-secondary hover:text-text h-full"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                    <span className="writing-mode-vertical text-xs font-bold tracking-widest uppercase text-primary">Discussion & AI</span>
+                  </button>
+                ) : (
+                  <div className="flex flex-col h-full overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary shrink-0">
+                      <span className="text-xs font-bold uppercase tracking-wider text-text flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-warning" /> AI Facilitator
+                      </span>
+                      <button onClick={() => setIsDiscussionCollapsed(true)} className="p-1 hover:bg-border rounded text-text-secondary">
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <DiscussionAssistantPanel
+                        roomId={roomId}
+                        problem={problem}
+                        currentCode={currentCode}
+                        currentLanguage={currentLanguage}
+                        selectedCode={selectedCode}
+                        socket={socket}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1 overflow-hidden">
-                    <DiscussionAssistantPanel
-                      roomId={roomId}
-                      problem={problem}
-                      currentCode={currentCode}
-                      currentLanguage={currentLanguage}
-                      selectedCode={selectedCode}
-                      socket={socket}
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
+                )}
+              </section>
+            )}
           </div>
         </LiveKitErrorBoundary>
       </LiveKitRoom>

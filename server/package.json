@@ -34,6 +34,7 @@
     "pdfjs-dist": "^4.5.136",
     "pdfkit": "^0.20.2",
     "socket.io": "^4.8.3",
+    "yjs": "^13.6.32",
     "zod": "^3.23.8"
   },
   "devDependencies": {

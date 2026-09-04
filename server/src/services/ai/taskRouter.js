@@ -2,7 +2,7 @@ import { MODEL_ROLES } from "./modelRouter.js";
 import { jdStructureSchema } from "./schemas/jdSchema.js";
 import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema, resumeSuggestionsSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
-import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema } from "./schemas/interviewSchema.js";
+import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema, techDiscussionEvaluationSchema, techDiscussionNudgeSchema, techDiscussionContextActionSchema } from "./schemas/interviewSchema.js";
 import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema, coverLetterSchema, recruiterMessageSchema } from "./schemas/careerSchema.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
@@ -281,6 +281,34 @@ export const AI_TASKS = {
     schema: null,
     buildContext: (params) => params,
     jsonMode: false
+  },
+  TECH_DISCUSSION_NUDGE: {
+    featureName: "tech discussion progressive nudge",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are a senior technical interviewer facilitating a live practice room for freshers. Ask ONE targeted question at a time and guide candidates SOCRATICALLY without spoiling full answers. Return valid JSON matching the schema.",
+    buildPrompt: (context) => context.prompt || `Level ${context.hintLevel} hint requested for topic: ${context.questionTitle}`,
+    schema: techDiscussionNudgeSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  TECH_DISCUSSION_CONTEXT_ACTION: {
+    featureName: "tech discussion context action",
+    modelRole: MODEL_ROLES.GENERAL_REASONING,
+    systemPrompt: "You are an expert technical interviewer analyzing code/design snippets in a live practice session. Follow structured stage progression (DSA: Approach -> Complexity -> Implementation -> Test Cases -> Evaluation; System Design: Requirements -> Architecture -> Data Flow -> Trade-offs -> Bottlenecks). Ask ONE targeted follow-up question. Return valid JSON matching the schema.",
+    buildPrompt: (context) => context.prompt || `Action: ${context.actionType}`,
+    schema: techDiscussionContextActionSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  TECH_DISCUSSION_EVALUATION: {
+    featureName: "tech discussion evaluation",
+    modelRole: MODEL_ROLES.COMPLEX_REASONING,
+    systemPrompt: "You are a senior staff engineer evaluating a completed live technical discussion session. Analyze technical correctness, edge cases, complexity, and communication clarity. Return valid JSON matching the schema.",
+    buildPrompt: (context) => context.prompt || "Evaluate technical performance across session.",
+    schema: techDiscussionEvaluationSchema,
+    buildContext: (params) => params,
+    jsonMode: true
   }
 };
+
 

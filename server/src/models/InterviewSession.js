@@ -101,6 +101,12 @@ const interviewSessionSchema = new mongoose.Schema(
     },
     // Unique seed per attempt — drives question diversity across retries
     interviewSeed: { type: String, default: "" },
+    // Personalized interviewer greeting string
+    greeting: { type: String, default: "" },
+    // Fingerprints of asked questions in this session
+    askedQuestionFingerprints: { type: [String], default: [] },
+    // Concept tags tested in this session
+    askedConcepts: { type: [String], default: [] },
     // Tracks which tech concepts have already been tested
     conceptsTested: [{
       concept: { type: String },

@@ -59,7 +59,7 @@ export const getCodingQuestion = async (sessionId) => {
 };
 
 export const executeCode = async (sessionId, questionId, language, code) => {
-  const response = await http.post(`/interview/${sessionId}/execute`, {
+  const response = await http.post(`/tech-discussion/${sessionId}/execute`, {
     questionId,
     language,
     code,

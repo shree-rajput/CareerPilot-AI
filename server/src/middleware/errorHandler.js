@@ -11,6 +11,21 @@ export function errorHandler(error, _req, res, _next) {
   let code = error.code || "SERVER_ERROR";
   let details = undefined;
 
+  // Handle AI Provider & AI Validation Errors safely without leaking stack traces/API keys to user
+  const isAiError = 
+    code?.startsWith("AI_") || 
+    message.includes("AxiosError") || 
+    message.includes("groq") || 
+    message.includes("Groq") ||
+    message.includes("JSON") ||
+    message.includes("Schema validation");
+
+  if (isAiError && statusCode >= 500) {
+    console.error("[AI Error Handler]", error.stack || error);
+    message = "We couldn't complete the AI analysis right now. Your existing data is safe. Please try again.";
+    code = "AI_SERVICE_TEMPORARILY_UNAVAILABLE";
+  }
+
   // Handle Zod Validation Errors
   if (error.name === "ZodError") {
     statusCode = 400;
@@ -35,7 +50,7 @@ export function errorHandler(error, _req, res, _next) {
     code = "CAST_ERROR";
   }
 
-  if (statusCode >= 500) {
+  if (statusCode >= 500 && !isAiError) {
     console.error(error);
   }
 
@@ -43,6 +58,6 @@ export function errorHandler(error, _req, res, _next) {
     message,
     code,
     details,
-    stack: env.nodeEnv === "development" ? error.stack : undefined
+    stack: env.nodeEnv === "development" && !isAiError ? error.stack : undefined
   });
 }

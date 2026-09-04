@@ -173,6 +173,27 @@ export async function evaluateCodingChallenge(params) {
 }
 
 /**
+ * Generates a personalized opening greeting string using authenticated user profile.
+ */
+export function generatePersonalizedGreeting(user = {}, targetRole = "Software Engineer") {
+  let name = "";
+  if (typeof user?.firstName === "string" && user.firstName.trim()) {
+    name = user.firstName.trim();
+  } else if (typeof user?.name === "string" && user.name.trim()) {
+    const parts = user.name.trim().split(/\s+/);
+    if (parts[0] && parts[0] !== "[object" && parts[0] !== "undefined" && parts[0] !== "null") {
+      name = parts[0];
+    }
+  }
+
+  if (name && name !== "undefined" && name !== "null" && name !== "[object Object]") {
+    return `Hello ${name}! 👋 Welcome to your technical interview. I'll be asking you a few questions based on your profile and experience as a ${targetRole}. Take your time, think aloud when useful, and feel free to explain your approach. Ready to begin?`;
+  }
+
+  return `Hello! Welcome to your technical interview. I'll be asking you a few questions based on your profile and experience as a ${targetRole}. Take your time, think aloud when useful, and feel free to explain your approach. Ready to begin?`;
+}
+
+/**
  * Generates a short conversational reaction from the interviewer to the candidate's previous answer.
  * This powers the "human-like" layer: acknowledgement + natural transition into the next question.
  */
@@ -181,13 +202,18 @@ export async function generateInterviewerReaction(params) {
     return await executeAiTask("GENERATE_INTERVIEWER_REACTION", params);
   } catch (error) {
     console.error("[AI] Interviewer reaction fallback:", error.message);
-    const { correctness, depth } = params.evaluation || {};
+    const evalObj = params.evaluation || {};
+    const { correctness, depth, answerStatus } = evalObj;
+
+    if (answerStatus === "NO_ANSWER" || params.transcript === "No idea" || params.transcript === "I don't know") {
+      return { reaction: "That's okay. Not knowing a specific detail is completely normal in an interview. Let's move to the next area.", tone: "supportive" };
+    }
     if (correctness === 'High' && depth === 'High') {
-      return { reaction: "Good explanation. Let's build on that.", tone: "affirming" };
+      return { reaction: "Good explanation. You identified the core mechanics clearly.", tone: "affirming" };
     } else if (correctness === 'Low') {
-      return { reaction: "I think there's a small gap there — let me approach it from a different angle.", tone: "probing" };
+      return { reaction: "I see your approach. There's an important trade-off to consider here.", tone: "probing" };
     } else {
-      return { reaction: "Okay. Let's go a bit deeper on that.", tone: "neutral" };
+      return { reaction: "Okay. Let's build on that concept.", tone: "neutral" };
     }
   }
 }
@@ -205,7 +231,7 @@ export async function generateCodingFollowUp(params) {
     const total = params.totalTests || 0;
     if (passed === total && total > 0) {
       return {
-        comment: "Your solution passed all the test cases. Good work on that. I noticed you used a particular approach — what would happen if the input size scaled significantly?",
+        comment: "Your solution passed all test cases. I noticed you used a particular approach — what would happen if the input size scaled significantly?",
         followUpQuestion: "If this function had to handle millions of inputs, how would you optimize it?"
       };
     }

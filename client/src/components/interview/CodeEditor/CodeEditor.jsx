@@ -78,6 +78,7 @@ export default function CodeEditor({
   readOnly = false,
   editorOptions = {},
   socket = null,
+  yjsProvider = null,
   userName = "You",
 }) {
   const editorRef = useRef(null);
@@ -138,6 +139,11 @@ export default function CodeEditor({
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+
+    // Bind Yjs CRDT text model to Monaco
+    if (yjsProvider) {
+      yjsProvider.bindMonaco(editor, monaco);
+    }
 
     // Track cursor and selection changes to emit to peer
     editor.onDidChangeCursorPosition((e) => {

@@ -104,6 +104,12 @@ const techDiscussionRoomSchema = new mongoose.Schema(
       default: "medium",
     },
 
+    experienceLevel: {
+      type: String,
+      enum: ["fresher", "junior", "mid", "senior"],
+      default: "fresher",
+    },
+
     language: {
       type: String,
       default: "javascript",
@@ -138,6 +144,41 @@ const techDiscussionRoomSchema = new mongoose.Schema(
     },
 
     problem: problemSchema,
+
+    currentQuestionId: {
+      type: String,
+      default: "",
+    },
+
+    questionState: {
+      type: String,
+      enum: [
+        "QUESTION_PRESENTED",
+        "WAITING_FOR_ANSWER",
+        "ANSWER_RECEIVED",
+        "EVALUATING",
+        "FEEDBACK",
+        "FOLLOW_UP",
+        "COMPLETED",
+        "NEXT_QUESTION_AVAILABLE"
+      ],
+      default: "QUESTION_PRESENTED",
+    },
+
+    questionSequence: {
+      type: Number,
+      default: 1,
+    },
+
+    previousQuestionIds: {
+      type: [String],
+      default: [],
+    },
+
+    nextQuestionAvailable: {
+      type: Boolean,
+      default: false,
+    },
 
     aiRecommendationReason: {
       type: String,

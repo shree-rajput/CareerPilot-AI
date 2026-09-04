@@ -6,8 +6,20 @@ import {
   getAIProgressiveNudge,
   executeContextAction,
   endTechDiscussionSession,
-  getIndividualTechDiscussionReport
+  getIndividualTechDiscussionReport,
+  getNextTechDiscussionQuestion
 } from "../services/career/techDiscussion.service.js";
+import { getSupportedLanguages } from "../config/programmingLanguages.js";
+
+export function getLanguagesController(req, res) {
+  try {
+    const languages = getSupportedLanguages();
+    return res.status(200).json({ success: true, data: languages });
+  } catch (error) {
+    console.error("getLanguagesController error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch supported programming languages" });
+  }
+}
 
 export async function createRoomController(req, res) {
   try {
@@ -177,3 +189,21 @@ export async function getReportController(req, res) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to fetch report" });
   }
 }
+
+export async function getNextQuestionController(req, res) {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+
+    const { roomId } = req.params;
+    const result = await getNextTechDiscussionQuestion({ roomId, userId });
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error("getNextQuestionController error:", error);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to advance to next question" });
+  }
+}
+

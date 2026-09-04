@@ -87,14 +87,19 @@ function TestCaseDetails({ testCase }) {
 }
 
 function getTestCaseResult(result, testCase, index) {
-  if (!result?.testResults) {
+  if (!result) {
+    return null;
+  }
+
+  const testResults = result.testResults || result.results || result.data?.results || [];
+  if (!testResults.length) {
     return null;
   }
 
   return (
-    result.testResults.find(
+    testResults.find(
       (item) => item.testCaseId === (testCase.id || testCase._id),
-    ) || result.testResults[index]
+    ) || testResults[index]
   );
 }
 

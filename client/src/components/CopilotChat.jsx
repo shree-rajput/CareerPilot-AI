@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, User, Loader2, ExternalLink } from 'lucide-react';
 import { copilotApi } from '../api/career';
 import { Button } from './ui/Button';
+import { MarkdownRenderer } from './ui/ai/MarkdownRenderer';
 
 export function CopilotChat() {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,14 +36,12 @@ export function CopilotChat() {
     try {
       let currentId = activeId;
       if (!currentId) {
-        // copilotApi.createConversation() returns { status: 'success', data: conversationObject }
         const createRes = await copilotApi.createConversation("Quick Chat");
         currentId = createRes?.data?._id;
         if (!currentId) throw new Error("Failed to create conversation session");
         setActiveId(currentId);
       }
 
-      // copilotApi.sendMessage() returns { status: 'success', data: { reply, suggestedActions, conversation } }
       const sendRes = await copilotApi.sendMessage(currentId, userQuery);
       const replyText = sendRes?.data?.reply
         || sendRes?.data?.conversation?.messages?.slice(-1)?.[0]?.content
@@ -112,8 +111,8 @@ export function CopilotChat() {
               <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${msg.role === 'user' ? 'bg-primary text-white' : 'bg-surface border border-border text-primary'}`}>
                 {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
               </div>
-              <div className={`max-w-[75%] p-3 rounded-2xl text-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-sm' : 'bg-bg-secondary text-text border border-border rounded-tl-sm'}`}>
-                {msg.content}
+              <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-sm whitespace-pre-wrap' : 'bg-bg-secondary text-text border border-border rounded-tl-sm'}`}>
+                {msg.role === 'user' ? msg.content : <MarkdownRenderer content={msg.content} />}
               </div>
             </div>
           ))}

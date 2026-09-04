@@ -97,17 +97,21 @@ Communication Metrics (computed locally):
 
 Evaluate the candidate's answer comprehensively.
 
-Guidelines:
-1. Be objective and constructive.
-2. If the transcript contains many filler words or pauses, slightly penalize the communication score, but focus mostly on clarity and conciseness.
-3. If the answer is completely off-topic, penalize relevance and completeness heavily.
-4. Generate a highly structured "ideal answer" that the candidate can learn from, using frameworks like STAR for behavioral, or direct structured explanations for technical questions.
-5. Do not invent details for the ideal answer that don't make sense for the question.
+CRITICAL EVALUATION GUIDELINES:
+1. STRICT NON-ANSWER ASSESSMENT: If the candidate answered "No", "I don't know", "No idea", "I'm not sure", or provided empty/irrelevant gibberish, you MUST set answerStatus to "NO_ANSWER", correctnessScore to 0, correctness to "Low", relevance to "Low", depth to "Low", and communication.score to 0.
+2. ANSWER CLASSIFICATION:
+   - "NO_ANSWER": Candidate declined to answer, stated they don't know, or gave a non-response (score = 0).
+   - "INCORRECT": Candidate attempted but gave factually wrong or completely off-target information (score = 1-30).
+   - "PARTIAL": Candidate covered some expected concepts accurately but missed important details or trade-offs (score = 31-70).
+   - "CORRECT": Candidate answered accurately, clearly, and addressed core technical concepts (score = 71-100).
+3. Generate a highly structured "ideal answer" that the candidate can learn from.
 
 You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
 The JSON object must use EXACTLY these field names:
 
 {
+  "answerStatus": "<NO_ANSWER | INCORRECT | PARTIAL | CORRECT>",
+  "correctnessScore": <0-100 numeric correctness score, 0 for NO_ANSWER>,
   "relevance": "<High | Medium | Low>",
   "correctness": "<High | Medium | Low>",
   "depth": "<High | Medium | Low>",
@@ -363,19 +367,19 @@ Generate a SHORT (1-3 sentence) natural interviewer reaction to this answer.
 Rules:
 1. Do NOT ask the next question — only react to what was said.
 2. Match tone to answer quality:
-   - Strong answer: brief affirmation + hint at going deeper. Example: "Good. That's a solid foundation."
-   - Weak/vague answer: gentle probe. Example: "I see what you're getting at. Let me rephrase..."
-   - Incorrect answer: neutral redirect. Example: "There's a small gap there — let's approach it differently."
+   - Strong answer (CORRECT): brief genuine affirmation + hint at going deeper. Example: "Good. That's a solid foundation."
+   - Partial answer (PARTIAL): encouraging but honest response. Example: "You've got the general idea right, though there's an important trade-off to consider."
+   - Weak/Incorrect answer (INCORRECT): neutral/corrective response without fake praise. Example: "I see your approach, but there's a key distinction here."
+   - Declined/Unknown (NO_ANSWER): supportive response without fake praise. Example: "That's okay. Not knowing a specific detail is completely normal in an interview."
    - Off-topic: politely redirect. Example: "Interesting point. Let me bring us back to the core question."
 3. Sound like a calm human professional, NOT like an AI assistant.
-4. Do NOT use "Great!", "Amazing!", "Excellent!", "Fantastic!" or similar exaggerated praise.
-5. Occasionally reference something specific from their answer (max 1x per conversation).
-6. Keep it under 40 words.
+4. DO NOT use exaggerated praise ("Great!", "Amazing!", "Excellent!", "Fantastic!", "Well done!") especially on weak, wrong, or NO_ANSWER responses.
+5. Keep it concise (1-2 short sentences, under 35 words).
 
 You MUST respond with ONLY a valid JSON object:
 {
-  "reaction": "<the 1-3 sentence reaction string>",
-  "tone": "<affirming | neutral | probing | redirecting>"
+  "reaction": "<the 1-2 sentence reaction string>",
+  "tone": "<affirming | neutral | probing | redirecting | supportive>"
 }`;
 };
 

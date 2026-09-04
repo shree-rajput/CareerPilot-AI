@@ -1,5 +1,54 @@
 import { z } from "zod";
 
+export const dsaSolutionSchema = z.object({
+  summary: z.string().default(""),
+  approach: z.array(z.string()).default([]),
+  algorithm: z.string().default(""),
+  correctness: z.string().default("Verified"),
+  complexity: z.object({
+    time: z.string().default("O(N)"),
+    space: z.string().default("O(1)")
+  }).default({ time: "O(N)", space: "O(1)" }),
+  code: z.string().default(""),
+  edgeCases: z.array(z.string()).default([]),
+  interviewTip: z.string().default("")
+});
+
+export const codeReviewStandardSchema = z.object({
+  summary: z.string().default(""),
+  bugs: z.array(z.string()).default([]),
+  correctnessIssues: z.array(z.string()).default([]),
+  performanceIssues: z.array(z.string()).default([]),
+  securityIssues: z.array(z.string()).default([]),
+  suggestions: z.array(z.string()).default([]),
+  improvedCode: z.string().default("")
+});
+
+export const systemDesignSchema = z.object({
+  requirements: z.array(z.string()).default([]),
+  architecture: z.array(z.string()).default([]),
+  dataFlow: z.array(z.string()).default([]),
+  database: z.record(z.any()).default({}),
+  scaling: z.array(z.string()).default([]),
+  bottlenecks: z.array(z.string()).default([]),
+  tradeoffs: z.array(z.string()).default([]),
+  missingAreas: z.array(z.string()).default([]),
+  score: z.number().min(0).max(100).default(75),
+  nextQuestion: z.string().nullable().default(null)
+});
+
+export const interviewEvaluationStandardSchema = z.object({
+  overallScore: z.number().min(0).max(100).default(75),
+  communication: z.record(z.any()).default({}),
+  technicalKnowledge: z.record(z.any()).default({}),
+  problemSolving: z.record(z.any()).default({}),
+  correctness: z.record(z.any()).default({}),
+  strengths: z.array(z.string()).default([]),
+  weaknesses: z.array(z.string()).default([]),
+  improvements: z.array(z.string()).default([]),
+  nextQuestion: z.string().nullable().default(null)
+});
+
 export const interviewQuestionSchema = z.object({
   questionText: z.string().min(1, "questionText must not be empty").describe("The interview question to ask."),
   category: z.string().min(1, "category must not be empty").describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
@@ -51,29 +100,36 @@ export const adaptiveActionSchema = z.object({
 });
 
 export const evidenceEvaluationSchema = z.object({
-  relevance: z.enum(["High", "Medium", "Low"]).describe("How well did the answer address the specific question asked?"),
-  correctness: z.enum(["High", "Medium", "Low"]).describe("Was the technical or factual information correct?"),
-  depth: z.enum(["High", "Medium", "Low"]).describe("Did the candidate go into sufficient detail, or stay surface-level?"),
-  specificity: z.enum(["High", "Medium", "Low"]).describe("Did they use concrete examples and metrics?"),
+  overallScore: z.number().min(0).max(100).default(75),
+  answerStatus: z.enum(["NO_ANSWER", "INCORRECT", "PARTIAL", "CORRECT"]).default("CORRECT"),
+  correctnessScore: z.number().min(0).max(100).default(75),
+  relevance: z.enum(["High", "Medium", "Low"]).default("Medium"),
+  correctness: z.enum(["High", "Medium", "Low"]).default("Medium"),
+  depth: z.enum(["High", "Medium", "Low"]).default("Medium"),
+  specificity: z.enum(["High", "Medium", "Low"]).default("Medium"),
   communication: z.object({
-    score: z.number().min(0).max(100).default(75).describe("Overall evidence-based communication score (0-100)"),
-    clarity: z.number().min(0).max(100).default(75).describe("How understandable and direct the response was"),
-    relevance: z.number().min(0).max(100).default(75).describe("How directly the response addressed the question"),
-    structure: z.number().min(0).max(100).default(70).describe("Logical sequencing of ideas"),
-    conciseness: z.number().min(0).max(100).default(75).describe("Efficiency of communication without rambling"),
-    fillerUsage: z.number().min(0).max(100).default(80).describe("Score reflecting low filler word penalty"),
-    evidence: z.array(z.string()).default([]).describe("Specific evidence points regarding communication style")
+    score: z.number().min(0).max(100).default(75),
+    clarity: z.number().min(0).max(100).default(75),
+    relevance: z.number().min(0).max(100).default(75),
+    structure: z.number().min(0).max(100).default(70),
+    conciseness: z.number().min(0).max(100).default(75),
+    fillerUsage: z.number().min(0).max(100).default(80),
+    evidence: z.array(z.string()).default([])
   }).optional(),
-  evidenceCollected: z.array(z.string()).describe("Specific strong points or phrases the candidate said that prove competence."),
-  strengths: z.array(z.string()).describe("What the candidate did well in this answer."),
-  weaknesses: z.array(z.string()).describe("Areas where the answer was weak or lacking."),
-  missingConcepts: z.array(z.string()).describe("Important concepts the candidate failed to mention."),
-  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).describe("Your confidence in this assessment based on the available transcript."),
+  technicalKnowledge: z.record(z.any()).default({}),
+  problemSolving: z.record(z.any()).default({}),
+  evidenceCollected: z.array(z.string()).default([]),
+  strengths: z.array(z.string()).default([]),
+  weaknesses: z.array(z.string()).default([]),
+  improvements: z.array(z.string()).default([]),
+  missingConcepts: z.array(z.string()).default([]),
+  nextQuestion: z.string().nullable().default(null),
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
   idealAnswer: z.object({
-    text: z.string().describe("A well-structured, strong example answer to this question."),
-    explanation: z.string().describe("Why this ideal answer is strong.")
-  }),
-  analysisSource: z.enum(["ai", "deterministic_fallback"]).default("ai"),
+    text: z.string().default(""),
+    explanation: z.string().default("")
+  }).optional(),
+  analysisSource: z.enum(["ai", "deterministic_fallback", "deterministic_non_answer"]).default("ai"),
   fallbackReason: z.string().default("")
 });
 
@@ -97,17 +153,21 @@ export const copilotSuggestionSchema = z.object({
 });
 
 export const codeReviewSchema = z.object({
+  summary: z.string().default(""),
+  bugs: z.array(z.string()).default([]),
+  correctnessIssues: z.array(z.string()).default([]),
+  performanceIssues: z.array(z.string()).default([]),
+  securityIssues: z.array(z.string()).default([]),
+  suggestions: z.array(z.string()).default([]),
+  improvedCode: z.string().default(""),
   metrics: z.object({
-    correctness: z.number().min(0).max(100).describe("Score out of 100 for correctness"),
-    efficiency: z.number().min(0).max(100).describe("Score out of 100 for algorithmic efficiency"),
-    codeQuality: z.number().min(0).max(100).describe("Score out of 100 for readability and practices"),
-    edgeCases: z.number().min(0).max(100).describe("Score out of 100 for handling edge cases")
-  }),
-  timeComplexity: z.string().describe("Big O time complexity"),
-  spaceComplexity: z.string().describe("Big O space complexity"),
-  strengths: z.array(z.string()).describe("Strengths of the code"),
-  potentialIssues: z.array(z.string()).describe("Bugs or missing edge cases"),
-  optimizationOpportunities: z.array(z.string()).describe("Ways to improve")
+    correctness: z.number().min(0).max(100).default(80),
+    efficiency: z.number().min(0).max(100).default(80),
+    codeQuality: z.number().min(0).max(100).default(80),
+    edgeCases: z.number().min(0).max(100).default(80)
+  }).optional(),
+  timeComplexity: z.string().optional().default("O(N)"),
+  spaceComplexity: z.string().optional().default("O(1)")
 });
 
 export const interviewerReactionSchema = z.object({
@@ -120,3 +180,28 @@ export const codingFollowUpSchema = z.object({
   followUpQuestion: z.string().min(1).describe("A specific verbal question about the code submitted, probing deeper understanding.")
 });
 
+export const techDiscussionEvaluationSchema = z.object({
+  correctElements: z.array(z.string()).describe("List of correct technical points or patterns identified."),
+  missingDetails: z.array(z.string()).describe("Important technical details or edge cases missed by candidate."),
+  technicalCorrections: z.array(z.string()).describe("Direct technical corrections for errors or anti-patterns."),
+  timeComplexity: z.string().default("N/A").describe("Analyzed Big-O time complexity."),
+  spaceComplexity: z.string().default("N/A").describe("Analyzed Big-O space complexity."),
+  communicationFeedback: z.string().default("").describe("Feedback on technical communication and clarity."),
+  readinessScore: z.number().min(0).max(100).default(75).describe("Overall technical readiness score out of 100."),
+  nextTargetedQuestion: z.string().default("").describe("ONE targeted question to advance to the next technical stage.")
+});
+
+export const techDiscussionNudgeSchema = z.object({
+  level: z.number().min(1).max(4).default(1).describe("The hint level (1-4)."),
+  nudgeText: z.string().min(1).describe("The targeted hint or socratic question."),
+  keyTakeaway: z.string().min(1).describe("1 line key technical takeaway."),
+  nextTargetedQuestion: z.string().default("").describe("ONE targeted follow-up question for the candidate.")
+});
+
+export const techDiscussionContextActionSchema = z.object({
+  actionType: z.string().min(1).describe("The action type executed."),
+  title: z.string().min(1).describe("Short title for the analysis output."),
+  response: z.string().min(1).describe("Structured feedback or analysis in clean markdown."),
+  stage: z.enum(["Approach", "Complexity", "Implementation", "Test Cases", "Evaluation", "Requirements", "Architecture", "Data Flow", "Trade-offs", "Bottlenecks"]).optional(),
+  nextTargetedQuestion: z.string().default("").describe("ONE single targeted follow-up question.")
+});

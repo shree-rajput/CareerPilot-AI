@@ -12,25 +12,41 @@ import { getDeterministicScenarioRecommendation } from "./deterministicSelection
 /**
  * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
  */
-export async function getAIProblemRecommendation(userId, { topic = "architecture", category = "architecture", difficulty = null, experienceLevel = null, excludeIds = [] } = {}) {
-  const cat = category || (topic ? topic.toLowerCase().replace(/ /g, "_") : "architecture");
+import { normalizeCategory, validateCategoryIntegrity } from "../../config/techDiscussionTaxonomy.js";
+
+/**
+ * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
+ */
+export async function getAIProblemRecommendation(userId, { topic = "coding", category = "coding", difficulty = null, experienceLevel = null, excludeIds = [] } = {}) {
+  const cat = normalizeCategory(category || topic);
   const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty, experienceLevel, excludeIds });
   
+  // HARD VALIDATION Check
+  if (!validateCategoryIntegrity(cat, result.scenario.category || cat)) {
+    console.error(`[QUESTION_CATEGORY_MISMATCH] Selected category "${cat}" mismatch with scenario category "${result.scenario.category}". Logging error.`);
+  }
+
   return {
     question: {
       id: result.scenario.scenarioId || `scenario-${Date.now()}`,
       title: result.scenario.title,
       description: result.scenario.openingPrompt,
+      category: cat,
+      questionType: cat,
       difficulty: result.scenario.difficulty || difficulty || result.difficulty,
       experienceLevel: result.scenario.experienceLevel || result.experienceLevel,
       topics: result.scenario.expectedConcepts || [topic],
-      supportedLanguages: ["javascript", "python", "java", "cpp", "typescript"],
-      defaultLanguage: "javascript",
+      supportedLanguages: result.scenario.supportedLanguages || ["javascript", "python", "java", "cpp"],
+      defaultLanguage: result.scenario.defaultLanguage || "javascript",
       starterCode: result.scenario.starterCode || {},
       starterCanvasElements: result.scenario.starterCanvasElements || [],
       constraints: result.scenario.tradeOffsToExplore || [],
       hints: result.scenario.guidedFollowUps || [],
-      expectedComplexity: "System Architecture & Scalability Focus"
+      testCases: result.scenario.testCases || [],
+      source: result.scenario.source || "CURATED",
+      sourceUrl: result.scenario.sourceUrl || "",
+      verified: result.scenario.verified ?? true,
+      expectedComplexity: "Verified Production Practice Topic"
     },
     rationale: result.rationale,
     targetRole: result.targetRole,
@@ -45,12 +61,13 @@ export async function getAIProblemRecommendation(userId, { topic = "architecture
 export async function createTechDiscussionRoom({
   userId,
   clientUrl = process.env.CLIENT_URL || "http://localhost:5173",
-  category = "architecture",
-  topic = "Architecture",
+  category = "coding",
+  topic = "Coding",
   problemType = "ai_recommended",
   selectedProblemId = null,
   customProblem = null,
   difficulty = "medium",
+  experienceLevel = "fresher",
   language = "javascript",
   durationMinutes = 45
 }) {
@@ -58,6 +75,7 @@ export async function createTechDiscussionRoom({
     throw new Error("User ID is required");
   }
 
+  const normCategory = normalizeCategory(category);
   const user = await User.findById(userId).lean();
   const userName = user?.name || "Participant 1";
   const roomId = crypto.randomBytes(8).toString("hex");
@@ -72,9 +90,11 @@ export async function createTechDiscussionRoom({
         id: q._id.toString(),
         title: q.title,
         description: q.description,
+        category: normCategory,
+        questionType: normCategory,
         difficulty: q.difficulty || difficulty,
         topics: q.topics || [],
-        supportedLanguages: q.supportedLanguages || ["javascript", "python", "java"],
+        supportedLanguages: q.supportedLanguages || ["javascript", "python", "java", "cpp"],
         defaultLanguage: q.defaultLanguage || language,
         starterCode: q.starterCode || {},
         testCases: q.testCases || [],
@@ -89,9 +109,11 @@ export async function createTechDiscussionRoom({
       id: `custom-${Date.now()}`,
       title: customProblem.title,
       description: customProblem.description || "Custom technical practice topic.",
+      category: normCategory,
+      questionType: normCategory,
       difficulty: customProblem.difficulty || difficulty,
       topics: customProblem.topics || [topic],
-      supportedLanguages: ["javascript", "python", "java"],
+      supportedLanguages: ["javascript", "python", "java", "cpp"],
       defaultLanguage: language,
       starterCode: customProblem.starterCode || {},
       testCases: customProblem.testCases || [],
@@ -104,7 +126,7 @@ export async function createTechDiscussionRoom({
 
   // Fallback to Deterministic Recommendation
   if (!problemData) {
-    const rec = await getAIProblemRecommendation(userId, { topic, category, difficulty });
+    const rec = await getAIProblemRecommendation(userId, { topic, category: normCategory, difficulty, experienceLevel });
     problemData = rec.question;
     aiReason = rec.rationale;
   }
@@ -117,16 +139,32 @@ export async function createTechDiscussionRoom({
     initialCode = problemData.starterCode;
   }
 
+  const validDifficulties = ["easy", "medium", "hard"];
+  const cleanDifficulty = validDifficulties.includes(String(difficulty).toLowerCase()) ? String(difficulty).toLowerCase() : "medium";
+  const cleanExperience = ["fresher", "junior", "mid", "senior"].includes(String(experienceLevel).toLowerCase()) ? String(experienceLevel).toLowerCase() : "fresher";
+
+  if (problemData) {
+    if (!validDifficulties.includes(String(problemData.difficulty).toLowerCase())) {
+      problemData.difficulty = cleanDifficulty;
+    }
+  }
+
   const room = await PeerInterviewRoom.create({
     roomId,
     createdBy: userId,
     status: "waiting",
-    category,
+    category: normCategory,
     topic,
-    difficulty,
+    difficulty: cleanDifficulty,
+    experienceLevel: cleanExperience,
     language,
     durationMinutes,
     problem: problemData,
+    currentQuestionId: problemData.id || `q-${Date.now()}`,
+    questionSequence: 1,
+    questionState: "QUESTION_PRESENTED",
+    previousQuestionIds: [],
+    nextQuestionAvailable: false,
     aiRecommendationReason: aiReason,
     participants: [
       {
@@ -156,6 +194,9 @@ export async function createTechDiscussionRoom({
     inviteLink,
     roomCode: room.roomId.toUpperCase(),
     problem: room.problem,
+    questionSequence: room.questionSequence,
+    questionState: room.questionState,
+    nextQuestionAvailable: room.nextQuestionAvailable,
     aiRecommendationReason: room.aiRecommendationReason
   };
 }
@@ -234,45 +275,84 @@ export async function joinTechDiscussionRoom({ roomId, userId }) {
 }
 
 /**
- * Generates LiveKit WebRTC access token.
+ * Generates LiveKit WebRTC access token with authorization & auto-join handling.
  */
 export async function generateTechDiscussionToken({ roomId, userId }) {
   if (!roomId || !userId) {
     const err = new Error("Room ID and User ID are required");
     err.statusCode = 400;
+    err.code = "INVALID_REQUEST";
     throw err;
   }
 
-  const room = await PeerInterviewRoom.findOne({ roomId }).populate("participants.userId", "name");
+  let room = await PeerInterviewRoom.findOne({ roomId }).populate("participants.userId", "name");
   if (!room) {
     const err = new Error("Tech Discussion Room not found");
     err.statusCode = 404;
+    err.code = "ROOM_NOT_FOUND";
     throw err;
   }
 
-  const isParticipant = room.participants.some(p => p.userId?._id?.toString() === userId.toString() || p.userId?.toString() === userId.toString());
+  if (room.status === "completed" || room.status === "report_generated") {
+    const err = new Error("This discussion room session has already concluded.");
+    err.statusCode = 409;
+    err.code = "ROOM_ALREADY_COMPLETED";
+    throw err;
+  }
+
+  const userIdStr = userId.toString();
+  let isParticipant = room.participants.some(
+    (p) => p.userId?._id?.toString() === userIdStr || p.userId?.toString() === userIdStr
+  );
+
+  // Auto-join if room has space and user is authenticated
+  if (!isParticipant) {
+    if (room.participants.length >= 2) {
+      const err = new Error("This discussion room is full (maximum 2 participants).");
+      err.statusCode = 409;
+      err.code = "ROOM_FULL";
+      throw err;
+    }
+
+    try {
+      await joinTechDiscussionRoom({ roomId, userId });
+      room = await PeerInterviewRoom.findOne({ roomId }).populate("participants.userId", "name");
+      isParticipant = room.participants.some(
+        (p) => p.userId?._id?.toString() === userIdStr || p.userId?.toString() === userIdStr
+      );
+    } catch (joinErr) {
+      if (joinErr.code) throw joinErr;
+      const err = new Error("You are not authorized to join this discussion room.");
+      err.statusCode = 403;
+      err.code = "ROOM_ACCESS_DENIED";
+      throw err;
+    }
+  }
 
   if (!isParticipant) {
-    const err = new Error("You are not authorized to join this private room");
+    const err = new Error("You are not authorized to join this room.");
     err.statusCode = 403;
-    err.code = "UNAUTHORIZED_PARTICIPANT";
-    throw err;
-  }
-
-  if (room.status === "completed") {
-    const err = new Error("This session has already concluded.");
-    err.statusCode = 409;
+    err.code = "ROOM_ACCESS_DENIED";
     throw err;
   }
 
   const currentUser = await User.findById(userId).lean();
   const livekitRoomName = `tech-discussion-${room.roomId}`;
 
-  const token = await createLiveKitToken({
-    identity: userId.toString(),
-    roomName: livekitRoomName,
-    name: currentUser?.name || "Peer Participant",
-  });
+  let token = "";
+  try {
+    token = await createLiveKitToken({
+      identity: userIdStr,
+      roomName: livekitRoomName,
+      name: currentUser?.name || "Peer Participant",
+    });
+  } catch (tokenErr) {
+    console.error("LiveKit token generation failure:", tokenErr);
+    const err = new Error("Failed to generate LiveKit media token.");
+    err.statusCode = 500;
+    err.code = "TOKEN_GENERATION_FAILED";
+    throw err;
+  }
 
   return {
     token,
@@ -282,7 +362,8 @@ export async function generateTechDiscussionToken({ roomId, userId }) {
     participants: room.participants,
     startedAt: room.startedAt,
     expiresAt: room.expiresAt,
-    codeState: room.codeState
+    codeState: room.codeState,
+    category: room.category
   };
 }
 
@@ -309,42 +390,32 @@ ${currentCode || "// Workspace empty"}
 ${selectedSnippet ? `User focused on snippet:\n\`\`\`\n${selectedSnippet}\n\`\`\`` : ""}
 
 Instructions by Level:
-- Level 1: Ask an engaging Socratic question that encourages the two engineers to think about trade-offs, edge cases, scalability, or data flow without spoiling answers.
+- Level 1: Ask an engaging Socratic question that encourages the candidate to think about trade-offs, edge cases, scalability, or data flow without spoiling answers.
 - Level 2: Point out the high-level pattern, algorithm, or architecture stencil without full code.
 - Level 3: Provide a structural outline or pseudocode steps for combining components.
 - Level 4: Give the optimal solution or architectural pattern and explain why it's optimal.
 
-Return JSON:
-{
-  "level": ${hintLevel},
-  "nudgeText": "Your concise nudge message",
-  "keyTakeaway": "1 line takeaway"
-}`;
+Return JSON with keys: level (number), nudgeText (string), keyTakeaway (string), nextTargetedQuestion (string).`;
 
   try {
-    const aiResult = await executeAiTask("SOLO_INTERVIEW_FEEDBACK", { customPrompt: prompt });
+    const aiResult = await executeAiTask("TECH_DISCUSSION_NUDGE", { prompt, hintLevel, questionTitle });
     if (aiResult?.nudgeText) return aiResult;
   } catch (err) {
     console.error("AI Progressive Nudge error:", err);
   }
 
   const fallbacks = {
-    1: { level: 1, nudgeText: "What are the primary bottleneck operations in your current design or code? Have you considered latency vs consistency trade-offs?", keyTakeaway: "Evaluate trade-offs & bottlenecks." },
-    2: { level: 2, nudgeText: "Consider placing an in-memory cache (Redis) or decoupling events via a message broker (Kafka/RabbitMQ).", keyTakeaway: "Use caching & decoupling." },
-    3: { level: 3, nudgeText: "1. Client submits request -> Load Balancer -> API Service.\n2. API checks Redis cache.\n3. If miss, query primary Database and update cache.", keyTakeaway: "Cache-aside pattern." },
-    4: { level: 4, nudgeText: "Here is the recommended architecture pattern for optimal throughput:\n- Load Balancer: Nginx (Round Robin)\n- Cache: Redis LRU (Eviction policy)\n- Persistence: PostgreSQL with Read Replicas", keyTakeaway: "Scalable 3-tier architecture." }
+    1: { level: 1, nudgeText: "What are the primary bottleneck operations in your current design or code? Have you considered latency vs consistency trade-offs?", keyTakeaway: "Evaluate trade-offs & bottlenecks.", nextTargetedQuestion: "How does your current approach handle spikes in read traffic?" },
+    2: { level: 2, nudgeText: "Consider placing an in-memory cache (Redis) or decoupling events via a message broker (Kafka/RabbitMQ).", keyTakeaway: "Use caching & decoupling.", nextTargetedQuestion: "Where in your component flow will the caching layer reside?" },
+    3: { level: 3, nudgeText: "1. Client submits request -> Load Balancer -> API Service.\n2. API checks Redis cache.\n3. If miss, query primary Database and update cache.", keyTakeaway: "Cache-aside pattern.", nextTargetedQuestion: "What is your strategy for cache eviction on database updates?" },
+    4: { level: 4, nudgeText: "Here is the recommended architecture pattern for optimal throughput:\n- Load Balancer: Nginx (Round Robin)\n- Cache: Redis LRU (Eviction policy)\n- Persistence: PostgreSQL with Read Replicas", keyTakeaway: "Scalable 3-tier architecture.", nextTargetedQuestion: "How will you handle failover if the primary DB node crashes?" }
   };
 
   return fallbacks[hintLevel] || fallbacks[1];
 }
 
 /**
- * AI Context Actions (9 Actions): Ask, Challenge, Hint, Explain, Complexity, Optimize, Debug, Design, Analyze.
- */
-
-
-/**
- * AI Context Actions (9 Actions): Ask, Challenge, Hint, Explain, Complexity, Optimize, Debug, Design, Analyze.
+ * AI Context Actions (8 Actions): Ask, Challenge, Hint, Explain, Complexity, Optimize, Debug, Design, Analyze.
  */
 export async function executeContextAction({ actionType, selectedCode, currentCode, problem, userQuestion }) {
   const rawText = selectedCode?.trim() ? selectedCode : currentCode;
@@ -365,8 +436,9 @@ export async function executeContextAction({ actionType, selectedCode, currentCo
   const selectedPrompt = prompts[actionType] || prompts.explain;
 
   try {
-    const aiResult = await executeAiTask("SOLO_INTERVIEW_FEEDBACK", {
-      customPrompt: `${selectedPrompt}\n\nReturn JSON: { "actionType": "${actionType}", "title": "${actionType.toUpperCase()} Analysis", "response": "Markdown formatted explanation" }`
+    const aiResult = await executeAiTask("TECH_DISCUSSION_CONTEXT_ACTION", {
+      prompt: `${selectedPrompt}\n\nReturn valid JSON matching the schema with fields: actionType, title, response, stage, nextTargetedQuestion.`,
+      actionType
     });
 
     if (aiResult?.response) return aiResult;
@@ -377,7 +449,8 @@ export async function executeContextAction({ actionType, selectedCode, currentCo
   return {
     actionType,
     title: `${actionType.toUpperCase()} Feedback`,
-    response: `Analysis for ${actionType}:\n- Snippet evaluated successfully.\n- Key focus: Verified against trade-offs, edge cases, and engineering best practices.`
+    response: `Analysis for ${actionType}:\n- Snippet evaluated successfully.\n- Key focus: Verified against trade-offs, edge cases, and engineering best practices.`,
+    nextTargetedQuestion: "What is your next optimization step for this section?"
   };
 }
 
@@ -558,3 +631,81 @@ export async function getIndividualTechDiscussionReport({ roomId, userId }) {
 
   return userReport;
 }
+
+/**
+ * Advances to the next question in a Tech Discussion room (State Machine Progression).
+ */
+export async function getNextTechDiscussionQuestion({ roomId, userId }) {
+  const room = await PeerInterviewRoom.findOne({ roomId });
+  if (!room) {
+    const err = new Error("Tech Discussion Room not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const userIdStr = userId.toString();
+  const isParticipant = room.participants.some(
+    p => p.userId?.toString() === userIdStr || p.userId?._id?.toString() === userIdStr
+  ) || room.createdBy.toString() === userIdStr;
+
+  if (!isParticipant) {
+    const err = new Error("Only room participants can request the next question.");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const cat = room.category || "coding";
+  const excludeIds = [...(room.previousQuestionIds || [])];
+  if (room.currentQuestionId) {
+    excludeIds.push(room.currentQuestionId);
+  }
+
+  const rec = await getAIProblemRecommendation(userId, {
+    topic: room.topic || cat,
+    category: cat,
+    difficulty: room.difficulty,
+    experienceLevel: room.experienceLevel || "fresher",
+    excludeIds
+  });
+
+  const newQuestion = rec.question;
+
+  if (!validateCategoryIntegrity(cat, newQuestion.category)) {
+    console.error(`[QUESTION_CATEGORY_MISMATCH] Next question category "${newQuestion.category}" does not match room category "${cat}".`);
+  }
+
+  if (room.currentQuestionId) {
+    room.previousQuestionIds.push(room.currentQuestionId);
+  }
+
+  room.currentQuestionId = newQuestion.id || `q-${Date.now()}`;
+  room.questionSequence = (room.questionSequence || 1) + 1;
+  room.questionState = "QUESTION_PRESENTED";
+  room.nextQuestionAvailable = false;
+  room.problem = newQuestion;
+
+  let initialCode = "";
+  if (typeof newQuestion.starterCode === "object" && newQuestion.starterCode[room.language]) {
+    initialCode = newQuestion.starterCode[room.language];
+  } else if (typeof newQuestion.starterCode === "string") {
+    initialCode = newQuestion.starterCode;
+  }
+
+  room.codeState = {
+    code: initialCode,
+    language: room.language,
+    updatedAt: new Date()
+  };
+
+  await room.save();
+
+  return {
+    roomId: room.roomId,
+    problem: room.problem,
+    questionSequence: room.questionSequence,
+    questionState: room.questionState,
+    nextQuestionAvailable: room.nextQuestionAvailable,
+    codeState: room.codeState
+  };
+}
+

@@ -25,7 +25,7 @@ async function runTest() {
     userA = await User.create({
       name: "Student Alpha",
       email: "testusera@careerpilot.ai",
-      password: "password123",
+      passwordHash: "$2a$10$abcdefghijklmnopqrstuu",
       targetRoles: [{ title: "Backend Engineer" }]
     });
   }
@@ -35,7 +35,7 @@ async function runTest() {
     userB = await User.create({
       name: "Student Beta",
       email: "testuserb@careerpilot.ai",
-      password: "password123",
+      passwordHash: "$2a$10$abcdefghijklmnopqrstuu",
       targetRoles: [{ title: "Full Stack Developer" }]
     });
   }

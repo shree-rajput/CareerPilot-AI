@@ -66,6 +66,7 @@ export function InterviewSessionPage() {
   // ── Core state ──────────────────────────────────────────
   const [interviewPhase, setInterviewPhase] = useState("loading_first");
   const [currentEntity, setCurrentEntity] = useState(null);
+  const [openingGreeting, setOpeningGreeting] = useState("");
   const [questionError, setQuestionError] = useState(null);
   const [fetchStatus, setFetchStatus] = useState(null);
   const [processingStep, setProcessingStep] = useState("");
@@ -185,6 +186,10 @@ export function InterviewSessionPage() {
         actualEntity = { type: 'question', data: response };
       }
 
+      if (response.greeting || response.data?.greeting) {
+        setOpeningGreeting(response.greeting || response.data.greeting);
+      }
+
       setCurrentEntity(actualEntity);
       setFetchStatus("ready");
       setInterviewPhase("questioning");
@@ -197,14 +202,17 @@ export function InterviewSessionPage() {
         setCurrentCode(starter);
       }
 
-      // If there's a transition message for coding, speak it first
+      // If there's an opening greeting or transition message for coding, speak it first
       const transitionMessage = response.transitionMessage;
+      const greetingToSpeak = (response.greeting || response.data?.greeting) && !currentEntity ? (response.greeting || response.data.greeting) : "";
       const questionText = actualEntity.type === 'challenge'
         ? actualEntity.data.question
         : actualEntity.data.questionText;
 
       setTimeout(() => {
-        if (transitionMessage) {
+        if (greetingToSpeak) {
+          speakText(greetingToSpeak + " " + questionText);
+        } else if (transitionMessage) {
           speakText(transitionMessage + " " + questionText);
         } else {
           speakText(questionText);
@@ -292,20 +300,13 @@ export function InterviewSessionPage() {
 
       setInterviewerReaction(reaction?.interviewerReaction || reaction);
       setInterviewPhase("evaluated");
-      setProcessingStep("Answer evaluated ✓ Loading next question...");
+      setProcessingStep("Answer evaluated ✓ Click 'Next Question' when ready.");
 
       // Speak the reaction if it has text
       const reactionText = reaction?.interviewerReaction?.reaction || reaction?.reaction;
       if (reactionText) {
         speakText(reactionText);
       }
-
-      // Automatically transition to the next question after brief reaction (1.5s)
-      setTimeout(async () => {
-        setInterviewPhase("loading_next");
-        setProcessingStep("Fetching next question...");
-        await fetchNextQuestion({ forceFetch: true });
-      }, 1500);
 
     } catch (err) {
       console.error("[Interview] Submit answer error:", err);
@@ -365,19 +366,12 @@ export function InterviewSessionPage() {
       });
 
       setInterviewPhase("evaluated");
-      setProcessingStep("Code evaluation complete ✓ Loading next question...");
+      setProcessingStep("Code evaluation complete ✓ Click 'Next Question' when ready.");
 
       // Speak the coding follow-up comment
       if (result?.codingFollowUp?.comment) {
         speakText(result.codingFollowUp.comment);
       }
-
-      // Automatically transition to the next question after brief follow-up (1.5s)
-      setTimeout(async () => {
-        setInterviewPhase("loading_next");
-        setProcessingStep("Fetching next question...");
-        await fetchNextQuestion({ forceFetch: true });
-      }, 1500);
 
     } catch (err) {
       console.error("[Interview] Submit code error:", err);
@@ -554,6 +548,19 @@ export function InterviewSessionPage() {
           {/* Question + Answer + Controls */}
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 custom-scrollbar">
+
+              {/* Opening Greeting */}
+              {openingGreeting && (
+                <div className="flex items-start gap-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 fade-in">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">AI</div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-indigo-400 mb-1 uppercase tracking-wider">Interviewer</p>
+                    <p className="text-slate-200 text-sm leading-relaxed">
+                      {openingGreeting}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Question display */}
               {currentEntity && (

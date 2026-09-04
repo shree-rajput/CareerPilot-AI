@@ -48,6 +48,15 @@ export async function executeContextAction(roomId, { actionType, selectedCode, c
   return response.data;
 }
 
+export async function executeTechDiscussionCode(roomId, { questionId, language, code }) {
+  const response = await http.post(`/tech-discussion/${roomId}/execute`, {
+    questionId,
+    language,
+    code
+  });
+  return response.data;
+}
+
 export async function endTechDiscussionSession(roomId) {
   const response = await http.post(`/tech-discussion/${roomId}/end`);
   return response.data;
@@ -57,3 +66,15 @@ export async function getTechDiscussionReport(roomId) {
   const response = await http.get(`/tech-discussion/${roomId}/report`);
   return response.data;
 }
+
+export async function getNextQuestion(roomId) {
+  const response = await http.post(`/tech-discussion/${roomId}/next-question`);
+  return response.data;
+}
+
+export async function getProgrammingLanguages() {
+  const response = await http.get("/tech-discussion/languages");
+  return response.data;
+}
+
+

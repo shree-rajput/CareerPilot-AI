@@ -349,12 +349,18 @@ export default function DiscussionAssistantPanel({
                 <div className="text-xs text-text leading-relaxed whitespace-pre-line font-medium">
                   {nudgeData.nudgeText}
                 </div>
+                {nudgeData.nextTargetedQuestion && (
+                  <div className="p-2.5 bg-primary/5 border border-primary/20 rounded-lg text-xs">
+                    <span className="font-bold text-primary block mb-0.5">🎯 Next Targeted Question:</span>
+                    <span className="text-text font-medium">{nudgeData.nextTargetedQuestion}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* --- TAB 3: 9 CONTEXT ACTIONS --- */}
+        {/* --- TAB 3: 8 CONTEXT ACTIONS --- */}
         {activeTab === "actions" && (
           <div className="p-4 space-y-4">
             <div>
@@ -430,10 +436,23 @@ export default function DiscussionAssistantPanel({
 
             {actionResult && !actionLoading && (
               <div className="bg-bg border border-border rounded-xl p-4 space-y-2 fade-in shadow-sm">
-                <h4 className="text-xs font-bold text-primary uppercase tracking-wider">{actionResult.title || actionResult.actionType}</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider">{actionResult.title || actionResult.actionType}</h4>
+                  {actionResult.stage && (
+                    <span className="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold uppercase">
+                      Stage: {actionResult.stage}
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-text leading-relaxed whitespace-pre-line font-medium">
                   {actionResult.response}
                 </div>
+                {actionResult.nextTargetedQuestion && (
+                  <div className="p-2.5 bg-primary/5 border border-primary/20 rounded-lg text-xs mt-2">
+                    <span className="font-bold text-primary block mb-0.5">🎯 Targeted Follow-Up Question:</span>
+                    <span className="text-text font-medium">{actionResult.nextTargetedQuestion}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

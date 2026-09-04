@@ -31,7 +31,7 @@ const SYSTEM_STENCILS = [
   { id: "queue", label: "Message Queue", icon: Inbox, defaultText: "Kafka Queue", fill: "#f0f9ff", stroke: "#06b6d4" },
 ];
 
-export default function ArchitecturalCanvas({ socket, initialElements = [], isReadOnly = false }) {
+export default function ArchitecturalCanvas({ socket, yjsProvider = null, initialElements = [], isReadOnly = false }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -47,12 +47,49 @@ export default function ArchitecturalCanvas({ socket, initialElements = [], isRe
 
   // Sync initial incoming elements
   useEffect(() => {
-    if (initialElements && initialElements.length > 0) {
+    if (initialElements && initialElements.length > 0 && elements.length === 0) {
       setElements(initialElements);
     }
   }, [initialElements]);
 
-  // Setup Socket sync
+  // Setup Yjs CRDT Array Sync
+  useEffect(() => {
+    if (!yjsProvider?.yCanvasArray || yjsProvider.destroyed) return;
+
+    let isSubscribed = true;
+    const syncYjsElements = (event, transaction) => {
+      if (!isSubscribed) return;
+      if (transaction?.origin === "canvas-local") return;
+      try {
+        const arr = yjsProvider.yCanvasArray.toArray();
+        if (Array.isArray(arr) && arr.length > 0) {
+          setElements(arr);
+        }
+      } catch (err) {
+        // Safe read catch
+      }
+    };
+
+    try {
+      yjsProvider.yCanvasArray.observe(syncYjsElements);
+      syncYjsElements();
+    } catch (e) {
+      // Ignore initial observe error if doc destroyed
+    }
+
+    return () => {
+      isSubscribed = false;
+      try {
+        if (yjsProvider?.yCanvasArray && !yjsProvider.destroyed) {
+          yjsProvider.yCanvasArray.unobserve(syncYjsElements);
+        }
+      } catch (e) {
+        // Idempotent catch to eliminate "Tried to remove event handler that doesn't exist"
+      }
+    };
+  }, [yjsProvider]);
+
+  // Setup Socket sync fallback
   useEffect(() => {
     if (!socket) return;
 
@@ -69,9 +106,21 @@ export default function ArchitecturalCanvas({ socket, initialElements = [], isRe
     };
   }, [socket]);
 
-  // Emit state updates to peers
+  // Emit state updates to peers via Yjs and Socket
   const broadcastElements = (updatedElements) => {
     setElements(updatedElements);
+
+    if (yjsProvider?.yCanvasArray) {
+      try {
+        yjsProvider.doc.transact(() => {
+          yjsProvider.yCanvasArray.delete(0, yjsProvider.yCanvasArray.length);
+          yjsProvider.yCanvasArray.push(updatedElements);
+        }, "canvas-local");
+      } catch (err) {
+        console.error("Yjs canvas update error:", err);
+      }
+    }
+
     if (socket) {
       socket.emit("canvas:elements-update", { elements: updatedElements });
     }

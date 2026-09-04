@@ -1,7 +1,8 @@
 /**
  * Report Scoring & Normalization Service
  * Ensures all interview question evaluations and session overall scores
- * are finite numbers bounded between 0 and 100, preventing NaN, Infinity, or crashes.
+ * are finite numbers bounded between 0 and 100, calculated deterministically
+ * strictly from actual recorded answer evidence.
  */
 
 /**
@@ -14,10 +15,11 @@ export function safeScore(value, fallback = 0) {
   }
 
   if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed.toLowerCase() === "high") return 90;
-    if (trimmed.toLowerCase() === "medium") return 70;
-    if (trimmed.toLowerCase() === "low") return 40;
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === "high" || trimmed === "correct") return 90;
+    if (trimmed === "medium" || trimmed === "partial") return 65;
+    if (trimmed === "low" || trimmed === "incorrect") return 20;
+    if (trimmed === "no_answer") return 0;
 
     const parsed = parseFloat(trimmed);
     if (Number.isFinite(parsed) && !Number.isNaN(parsed)) {
@@ -27,10 +29,6 @@ export function safeScore(value, fallback = 0) {
 
   return fallback;
 }
-
-/**
- * Maps qualitative levels ("High", "Medium", "Low") to numeric scores.
- */
 
 /**
  * Normalizes a single question's evaluation structure into a canonical format
@@ -44,44 +42,75 @@ export function normalizeQuestionEvaluation(question) {
   const commMetrics = question.communicationMetrics || {};
   const commObject = rawEval.communication || {};
 
+  const isNonAnswer =
+    rawEval.answerStatus === "NO_ANSWER" ||
+    question.analysisSource === "deterministic_non_answer" ||
+    (typeof question.transcript === "string" && ["no", "idk", "no idea", "dont know", "i dont know", "i do not know"].includes(question.transcript.trim().toLowerCase()));
+
+  if (isNonAnswer) {
+    return {
+      ...question,
+      analysis: {
+        technicalAccuracy: 0,
+        communication: 0,
+        clarity: 0,
+        depth: 0,
+        overall: 0
+      },
+      feedback: {
+        strengths: [],
+        weaknesses: ["Candidate did not provide an answer or stated they did not know."],
+        missingConcepts: Array.isArray(rawEval.missingConcepts) && rawEval.missingConcepts.length > 0
+          ? rawEval.missingConcepts
+          : Array.isArray(question.expectedConcepts) ? question.expectedConcepts : []
+      },
+      idealAnswer: {
+        text: question.idealAnswer?.text || "Candidate provided no answer.",
+        explanation: question.idealAnswer?.explanation || "A complete answer requires articulating the core technical concepts."
+      }
+    };
+  }
+
   // Compute numeric technical accuracy
-  let techAccuracy = 70;
-  if (typeof rawAnalysis.technicalAccuracy === "number") {
-    techAccuracy = safeScore(rawAnalysis.technicalAccuracy);
+  let techAccuracy = 0;
+  if (typeof rawEval.correctnessScore === "number") {
+    techAccuracy = safeScore(rawEval.correctnessScore, 0);
+  } else if (typeof rawAnalysis.technicalAccuracy === "number") {
+    techAccuracy = safeScore(rawAnalysis.technicalAccuracy, 0);
   } else if (rawEval.correctness) {
-    techAccuracy = safeScore(rawEval.correctness, 70);
+    techAccuracy = safeScore(rawEval.correctness, 0);
   }
 
   // Compute evidence-based communication score
-  let commScore = 75;
+  let commScore = 0;
   if (typeof commObject.score === "number") {
-    commScore = safeScore(commObject.score);
+    commScore = safeScore(commObject.score, 0);
   } else if (typeof rawAnalysis.communication === "number") {
-    commScore = safeScore(rawAnalysis.communication);
+    commScore = safeScore(rawAnalysis.communication, 0);
   } else {
     // Computed from transcript speech metrics (WPM + filler word penalty)
     const pace = commMetrics.speakingPace || 130;
     const fillers = commMetrics.fillerWords || 0;
     let paceScore = pace >= 110 && pace <= 160 ? 90 : pace > 80 && pace < 180 ? 75 : 55;
     let fillerPenalty = Math.min(25, fillers * 4);
-    commScore = safeScore(paceScore - fillerPenalty, 75);
+    commScore = safeScore(paceScore - fillerPenalty, 50);
   }
 
   // Compute clarity score
   let clarityScore = typeof commObject.clarity === "number"
-    ? safeScore(commObject.clarity)
+    ? safeScore(commObject.clarity, 0)
     : typeof rawAnalysis.clarity === "number"
-    ? safeScore(rawAnalysis.clarity)
-    : safeScore(rawEval.relevance || rawEval.structure, 75);
+    ? safeScore(rawAnalysis.clarity, 0)
+    : safeScore(rawEval.relevance || rawEval.structure, 0);
 
   // Compute depth score
   let depthScore = typeof rawAnalysis.depth === "number"
-    ? safeScore(rawAnalysis.depth)
-    : safeScore(rawEval.depth || rawEval.specificity, 70);
+    ? safeScore(rawAnalysis.depth, 0)
+    : safeScore(rawEval.depth || rawEval.specificity, 0);
 
   // Compute question overall score
   let overallScore = typeof rawAnalysis.overall === "number"
-    ? safeScore(rawAnalysis.overall)
+    ? safeScore(rawAnalysis.overall, 0)
     : Math.round((techAccuracy * 0.5) + (clarityScore * 0.25) + (commScore * 0.25));
 
   const canonicalAnalysis = {
@@ -89,20 +118,20 @@ export function normalizeQuestionEvaluation(question) {
     communication: commScore,
     clarity: clarityScore,
     depth: depthScore,
-    overall: safeScore(overallScore, 70)
+    overall: safeScore(overallScore, 0)
   };
 
   const strengths = Array.isArray(question.feedback?.strengths) && question.feedback.strengths.length > 0
     ? question.feedback.strengths
     : Array.isArray(rawEval.strengths) && rawEval.strengths.length > 0
     ? rawEval.strengths
-    : ["Clear communication", "Demonstrated relevant domain knowledge"];
+    : ["Clear communication"];
 
   const weaknesses = Array.isArray(question.feedback?.weaknesses) && question.feedback.weaknesses.length > 0
     ? question.feedback.weaknesses
     : Array.isArray(rawEval.weaknesses) && rawEval.weaknesses.length > 0
     ? rawEval.weaknesses
-    : ["Could provide deeper architectural trade-offs", "Include more specific metrics from past experience"];
+    : ["Could elaborate deeper on architectural trade-offs"];
 
   const idealText = question.idealAnswer?.text
     || "A strong answer clearly articulates the core technical concept, provides a concrete real-world example, and discusses practical trade-offs.";
@@ -126,7 +155,7 @@ export function normalizeQuestionEvaluation(question) {
 }
 
 /**
- * Calculates overall session scores and individual category breakdowns.
+ * Calculates overall session scores and individual category breakdowns strictly from answer evidence.
  * Excludes Video Presence (marked as available: false / null) from the deterministic weighted average.
  */
 export function calculateSessionScores(session, questions = [], challenges = []) {
@@ -154,22 +183,22 @@ export function calculateSessionScores(session, questions = [], challenges = [])
 
   // Technical average
   const totalTech = normalizedQuestions.reduce((acc, q) => acc + q.analysis.technicalAccuracy, 0);
-  const techAvg = normalizedQuestions.length > 0 ? totalTech / normalizedQuestions.length : 70;
+  const techAvg = normalizedQuestions.length > 0 ? totalTech / normalizedQuestions.length : 0;
 
   // Communication average
   const totalComm = normalizedQuestions.reduce((acc, q) => acc + q.analysis.communication, 0);
-  const commAvg = normalizedQuestions.length > 0 ? totalComm / normalizedQuestions.length : 75;
+  const commAvg = normalizedQuestions.length > 0 ? totalComm / normalizedQuestions.length : 0;
 
   // Clarity average
   const totalClarity = normalizedQuestions.reduce((acc, q) => acc + q.analysis.clarity, 0);
-  const clarityAvg = normalizedQuestions.length > 0 ? totalClarity / normalizedQuestions.length : 75;
+  const clarityAvg = normalizedQuestions.length > 0 ? totalClarity / normalizedQuestions.length : 0;
 
   // Structure / Depth average
   const totalDepth = normalizedQuestions.reduce((acc, q) => acc + q.analysis.depth, 0);
-  const structureAvg = normalizedQuestions.length > 0 ? totalDepth / normalizedQuestions.length : 70;
+  const structureAvg = normalizedQuestions.length > 0 ? totalDepth / normalizedQuestions.length : 0;
 
   // Coding / Problem Solving average
-  let problemSolvingAvg = 75;
+  let problemSolvingAvg = 0;
   let hasCoding = false;
   if (answeredChallenges.length > 0) {
     hasCoding = true;
@@ -192,14 +221,14 @@ export function calculateSessionScores(session, questions = [], challenges = [])
   }
 
   return {
-    overallScore: safeScore(overallScore, 70),
+    overallScore: safeScore(overallScore, 0),
     scores: {
-      technical: safeScore(techAvg, 70),
-      communication: safeScore(commAvg, 75),
-      clarity: safeScore(clarityAvg, 75),
+      technical: safeScore(techAvg, 0),
+      communication: safeScore(commAvg, 0),
+      clarity: safeScore(clarityAvg, 0),
       videoPresence: null, // Explicitly marked null: visual behavior analysis not enabled
-      structure: safeScore(structureAvg, 70),
-      problemSolving: safeScore(problemSolvingAvg, 75)
+      structure: safeScore(structureAvg, 0),
+      problemSolving: safeScore(problemSolvingAvg, 0)
     }
   };
 }

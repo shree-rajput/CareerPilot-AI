@@ -1,5 +1,51 @@
 import { z } from "zod";
 
+export const copilotSchema = z.object({
+  answer: z.string().describe("Direct conversational answer or explanation."),
+  keyPoints: z.array(z.string()).default([]).describe("Key takeaways or bullet points."),
+  actionItems: z.array(z.string()).default([]).describe("Actionable steps."),
+  data: z.any().nullable().default(null).describe("Structured data object if applicable.")
+}).passthrough();
+
+export const resumeAnalysisSchema = z.object({
+  summary: z.string().default(""),
+  strengths: z.array(z.string()).default([]),
+  weaknesses: z.array(z.string()).default([]),
+  skills: z.array(z.string()).default([]),
+  experience: z.array(z.any()).default([]),
+  education: z.array(z.any()).default([]),
+  recommendations: z.array(z.string()).default([]),
+  parserConfidence: z.number().min(0).max(100).default(85)
+});
+
+export const atsAnalysisSchema = z.object({
+  atsCompatibilityScore: z.number().min(0).max(100).default(75),
+  status: z.string().default("VALID"),
+  breakdown: z.record(z.any()).default({}),
+  issues: z.array(z.string()).default([]),
+  recommendations: z.array(z.string()).default([]),
+  evidence: z.array(z.string()).default([])
+});
+
+export const jobMatchSchema = z.object({
+  matchScore: z.number().min(0).max(100).default(70),
+  requiredSkills: z.array(z.string()).default([]),
+  preferredSkills: z.array(z.string()).default([]),
+  matchedSkills: z.array(z.string()).default([]),
+  missingSkills: z.array(z.string()).default([]),
+  evidence: z.array(z.string()).default([]),
+  recommendations: z.array(z.string()).default([])
+});
+
+export const preparationPlanSchema = z.object({
+  currentLevel: z.string().default("Intermediate"),
+  weakSkills: z.array(z.string()).default([]),
+  priorityTopics: z.array(z.string()).default([]),
+  dailyTasks: z.array(z.any()).default([]),
+  reasoning: z.array(z.string()).default([]),
+  nextBestAction: z.string().default("")
+});
+
 export const projectKitSchema = z.object({
   kit: z.array(
     z.object({
@@ -10,17 +56,7 @@ export const projectKitSchema = z.object({
   )
 });
 
-export const prepPlanSchema = z.object({
-  actionItems: z.array(
-    z.object({
-      title: z.string(),
-      reason: z.string(),
-      priority: z.enum(["HIGH", "MEDIUM", "LOW"]),
-      estimatedTimeMinutes: z.number().int(),
-      source: z.string()
-    })
-  )
-});
+export const prepPlanSchema = preparationPlanSchema;
 
 export const copilotChatSchema = z.object({
   reply: z.any().optional().transform((val) => {
@@ -33,7 +69,10 @@ export const copilotChatSchema = z.object({
   suggestedActions: z.any().optional().transform((val) => {
     if (!Array.isArray(val)) return [];
     return val.map((item) => (typeof item === "string" ? item : item?.label || item?.text || item?.title || String(item || ""))).filter(Boolean);
-  })
+  }),
+  keyPoints: z.array(z.string()).optional().default([]),
+  actionItems: z.array(z.string()).optional().default([]),
+  data: z.any().optional().default(null)
 }).passthrough();
 
 export const mentorExplanationSchema = z.object({
@@ -64,4 +103,3 @@ export const recruiterMessageSchema = z.object({
   type: z.string().optional(),
   subjectLine: z.string().optional()
 });
-

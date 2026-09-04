@@ -6,12 +6,18 @@ import { Resume } from "../../models/Resume.js";
 import { User } from "../../models/User.js";
 
 const ROLE_SKILL_MAP = {
-  "full stack": ["JavaScript", "React", "Node.js", "Express", "MongoDB", "REST APIs", "Authentication", "Testing", "Git"],
-  frontend: ["JavaScript", "React", "HTML", "CSS", "State Management", "Performance", "Testing"],
-  backend: ["Node.js", "Express", "REST APIs", "Authentication", "MongoDB", "SQL", "Caching", "Testing"],
+  "data scientist": ["Python", "SQL", "Data Analysis", "Statistics", "Data Processing", "Machine Learning", "Git"],
+  "ml engineer": ["Python", "SQL", "Model Serving", "Data Pipelines", "APIs", "System Architecture", "Git"],
+  "java developer": ["Java", "Spring", "APIs", "SQL", "Databases", "Unit Testing", "Git"],
+  "python developer": ["Python", "APIs", "SQL", "Databases", "Async Programming", "Testing", "Git"],
+  "c++ developer": ["C++", "STL", "Memory Management", "Data Structures", "Algorithms", "Performance Tuning", "Debugging"],
+  "data engineer": ["Python", "SQL", "ETL Pipelines", "Data Warehousing", "Distributed Systems", "Databases"],
+  backend: ["APIs", "Databases", "SQL", "Caching", "System Architecture", "Security", "Testing"],
+  frontend: ["JavaScript", "HTML", "CSS", "State Management", "Browser Concepts", "Performance", "Testing"],
+  "full stack": ["JavaScript", "APIs", "Databases", "SQL", "System Design", "Git", "Testing"],
   mern: ["MongoDB", "Express", "React", "Node.js", "JavaScript", "REST APIs", "Authentication"],
   "software engineer": ["Data Structures", "Algorithms", "System Design", "Databases", "Git", "Testing"],
-  intern: ["JavaScript", "Git", "Problem Solving", "Projects", "Communication"]
+  intern: ["Problem Solving", "Data Structures", "Git", "Projects", "Communication"]
 };
 
 function normalize(value) {
@@ -206,12 +212,16 @@ function buildSkillGap({ userSkills, targetSkills, missingFromMatches, weakFromI
 
 function getRecommendedTopics(skill) {
   const key = normalize(skill);
+  if (key.includes("python")) return ["data structures", "asyncio", "APIs", "package management", "testing"];
+  if (key.includes("java")) return ["OOP concepts", "Collections", "Spring framework", "JVM memory", "multithreading"];
+  if (key.includes("c++") || key.includes("cpp")) return ["pointers & memory", "STL containers", "templates", "RAII", "performance"];
+  if (key.includes("sql") || key.includes("database")) return ["query optimization", "indexing", "transactions", "schema design"];
+  if (key.includes("data") || key.includes("ml")) return ["data preprocessing", "model evaluation", "pipeline design", "feature engineering"];
+  if (key.includes("api") || key.includes("rest")) return ["REST principles", "status codes", "auth headers", "error contracts"];
   if (key.includes("react")) return ["Hooks", "state management", "component architecture", "performance"];
   if (key.includes("node") || key.includes("express")) return ["event loop", "middleware", "REST APIs", "error handling"];
-  if (key.includes("mongo")) return ["schema design", "indexes", "aggregation", "query optimization"];
-  if (key.includes("auth") || key.includes("jwt")) return ["JWT flow", "refresh tokens", "password hashing", "authorization"];
   if (key.includes("system")) return ["scalability", "caching", "database choice", "API design"];
-  if (key.includes("test")) return ["unit tests", "integration tests", "API testing"];
+  if (key.includes("test")) return ["unit tests", "integration tests", "mocking"];
   return ["fundamentals", "practical use cases", "project examples", "interview explanations"];
 }
 

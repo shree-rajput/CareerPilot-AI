@@ -21,14 +21,12 @@ const codingSubmissionSchema = new mongoose.Schema(
       index: true
     },
     interviewSessionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "InterviewSession",
+      type: mongoose.Schema.Types.Mixed,
       default: null,
       index: true
     },
     questionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "CodingQuestion",
+      type: mongoose.Schema.Types.Mixed,
       required: true,
       index: true
     },
