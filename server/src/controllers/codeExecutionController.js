@@ -118,18 +118,23 @@ export const executeRoomCodeController = async (req, res) => {
       );
     }
 
-    // 2. Resolve Test Cases
+    // 2. Resolve Test Cases based on runMode ('run' vs 'submit')
+    const runMode = req.body?.runMode || "run";
     let testCasesToRun = [];
 
     if (questionId && typeof questionId === "string" && questionId.match(/^[0-9a-fA-F]{24}$/)) {
       const dbQuestion = await CodingQuestion.findById(questionId).lean();
       if (dbQuestion?.testCases?.length > 0) {
-        testCasesToRun = dbQuestion.testCases.filter((tc) => !tc.hidden);
+        testCasesToRun = runMode === "run"
+          ? dbQuestion.testCases.filter((tc) => !tc.hidden)
+          : dbQuestion.testCases;
       }
     }
 
     if (testCasesToRun.length === 0 && roomProblem?.testCases?.length > 0) {
-      testCasesToRun = roomProblem.testCases.filter((tc) => !tc.hidden);
+      testCasesToRun = runMode === "run"
+        ? roomProblem.testCases.filter((tc) => !tc.hidden)
+        : roomProblem.testCases;
     }
 
     if (testCasesToRun.length === 0) {
@@ -163,22 +168,45 @@ export const executeRoomCodeController = async (req, res) => {
         res,
         503,
         "EXECUTION_SERVICE_UNAVAILABLE",
-        "Code execution service encountered an isolated sandbox error."
+        execError.message || "Code execution service encountered an isolated sandbox error."
       );
     }
 
     // Aggregate primary result details
     const firstResult = executionResult.results?.[0] || {};
-    const stdout = firstResult.actualOutput !== undefined && firstResult.actualOutput !== null ? String(typeof firstResult.actualOutput === "object" ? JSON.stringify(firstResult.actualOutput) : firstResult.actualOutput) : "";
-    const stderr = firstResult.error || "";
-    const exitCode = firstResult.passed ? 0 : (executionResult.allPassed ? 0 : 1);
+    const stdoutLogs = executionResult.results?.map(r => r.stdout).filter(Boolean) || [];
+    const stdout = stdoutLogs.join("\n") || (firstResult.actualOutput !== undefined && firstResult.actualOutput !== null ? String(firstResult.actualOutput) : "");
+    
+    const stderrArr = executionResult.results?.map(r => r.error).filter(Boolean) || [];
+    const stderr = stderrArr.join("\n") || firstResult.error || "";
     const executionTimeMs = executionResult.results?.reduce((acc, r) => acc + (r.executionTimeMs || 0), 0) || 0;
 
-    if (stderr.includes("Time limit exceeded") || stderr.includes("timeout")) {
-      return sendErrorResponse(res, 408, "EXECUTION_TIMEOUT", "Code execution exceeded the allowed time.");
+    // Standardize status and verdict breakdown
+    let status = "SUCCESS";
+    let verdict = executionResult.allPassed ? "Accepted" : "Wrong Answer";
+    let compileError = null;
+    let runtimeError = null;
+
+    const lowerErr = stderr.toLowerCase();
+    if (lowerErr.includes("syntaxerror") || lowerErr.includes("indentationerror") || lowerErr.includes("compilation error") || lowerErr.includes("syntax error")) {
+      status = "COMPILE_ERROR";
+      verdict = "Compilation Error";
+      compileError = stderr;
+    } else if (lowerErr.includes("time limit exceeded") || lowerErr.includes("timeout")) {
+      status = "TIMEOUT";
+      verdict = "Time Limit Exceeded";
+      runtimeError = "Execution timed out.";
+    } else if (stderr.trim().length > 0 && !executionResult.allPassed) {
+      status = "RUNTIME_ERROR";
+      verdict = "Runtime Error";
+      runtimeError = stderr;
     }
 
-    // 5. Log submission safely
+    const passedTests = executionResult.passedTests || 0;
+    const totalTests = executionResult.totalTests || 0;
+    const failedTests = Math.max(0, totalTests - passedTests);
+
+    // Log submission record safely
     let submission = null;
     try {
       submission = await CodingSubmission.create({
@@ -187,38 +215,64 @@ export const executeRoomCodeController = async (req, res) => {
         questionId: questionId || roomProblem?.id || "custom-scenario",
         language,
         code,
-        status: executionResult.allPassed ? "completed" : "failed",
-        passedTests: executionResult.passedTests,
-        totalTests: executionResult.totalTests,
+        status: status === "SUCCESS" && executionResult.allPassed ? "completed" : "failed",
+        passedTests,
+        totalTests,
         testResults: executionResult.results,
         submittedAt: new Date(),
       });
+
+      await PeerInterviewRoom.findOneAndUpdate(
+        { roomId },
+        {
+          $push: {
+            submissions: {
+              userId: targetUserId,
+              code,
+              language,
+              status: status === "SUCCESS" && executionResult.allPassed ? "completed" : "failed",
+              passedTests,
+              totalTests,
+              submittedAt: new Date(),
+            }
+          }
+        }
+      ).catch(() => {});
     } catch (dbErr) {
       console.warn("Non-fatal: Failed to persist submission record:", dbErr.message);
     }
+
+    const responsePayload = {
+      submissionId: submission?._id || null,
+      status,
+      verdict,
+      passedTests,
+      totalTests,
+      failedTests,
+      passed: passedTests,
+      total: totalTests,
+      allPassed: executionResult.allPassed,
+      results: executionResult.results,
+      testResults: executionResult.results,
+      stdout,
+      stderr,
+      compileError,
+      runtimeError,
+      executionTimeMs,
+      message: executionResult.allPassed 
+        ? "All test cases passed successfully!" 
+        : `Passed ${passedTests} of ${totalTests} test cases.`
+    };
 
     return res.status(200).json({
       success: true,
       result: {
         stdout,
         stderr,
-        exitCode,
+        exitCode: status === "SUCCESS" && executionResult.allPassed ? 0 : 1,
         executionTimeMs,
       },
-      data: {
-        submissionId: submission?._id || null,
-        status: executionResult.allPassed ? "completed" : "failed",
-        passedTests: executionResult.passedTests,
-        totalTests: executionResult.totalTests,
-        passed: executionResult.passedTests,
-        total: executionResult.totalTests,
-        allPassed: executionResult.allPassed,
-        results: executionResult.results,
-        testResults: executionResult.results,
-        stdout,
-        stderr,
-        executionTimeMs,
-      },
+      data: responsePayload
     });
   } catch (error) {
     console.error("Canonical execute code error:", error);
@@ -227,9 +281,10 @@ export const executeRoomCodeController = async (req, res) => {
       res,
       500,
       "CODE_EXECUTION_FAILED",
-      "Failed to execute code safely. Internal execution error."
+      error.message || "Failed to execute code safely. Internal execution error."
     );
   }
 };
 
 export const runCode = executeRoomCodeController;
+

@@ -144,7 +144,7 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
     if (error instanceof AppError) throw error;
 
     // ── Groq provider rate limit (429) ──────────────────────────────────────
-    // Retry once with a 2-second backoff. If still 429, surface a clear error.
+    // Retry once with a 2-second backoff. If still 429, attempt fallback models.
     if (error.status === 429) {
       console.warn("[Groq] Rate limited (429) — retrying once after 2s backoff…");
       await sleep(2000);
@@ -153,15 +153,49 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
         return await attempt();
       } catch (retryError) {
         if (retryError instanceof AppError) throw retryError;
-        // Still 429 after backoff — the provider is genuinely rate-limited
+
         if (retryError.status === 429) {
+          const fallbackModels = [
+            "llama-3.2-3b-preview",
+            "llama-3.2-1b-preview",
+            "llama-3.2-11b-vision-preview",
+            "llama-3.2-90b-vision-preview",
+            "deepseek-r1-distill-qwen-32b"
+          ].filter(m => m !== model);
+
+          for (const fallbackModel of fallbackModels) {
+            console.warn(`[Groq] Model "${model}" rate limited (429). Attempting fallback model "${fallbackModel}"…`);
+            try {
+              const fallbackRequest = {
+                model: fallbackModel,
+                messages: sanitizedMessages,
+                temperature
+              };
+              if (jsonMode) {
+                fallbackRequest.response_format = { type: "json_object" };
+              }
+
+              const completion = await client.chat.completions.create(fallbackRequest, {
+                timeout: env.aiRequestTimeoutMs
+              });
+
+              const content = completion.choices?.[0]?.message?.content;
+              if (content) {
+                console.log(`[AI_RESPONSE] Provider: Groq | Fallback Model: ${fallbackModel} | Status: 200 | LatencyMs: ${Date.now() - callStartTime}`);
+                return content;
+              }
+            } catch (fbError) {
+              console.warn(`[Groq] Fallback model "${fallbackModel}" failed: ${fbError.message}`);
+            }
+          }
+
           throw new AppError(
-            "AI service is temporarily rate-limited. Please wait a moment and try again.",
+            "AI service is temporarily rate-limited across models. Please wait a moment and try again.",
             429,
             "AI_RATE_LIMITED"
           );
         }
-        // Different error on retry — fall through to generic handler below
+
         throw new AppError(
           `AI request failed on retry: ${retryError.message || "unknown error"}`,
           502,

@@ -175,6 +175,11 @@ const techDiscussionRoomSchema = new mongoose.Schema(
       default: [],
     },
 
+    previousQuestionTitles: {
+      type: [String],
+      default: [],
+    },
+
     nextQuestionAvailable: {
       type: Boolean,
       default: false,

@@ -40,8 +40,7 @@ import {
 } from "lucide-react";
 import { useSocket } from "../hooks/useSocket.js";
 import { YjsSocketProvider } from "../services/yjsProvider.js";
-import { getLiveKitToken, endTechDiscussionSession, getNextQuestion } from "../api/techDiscussion";
-import { executeCode } from "../api/peerInterview";
+import { getLiveKitToken, endTechDiscussionSession, getNextQuestion, executeTechDiscussionCode } from "../api/techDiscussion";
 
 class LiveKitErrorBoundary extends React.Component {
   constructor(props) {
@@ -161,7 +160,6 @@ export default function TechDiscussionRoomPage() {
       setYjsProvider(null);
     };
   }, [roomId, socket, socketConnected]);
-
   // Fetch LiveKit Token & Room Data
   useEffect(() => {
     if (!hasJoinedLobby || !roomId) return;
@@ -207,6 +205,7 @@ export default function TechDiscussionRoomPage() {
     return () => {
       isMounted = false;
     };
+  }, [roomId, hasJoinedLobby]);
   // Real-time listener for question change from peer/host
   useEffect(() => {
     if (!socket) return;
@@ -232,7 +231,7 @@ export default function TechDiscussionRoomPage() {
       setTimeRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          toast.info("Session time expired! Finalizing Learning Report...");
+          toast.info("Session time completed!");
           handleEndSession();
           return 0;
         }
@@ -260,13 +259,15 @@ export default function TechDiscussionRoomPage() {
 
   const handleMouseMoveResize = (e) => {
     if (isResizingProblem.current) {
-      const newWidth = Math.max(220, Math.min(e.clientX, 600));
+      const newWidth = Math.max(220, Math.min(e.clientX, 650));
       setProblemWidth(newWidth);
       localStorage.setItem("tech_discussion_problem_width", newWidth);
+      window.dispatchEvent(new Event("resize"));
     } else if (isResizingDiscussion.current) {
-      const newWidth = Math.max(240, Math.min(window.innerWidth - e.clientX, 600));
+      const newWidth = Math.max(240, Math.min(window.innerWidth - e.clientX, 650));
       setDiscussionWidth(newWidth);
       localStorage.setItem("tech_discussion_discussion_width", newWidth);
+      window.dispatchEvent(new Event("resize"));
     }
   };
 
@@ -275,6 +276,7 @@ export default function TechDiscussionRoomPage() {
     isResizingDiscussion.current = false;
     document.removeEventListener("mousemove", handleMouseMoveResize);
     document.removeEventListener("mouseup", handleMouseUpResize);
+    window.dispatchEvent(new Event("resize"));
   };
 
   const formatTimer = (totalSec) => {
@@ -284,31 +286,68 @@ export default function TechDiscussionRoomPage() {
   };
 
   const handleRun = async (payload) => {
+    if (isRunning || isSubmitting) return;
     try {
       setIsRunning(true);
-      const data = await executeCode(roomId, payload.questionId || problem?.id || "question", payload.language, payload.code);
-      setExecutionResult(data.data || data);
+      const res = await executeTechDiscussionCode(roomId, {
+        questionId: payload?.questionId || problem?.id || "question",
+        language: payload?.language || currentLanguage,
+        code: payload?.code || currentCode
+      });
+      const resData = res?.data || res;
+      setExecutionResult(resData);
+      if (resData?.status === "COMPILE_ERROR") {
+        toast.error("Compilation Error: Check output panel.");
+      } else if (resData?.status === "RUNTIME_ERROR") {
+        toast.error("Runtime Error: Check output panel.");
+      } else if (resData?.status === "TIMEOUT") {
+        toast.error("Execution Timeout exceeded.");
+      } else {
+        toast.success(`Run completed: ${resData?.passedTests || 0}/${resData?.totalTests || 0} passed`);
+      }
     } catch (err) {
       console.error("Run error:", err);
-      toast.error(err.response?.data?.message || "Failed to execute code");
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "Failed to execute code";
+      toast.error(msg);
+      setExecutionResult({
+        status: "EXECUTION_ERROR",
+        verdict: "Execution Error",
+        stderr: msg,
+        message: msg
+      });
     } finally {
       setIsRunning(false);
     }
   };
 
   const handleSubmit = async (payload) => {
+    if (isRunning || isSubmitting) return;
     try {
       setIsSubmitting(true);
-      const data = await executeCode(roomId, payload.questionId || problem?.id || "question", payload.language, payload.code);
-      setExecutionResult(data.data || data);
-      if (data.data?.passedTests === data.data?.totalTests) {
-        toast.success("Submission Successful! All test cases passed.");
+      const res = await executeTechDiscussionCode(roomId, {
+        questionId: payload?.questionId || problem?.id || "question",
+        language: payload?.language || currentLanguage,
+        code: payload?.code || currentCode
+      });
+      const resData = res?.data || res;
+      setExecutionResult(resData);
+      if (resData?.status === "SUCCESS" && resData?.allPassed) {
+        toast.success("Submission Accepted! All test cases passed.");
+      } else if (resData?.verdict) {
+        toast.info(`Submission Result: ${resData.verdict}`);
       } else {
         toast.info("Submission processed.");
       }
     } catch (err) {
       console.error("Submit error:", err);
-      toast.error(err.response?.data?.message || "Failed to submit code");
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "Failed to submit code";
+      toast.error(msg);
+      setExecutionResult({
+        status: "EXECUTION_ERROR",
+        verdict: "Submission Error",
+        stderr: msg,
+        message: msg
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -317,6 +356,7 @@ export default function TechDiscussionRoomPage() {
   const [loadingNext, setLoadingNext] = useState(false);
 
   const handleNextQuestion = async () => {
+    if (loadingNext) return;
     try {
       setLoadingNext(true);
       const res = await getNextQuestion(roomId);
@@ -337,11 +377,15 @@ export default function TechDiscussionRoomPage() {
         if (socket) {
           socket.emit("question:change", { roomId, problem: problemData, code: starter, sequence: payload?.questionSequence });
         }
-        toast.success(`Advanced to Question #${payload?.questionSequence || ""}`);
+        toast.success(`Advanced to Question #${payload?.questionSequence || ""}: ${problemData.title}`);
+        window.dispatchEvent(new Event("resize"));
+      } else {
+        toast.error("Failed to parse next question data.");
       }
     } catch (err) {
       console.error("Next Question error:", err);
-      toast.error(err.response?.data?.message || "Failed to load next question");
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "Failed to load next question";
+      toast.error(msg);
     } finally {
       setLoadingNext(false);
     }
@@ -350,12 +394,12 @@ export default function TechDiscussionRoomPage() {
   const handleEndSession = async () => {
     try {
       setLoading(true);
-      await endTechDiscussionSession(roomId);
-      navigate(`/tech-discussion/${roomId}/report`);
+      await endTechDiscussionSession(roomId).catch(() => {});
+      toast.success("Practice session ended.");
+      navigate("/tech-discussion");
     } catch (err) {
       console.error("Failed to end session:", err);
-      toast.error("Failed to generate report.");
-      setLoading(false);
+      navigate("/tech-discussion");
     }
   };
 
@@ -404,7 +448,7 @@ export default function TechDiscussionRoomPage() {
 
   return (
     <div className="flex h-screen w-full flex-col bg-bg text-text overflow-hidden font-sans">
-      
+
       {/* HEADER BAR */}
       <header className="flex h-14 items-center justify-between border-b border-border bg-surface px-4 shrink-0 shadow-sm z-20">
         <div className="flex items-center gap-3">
@@ -439,20 +483,19 @@ export default function TechDiscussionRoomPage() {
           {/* Connection Status Pill */}
           <div className="flex items-center gap-2 bg-bg-secondary px-3 py-1 rounded-full border border-border">
             <div
-              className={`h-2 w-2 rounded-full ${
-                connectionStatus === "joined"
+              className={`h-2 w-2 rounded-full ${connectionStatus === "joined"
                   ? "bg-success shadow-sm"
                   : connectionStatus === "reconnecting"
-                  ? "bg-warning animate-pulse"
-                  : "bg-danger"
-              }`}
+                    ? "bg-warning animate-pulse"
+                    : "bg-danger"
+                }`}
             />
             <span className="text-[11px] text-text-secondary font-bold uppercase tracking-wider">
               {connectionStatus === "joined"
                 ? "Realtime Sync Active"
                 : connectionStatus === "reconnecting"
-                ? "Reconnecting..."
-                : "Connecting..."}
+                  ? "Reconnecting..."
+                  : "Connecting..."}
             </span>
           </div>
 
@@ -544,7 +587,7 @@ export default function TechDiscussionRoomPage() {
         className="flex flex-1 overflow-hidden relative bg-bg"
       >
         <LiveKitErrorBoundary>
-          
+
           {/* FLOATING MINIMIZABLE VIDEO PANEL */}
           {!isVideoMinimized && (
             <div className="absolute top-3 right-4 z-30 w-72 bg-surface/95 backdrop-blur border border-border rounded-2xl shadow-2xl p-2 space-y-2 fade-in">
@@ -570,7 +613,7 @@ export default function TechDiscussionRoomPage() {
 
           {/* THREE-COLUMN RESIZABLE WORKSPACE */}
           <div className="flex flex-1 w-full h-full overflow-hidden relative">
-            
+
             {/* LEFT COLUMN: SCENARIO / PROBLEM PANEL */}
             {!isFullscreenWorkspace && (
               <section
@@ -617,33 +660,30 @@ export default function TechDiscussionRoomPage() {
 
             {/* MIDDLE COLUMN: MULTI-TOOL WORKSPACE */}
             <section className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden relative">
-              
+
               {/* Workspace Mode Bar: Code | Architectural Canvas | Spec Notes */}
               <div className="flex items-center justify-between border-b border-border bg-bg-secondary px-4 py-2 shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveWorkspace("code")}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                      activeWorkspace === "code" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${activeWorkspace === "code" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
+                      }`}
                   >
                     <Terminal className="w-3.5 h-3.5" /> Code Editor
                   </button>
 
                   <button
                     onClick={() => setActiveWorkspace("canvas")}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                      activeWorkspace === "canvas" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${activeWorkspace === "canvas" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
+                      }`}
                   >
                     <Layout className="w-3.5 h-3.5 text-warning" /> Architecture Canvas
                   </button>
 
                   <button
                     onClick={() => setActiveWorkspace("spec")}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                      activeWorkspace === "spec" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${activeWorkspace === "spec" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text hover:bg-bg"
+                      }`}
                   >
                     <FileText className="w-3.5 h-3.5 text-success" /> System Spec Notes
                   </button>

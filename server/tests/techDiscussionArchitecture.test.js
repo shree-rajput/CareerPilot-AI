@@ -119,5 +119,28 @@ describe("Tech Discussion Architecture & Security Test Suite", () => {
       assert.ok(secondRec.scenario);
       assert.notStrictEqual(secondRec.scenario.scenarioId, firstRec.scenario.scenarioId);
     });
+
+    it("should generate a series of unique questions without repeating previous questions", async () => {
+      const excludeIds = [];
+      const titles = new Set();
+
+      for (let i = 0; i < 4; i++) {
+        const rec = await getDeterministicScenarioRecommendation(null, {
+          category: "coding",
+          experienceLevel: "fresher",
+          excludeIds
+        });
+
+        assert.ok(rec.scenario);
+        assert.ok(!titles.has(rec.scenario.title.toLowerCase()), `Question '${rec.scenario.title}' was repeated in sequence`);
+
+        excludeIds.push(rec.scenario.scenarioId);
+        titles.add(rec.scenario.title.toLowerCase());
+      }
+
+      assert.strictEqual(titles.size, 4);
+    });
   });
 });
+
+

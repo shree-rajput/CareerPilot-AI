@@ -29,20 +29,6 @@ const PRACTICE_MODES = [
     subtopics: ["Arrays & HashMaps", "Strings & Two Pointers", "Trees & Recursion", "Algorithmic Logic"]
   },
   {
-    id: "development",
-    label: "Development",
-    icon: Terminal,
-    desc: "APIs, databases, language features, system components & Git",
-    subtopics: ["APIs & Data Contracts", "Component/Module Logic", "Database Queries & Models", "Language-Specific Concepts"]
-  },
-  {
-    id: "system_design",
-    label: "System Design",
-    icon: Layout,
-    desc: "Architecture and real-world engineering",
-    subtopics: ["Client-Server & Protocols", "Caching & Database Scaling", "URL Shortener & Web Services", "Microservices & Message Queues"]
-  },
-  {
     id: "interview",
     label: "Interview",
     icon: GraduationCap,

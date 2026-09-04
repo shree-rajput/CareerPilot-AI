@@ -46,13 +46,13 @@ export default function OutputPanel({ result, isRunning, isSubmitting }) {
 }
 
 function ExecutionResult({ result }) {
-  const errorMessage = result.error || result.stderr || result.result?.stderr;
+  const errorMessage = result.compileError || result.runtimeError || result.error || result.stderr || result.result?.stderr;
 
   if (errorMessage && !result.results && !result.testResults) {
     return (
       <div className="rounded-md border border-red-500/20 bg-red-500/10 p-3">
         <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-red-400">
-          Execution Error
+          {result.status || "Execution Error"}
         </p>
         <pre className="whitespace-pre-wrap text-xs text-red-300 font-mono">
           {errorMessage}
@@ -67,6 +67,8 @@ function ExecutionResult({ result }) {
   const total = result.totalTests ?? result.total ?? testList.length ?? 0;
   const runtime = result.executionTimeMs ?? result.result?.executionTimeMs;
   const stdout = result.stdout ?? result.output ?? result.result?.stdout;
+
+  const verdictLabel = result.verdict || (passed === total && total > 0 ? "Accepted" : "Wrong Answer");
 
   return (
     <div className="space-y-4">
@@ -83,9 +85,9 @@ function ExecutionResult({ result }) {
         )}
 
         <Metric 
-          label="Result Status" 
-          value={passed === total && total > 0 ? "ALL PASSED ✓" : "PARTIAL / FAILED ✕"} 
-          highlight={passed === total && total > 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}
+          label="Result Verdict" 
+          value={verdictLabel} 
+          highlight={verdictLabel === "Accepted" ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}
         />
       </div>
 
@@ -105,7 +107,7 @@ function ExecutionResult({ result }) {
       {errorMessage && (
         <div className="rounded-md border border-red-500/20 bg-red-500/10 p-3">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-red-400">
-            Stderr / Error Trace
+            {result.status || "Stderr / Error Trace"}
           </p>
           <pre className="whitespace-pre-wrap text-xs text-red-300 font-mono">
             {errorMessage}
@@ -175,7 +177,13 @@ function StatusBadge({ status }) {
   const styles = {
     completed: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
     passed: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
+    success: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
+    accepted: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
     failed: "bg-red-500/10 text-red-400 border border-red-500/30",
+    compile_error: "bg-amber-500/10 text-amber-400 border border-amber-500/30",
+    runtime_error: "bg-red-500/10 text-red-400 border border-red-500/30",
+    timeout: "bg-purple-500/10 text-purple-400 border border-purple-500/30",
+    execution_error: "bg-red-500/10 text-red-400 border border-red-500/30",
     error: "bg-red-500/10 text-red-400 border border-red-500/30",
     running: "bg-blue-500/10 text-blue-400 border border-blue-500/30",
   };

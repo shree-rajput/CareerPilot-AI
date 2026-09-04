@@ -117,6 +117,7 @@ export const VERIFIED_QUESTION_BANK = [
   },
 
   // ==========================================
+  // ==========================================
   // 2. DEVELOPMENT (Role-Aware Software Engineering)
   // ==========================================
   {
@@ -146,6 +147,32 @@ export const VERIFIED_QUESTION_BANK = [
     ]
   },
   {
+    id: "dev-api-payload-sanitizer",
+    title: "API Payload Field Validator & Sanitizer",
+    category: "development",
+    topic: "API Development & Validation",
+    difficulty: "easy",
+    prerequisites: ["Objects / Dicts", "String Validation"],
+    expectedSkills: ["Input Sanitization", "Field Presence Verification", "API Error Response Format"],
+    source: "CURATED",
+    sourceUrl: "https://careerpilot.ai/curated/api-payload-sanitizer",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "development",
+    description: "Implement a payload validator `validateRegistrationPayload(data)` that ensures `username` (min 3 chars), valid `email` containing `@`, and `age` >= 18 are present.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function validateRegistrationPayload(data) {\n  // Write your solution here\n  return false;\n}`,
+      python: `def validateRegistrationPayload(data: dict) -> bool:\n    # Write your solution here\n    return False`,
+      java: `import java.util.*;\n\npublic class Solution {\n    public boolean validateRegistrationPayload(Map<String, Object> data) {\n        // Write your solution here\n        return false;\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\n\nbool validateRegistrationPayload(void* data) {\n    // Write your solution here\n    return false;\n}`
+    },
+    testCases: [
+      { input: { data: { username: "alex", email: "alex@example.com", age: 21 } }, expectedOutput: true },
+      { input: { data: { username: "al", email: "invalid-email", age: 16 } }, expectedOutput: false }
+    ]
+  },
+  {
     id: "dev-python-data-processing",
     title: "Data Transformation & Pipeline Cleaning",
     category: "development",
@@ -168,31 +195,6 @@ export const VERIFIED_QUESTION_BANK = [
     },
     testCases: [
       { input: { records: [10, null, 150, 45, 0] }, expectedOutput: [0, 10, 45, 100] }
-    ]
-  },
-  {
-    id: "dev-sql-join-query",
-    title: "SQL Query: User Order Aggregation",
-    category: "development",
-    topic: "SQL & Databases",
-    difficulty: "easy",
-    prerequisites: ["SQL Basics", "GROUP BY"],
-    expectedSkills: ["JOIN Operations", "HAVING Clause", "Aggregation"],
-    source: "CURATED",
-    sourceUrl: "https://careerpilot.ai/curated/sql-user-orders",
-    verified: true,
-    fresherAppropriate: true,
-    questionType: "development",
-    description: "Write a SQL query string to retrieve the top 5 users by total order value. Discuss indexing strategies on `orders(user_id, total_amount)`.",
-    supportedLanguages: ["javascript", "python", "java", "cpp"],
-    starterCode: {
-      javascript: `function getTopUsersQuery() {\n  // Write your SQL query string here\n  return "";\n}`,
-      python: `def getTopUsersQuery():\n    # Write your SQL query string here\n    return ""`,
-      java: `public class Solution {\n    public String getTopUsersQuery() {\n        // Write your SQL query string here\n        return "";\n    }\n}`,
-      cpp: `#include <string>\nusing namespace std;\n\nstring getTopUsersQuery() {\n    // Write your SQL query string here\n    return "";\n}`
-    },
-    testCases: [
-      { input: {}, expectedOutput: "SELECT u.id, u.name, SUM(o.total_amount) AS total_spent FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.id, u.name ORDER BY total_spent DESC LIMIT 5;" }
     ]
   },
 
@@ -221,25 +223,34 @@ export const VERIFIED_QUESTION_BANK = [
     ]
   },
   {
-    id: "sd-fresher-url-shortener",
-    title: "Design a Scalable Key-Value Service (URL Shortener)",
+    id: "sd-fresher-simple-caching",
+    title: "Design an In-Memory Cache Stencil & Expiry Logic",
     category: "system_design",
-    topic: "System Design & Scalability",
-    difficulty: "medium",
-    prerequisites: ["HTTP REST APIs", "Database Indexing"],
-    expectedSkills: ["High Read-Write Ratio Handling", "Cache-Aside Pattern"],
+    topic: "Caching & Performance",
+    difficulty: "easy",
+    prerequisites: ["Key-Value Storage", "Timestamps"],
+    expectedSkills: ["Cache Key Hashing", "TTL Invalidation", "Hit/Miss Ratio"],
     source: "CURATED",
-    sourceUrl: "https://careerpilot.ai/curated/url-shortener-design",
+    sourceUrl: "https://careerpilot.ai/curated/simple-cache-stencil",
     verified: true,
     fresherAppropriate: true,
     questionType: "system_design",
-    description: "Design a scalable URL shortener service. Discuss encoding algorithms, database choice, caching strategy, and key collision prevention.",
+    description: "Design a key-value caching helper function `cacheLookup(cacheMap, key, currentTime)` that returns stored value if not expired, or `null` if expired.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function cacheLookup(cacheMap, key, currentTime) {\n  // Write your solution here\n  return null;\n}`,
+      python: `def cacheLookup(cacheMap: dict, key: str, currentTime: int):\n    # Write your solution here\n    return None`,
+      java: `import java.util.*;\n\npublic class Solution {\n    public Object cacheLookup(Map<String, Object> cacheMap, String key, long currentTime) {\n        return null;\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\n\nvoid* cacheLookup(void* cacheMap, string key, long currentTime) {\n    return nullptr;\n}`
+    },
+    testCases: [
+      { input: { cacheMap: { "user:1": { val: "John", ttl: 100 } }, key: "user:1", currentTime: 50 }, expectedOutput: "John" },
+      { input: { cacheMap: { "user:1": { val: "John", ttl: 100 } }, key: "user:1", currentTime: 150 }, expectedOutput: null }
+    ],
     starterCanvasElements: [
-      { type: "stencil", stencilType: "client", x: 100, y: 150, text: "Client Browser" },
-      { type: "stencil", stencilType: "load_balancer", x: 300, y: 150, text: "Load Balancer" },
-      { type: "stencil", stencilType: "microservice", x: 520, y: 150, text: "URL Core Service" },
-      { type: "stencil", stencilType: "redis", x: 520, y: 320, text: "Redis Cache" },
-      { type: "stencil", stencilType: "database", x: 740, y: 150, text: "Relational / NoSQL DB" }
+      { type: "stencil", stencilType: "client", x: 100, y: 150, text: "Web App" },
+      { type: "stencil", stencilType: "redis", x: 350, y: 150, text: "In-Memory Cache (Redis)" },
+      { type: "stencil", stencilType: "database", x: 650, y: 150, text: "PostgreSQL Database" }
     ]
   },
 
@@ -247,23 +258,29 @@ export const VERIFIED_QUESTION_BANK = [
   // 4. INTERVIEW (Role-Driven Mixed Practice)
   // ==========================================
   {
-    id: "interview-fullstack-debug",
-    title: "Role-Aligned Technical Reasoning & Architecture Defense",
+    id: "interview-fresher-debugging",
+    title: "Fresher Technical Walkthrough: Isolate & Fix Async Bug",
     category: "interview",
-    topic: "Architecture & Problem Solving Defense",
-    difficulty: "medium",
-    prerequisites: ["Web Fundamentals", "Database Basics"],
-    expectedSkills: ["Trade-Off Analysis", "Debugging Methodology", "Architecture Explanation"],
+    topic: "Technical Reasoning & Problem Solving",
+    difficulty: "easy",
+    prerequisites: ["Async Control Flow", "Error Handling"],
+    expectedSkills: ["Root Cause Identification", "Safe Async Execution", "Null Checks"],
     source: "CURATED",
-    sourceUrl: "https://careerpilot.ai/curated/fullstack-interview-practice",
+    sourceUrl: "https://careerpilot.ai/curated/fresher-async-debugging",
     verified: true,
     fresherAppropriate: true,
     questionType: "interview",
-    description: "Walk through a real-world system architecture for your target role. Explain database model choices, API latency bottlenecks, security measures, and how you isolate production errors.",
-    starterCanvasElements: [
-      { type: "stencil", stencilType: "client", x: 100, y: 150, text: "Client Layer" },
-      { type: "stencil", stencilType: "microservice", x: 450, y: 150, text: "Backend Application Service" },
-      { type: "stencil", stencilType: "database", x: 750, y: 150, text: "Database / Store" }
+    description: "Analyze a common production bug where an API request fails when user profile data is null. Implement a safe fallback function `safeGetUserCity(user)` that returns city or 'Unknown'.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function safeGetUserCity(user) {\n  // Write your solution here\n  return "Unknown";\n}`,
+      python: `def safeGetUserCity(user: dict) -> str:\n    # Write your solution here\n    return "Unknown"`,
+      java: `public class Solution {\n    public String safeGetUserCity(Object user) {\n        return "Unknown";\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\n\nstring safeGetUserCity(void* user) {\n    return "Unknown";\n}`
+    },
+    testCases: [
+      { input: { user: { profile: { address: { city: "Boston" } } } }, expectedOutput: "Boston" },
+      { input: { user: null }, expectedOutput: "Unknown" }
     ]
   }
 ];

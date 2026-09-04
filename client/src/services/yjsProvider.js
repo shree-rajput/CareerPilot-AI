@@ -96,6 +96,18 @@ export class YjsSocketProvider {
     }
   }
 
+  resetCode(newCode) {
+    if (this.destroyed || !this.yCode) return;
+    try {
+      this.doc.transact(() => {
+        this.yCode.delete(0, this.yCode.length);
+        this.yCode.insert(0, newCode || "");
+      });
+    } catch (err) {
+      console.error("Yjs resetCode error:", err);
+    }
+  }
+
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;

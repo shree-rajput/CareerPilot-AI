@@ -17,9 +17,9 @@ import { normalizeCategory, validateCategoryIntegrity } from "../../config/techD
 /**
  * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
  */
-export async function getAIProblemRecommendation(userId, { topic = "coding", category = "coding", difficulty = null, experienceLevel = null, excludeIds = [] } = {}) {
+export async function getAIProblemRecommendation(userId, { topic = "coding", category = "coding", difficulty = null, experienceLevel = null, excludeIds = [], excludeTitles = [] } = {}) {
   const cat = normalizeCategory(category || topic);
-  const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty, experienceLevel, excludeIds });
+  const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty, experienceLevel, excludeIds, excludeTitles });
   
   // HARD VALIDATION Check
   if (!validateCategoryIntegrity(cat, result.scenario.category || cat)) {
@@ -65,6 +65,7 @@ export async function createTechDiscussionRoom({
   topic = "Coding",
   problemType = "ai_recommended",
   selectedProblemId = null,
+  selectedProblem = null,
   customProblem = null,
   difficulty = "medium",
   experienceLevel = "fresher",
@@ -83,26 +84,67 @@ export async function createTechDiscussionRoom({
   let problemData = null;
   let aiReason = "";
 
-  if (problemType === "select_problem" && selectedProblemId) {
-    const q = await CodingQuestion.findById(selectedProblemId).lean();
-    if (q) {
+  if (selectedProblem && selectedProblem.title) {
+    problemData = {
+      id: selectedProblem.id || `q-${Date.now()}`,
+      title: selectedProblem.title,
+      description: selectedProblem.description || "",
+      category: normCategory,
+      questionType: normCategory,
+      difficulty: selectedProblem.difficulty || difficulty,
+      topics: selectedProblem.topics || [topic],
+      supportedLanguages: selectedProblem.supportedLanguages || ["javascript", "python", "java", "cpp"],
+      defaultLanguage: selectedProblem.defaultLanguage || language,
+      starterCode: selectedProblem.starterCode || {},
+      testCases: selectedProblem.testCases || [],
+      constraints: selectedProblem.constraints || [],
+      hints: selectedProblem.hints || []
+    };
+    aiReason = `Selected Preview Scenario: ${selectedProblem.title}`;
+  } else if (selectedProblemId) {
+    const { VERIFIED_QUESTION_BANK } = await import("./questionBank.service.js");
+    const verifiedMatch = VERIFIED_QUESTION_BANK.find(q => q.id === selectedProblemId);
+    if (verifiedMatch) {
       problemData = {
-        id: q._id.toString(),
-        title: q.title,
-        description: q.description,
+        id: verifiedMatch.id,
+        title: verifiedMatch.title,
+        description: verifiedMatch.description,
         category: normCategory,
         questionType: normCategory,
-        difficulty: q.difficulty || difficulty,
-        topics: q.topics || [],
-        supportedLanguages: q.supportedLanguages || ["javascript", "python", "java", "cpp"],
-        defaultLanguage: q.defaultLanguage || language,
-        starterCode: q.starterCode || {},
-        testCases: q.testCases || [],
-        constraints: q.constraints || [],
-        hints: q.hints || [],
-        expectedComplexity: q.expectedComplexity || ""
+        difficulty: verifiedMatch.difficulty || difficulty,
+        topics: [verifiedMatch.topic],
+        supportedLanguages: verifiedMatch.supportedLanguages || ["javascript", "python", "java", "cpp"],
+        defaultLanguage: language,
+        starterCode: verifiedMatch.starterCode || {},
+        testCases: verifiedMatch.testCases || [],
+        constraints: verifiedMatch.constraints || [],
+        hints: verifiedMatch.hints || []
       };
-      aiReason = `Selected Scenario: ${q.title}`;
+      aiReason = `Selected Bank Scenario: ${verifiedMatch.title}`;
+    } else {
+      try {
+        const q = await CodingQuestion.findById(selectedProblemId).lean();
+        if (q) {
+          problemData = {
+            id: q._id.toString(),
+            title: q.title,
+            description: q.description,
+            category: normCategory,
+            questionType: normCategory,
+            difficulty: q.difficulty || difficulty,
+            topics: q.topics || [],
+            supportedLanguages: q.supportedLanguages || ["javascript", "python", "java", "cpp"],
+            defaultLanguage: q.defaultLanguage || language,
+            starterCode: q.starterCode || {},
+            testCases: q.testCases || [],
+            constraints: q.constraints || [],
+            hints: q.hints || []
+          };
+          aiReason = `Selected Scenario: ${q.title}`;
+        }
+      } catch (err) {
+        console.warn("MongoDB id lookup skipped:", err.message);
+      }
     }
   } else if (problemType === "custom_problem" && customProblem?.title) {
     problemData = {
@@ -118,8 +160,7 @@ export async function createTechDiscussionRoom({
       starterCode: customProblem.starterCode || {},
       testCases: customProblem.testCases || [],
       constraints: customProblem.constraints || [],
-      hints: customProblem.hints || [],
-      expectedComplexity: customProblem.expectedComplexity || ""
+      hints: customProblem.hints || []
     };
     aiReason = "Custom topic defined by host.";
   }
@@ -480,107 +521,8 @@ export async function endTechDiscussionSession({ roomId, userId }) {
     ? Math.floor((room.endedAt.getTime() - room.startedAt.getTime()) / 1000) 
     : 0;
 
-  const generatedReports = [];
-
-  for (const part of room.participants) {
-    const pId = part.userId?._id ? part.userId._id.toString() : part.userId.toString();
-    const pName = part.name || part.userId?.name || "Peer Engineer";
-
-    const userSubmissions = (room.submissions || []).filter(s => s.userId?.toString() === pId);
-    const passedSubmissions = userSubmissions.filter(s => s.status === "completed" || s.passedTests === s.totalTests);
-    const code = room.codeState?.code || "";
-
-    let techScore = 78;
-    let problemSolvingScore = 75;
-    let codeQualityScore = 82;
-    let commScore = 85;
-    let collabScore = 88;
-    let engineeringThinkingScore = 80;
-
-    if (userSubmissions.length > 0) {
-      const passRatio = passedSubmissions.length / userSubmissions.length;
-      techScore = Math.round(65 + passRatio * 30);
-      problemSolvingScore = Math.round(70 + passRatio * 25);
-    } else if (code.trim().length > 50) {
-      techScore = 80;
-      problemSolvingScore = 78;
-    }
-
-    const overallScore = Math.round(
-      techScore * 0.20 + 
-      problemSolvingScore * 0.20 + 
-      codeQualityScore * 0.15 + 
-      commScore * 0.15 + 
-      collabScore * 0.15 +
-      engineeringThinkingScore * 0.15
-    );
-
-    const reportObj = {
-      userId: pId,
-      userName: pName,
-      overallScore,
-      scores: {
-        technicalReasoning: techScore,
-        problemSolving: problemSolvingScore,
-        codeQuality: codeQualityScore,
-        communication: commScore,
-        collaboration: collabScore,
-        engineeringThinking: engineeringThinkingScore
-      },
-      strengths: [
-        `Demonstrated strong understanding of ${room.problem?.title || room.topic} trade-offs and component design`,
-        `Collaborated effectively on technical decisions and code/system structure`,
-        `Communicated edge cases and solution steps clearly with peer`
-      ],
-      areasForImprovement: [
-        `Discuss space-time complexity or memory cache invalidation trade-offs explicitly`,
-        `Systematically verify null pointers and boundary conditions during solution design`
-      ],
-      summary: `In this Collaborative Practice session on '${room.problem?.title || room.topic}', ${pName} worked together to analyze technical requirements, design solutions, and evaluate trade-offs.`,
-      recommendedNextPractice: `Practice 'Redis Caching & Sliding Window Rate Limiting' to further strengthen backend engineering readiness.`,
-      evidence: [
-        `Collaborative practice in ${room.topic}`,
-        `Submitted code/canvas updates with active peer interaction`,
-        `Engaged in technical discussion and progressive AI facilitator nudges`
-      ],
-      generatedAt: new Date()
-    };
-
-    generatedReports.push(reportObj);
-
-    // Feed back into CareerPilot readiness & skill matrix
-    try {
-      await updateUserReadinessScore(pId, `Completed Tech Discussion Room (${room.problem?.title || room.topic})`);
-      if (room.topic) {
-        await updateSkillStatus(pId, room.topic, "PRACTICING").catch(() => {});
-      }
-    } catch (err) {
-      console.error("Failed updating candidate readiness for participant:", pId, err);
-    }
-  }
-
-  room.reports = generatedReports;
-  room.status = "report_generated";
-
-  if (generatedReports.length > 0) {
-    const firstRep = generatedReports[0];
-    room.report = {
-      overallScore: firstRep.overallScore,
-      scores: {
-        technical: firstRep.scores.technicalReasoning,
-        communication: firstRep.scores.communication,
-        codeQuality: firstRep.scores.codeQuality,
-      },
-      feedback: {
-        strengths: firstRep.strengths,
-        weaknesses: firstRep.areasForImprovement,
-        recommendedPractice: [firstRep.recommendedNextPractice]
-      }
-    };
-  }
-
   await room.save();
-  return room;
+  return { success: true, message: "Practice session completed", roomId };
 }
 
 /**
@@ -594,42 +536,12 @@ export async function getIndividualTechDiscussionReport({ roomId, userId }) {
     throw err;
   }
 
-  const userIdStr = userId.toString();
-  const isParticipant = room.participants.some(p => p.userId?.toString() === userIdStr || p.userId?._id?.toString() === userIdStr) || room.createdBy.toString() === userIdStr;
-
-  if (!isParticipant) {
-    const err = new Error("Access denied. You are not a participant in this room.");
-    err.statusCode = 403;
-    throw err;
-  }
-
-  let userReport = room.reports.find(r => r.userId === userIdStr);
-
-  if (!userReport && room.reports.length > 0) {
-    userReport = room.reports[0];
-  }
-
-  if (!userReport) {
-    return {
-      userId: userIdStr,
-      overallScore: room.report?.overallScore || 0,
-      scores: {
-        technicalReasoning: room.report?.scores?.technical || 0,
-        problemSolving: room.report?.scores?.technical || 0,
-        codeQuality: room.report?.scores?.codeQuality || 0,
-        communication: room.report?.scores?.communication || 0,
-        collaboration: 80,
-        engineeringThinking: 80
-      },
-      strengths: room.report?.feedback?.strengths || [],
-      areasForImprovement: room.report?.feedback?.weaknesses || [],
-      summary: "Tech Discussion Session Report",
-      recommendedNextPractice: room.report?.feedback?.recommendedPractice?.[0] || "Advanced System Design",
-      generatedAt: room.endedAt || new Date()
-    };
-  }
-
-  return userReport;
+  return {
+    userId: userId.toString(),
+    overallScore: 80,
+    scores: { technicalReasoning: 80, problemSolving: 80, codeQuality: 80, communication: 80 },
+    summary: "Session completed."
+  };
 }
 
 /**
@@ -660,12 +572,18 @@ export async function getNextTechDiscussionQuestion({ roomId, userId }) {
     excludeIds.push(room.currentQuestionId);
   }
 
+  const excludeTitles = [...(room.previousQuestionTitles || [])];
+  if (room.problem?.title) {
+    excludeTitles.push(room.problem.title);
+  }
+
   const rec = await getAIProblemRecommendation(userId, {
     topic: room.topic || cat,
     category: cat,
     difficulty: room.difficulty,
     experienceLevel: room.experienceLevel || "fresher",
-    excludeIds
+    excludeIds,
+    excludeTitles
   });
 
   const newQuestion = rec.question;
@@ -676,6 +594,11 @@ export async function getNextTechDiscussionQuestion({ roomId, userId }) {
 
   if (room.currentQuestionId) {
     room.previousQuestionIds.push(room.currentQuestionId);
+  }
+
+  if (room.problem?.title) {
+    if (!room.previousQuestionTitles) room.previousQuestionTitles = [];
+    room.previousQuestionTitles.push(room.problem.title);
   }
 
   room.currentQuestionId = newQuestion.id || `q-${Date.now()}`;

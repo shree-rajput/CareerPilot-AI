@@ -66,7 +66,7 @@ if (input !== null && typeof input === "object" && !Array.isArray(input)) {
   result = targetFn(input);
 }
 
-console.log(JSON.stringify(result !== undefined ? result : null));
+console.log("__CP_OUTPUT_START__" + JSON.stringify(result !== undefined ? result : null) + "__CP_OUTPUT_END__");
 `;
 
     await writeFile(filePath, wrappedCode, "utf8");

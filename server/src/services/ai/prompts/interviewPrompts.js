@@ -307,9 +307,9 @@ You MUST respond with ONLY a valid JSON object matching this structure:
 export const generateInterviewChallengePrompt = (params) => {
   return `You are an expert technical interviewer creating a dynamic coding challenge for a candidate.
 
-Target Role: ${params.targetRole}
-Technology Stack: ${params.technologyStack.join(", ")}
-Requested Difficulty: ${params.difficulty}
+Target Role: ${params.targetRole || "Software Engineer"}
+Technology Stack: ${Array.isArray(params.technologyStack) ? params.technologyStack.join(", ") : (params.technology || "Algorithms")}
+Requested Difficulty: ${params.difficulty || "medium"}
 
 DIFFICULTY GUIDELINES:
 - EASY: Basic array/string manipulation, hash map lookup, simple loops, or basic utility functions. Solvable in < 10 mins.

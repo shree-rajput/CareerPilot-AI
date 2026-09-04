@@ -123,17 +123,18 @@ export default function CodeEditor({
     const newLanguage = normalizeLanguage(
       initialLanguage ||
       question?.defaultLanguage ||
-      question?.supportedLanguages?.[0],
+      question?.supportedLanguages?.[0] ||
+      "javascript"
     );
 
-    if (!newLanguage) return;
-
     setLanguage(newLanguage);
+    const starter = getStarterCode(question, newLanguage);
+    setCode(starter);
 
-    if (typeof value !== "string") {
-      setCode(getStarterCode(question, newLanguage));
+    if (yjsProvider) {
+      yjsProvider.resetCode(starter);
     }
-  }, [question?.id, question?._id]);
+  }, [question?.id, question?._id, question?.title]);
 
   // Setup Monaco mount handler
   const handleEditorMount = (editor, monaco) => {
@@ -284,8 +285,50 @@ export default function CodeEditor({
     });
   };
 
+  const containerRef = useRef(null);
+  const isResizingOutput = useRef(false);
+  const [outputHeight, setOutputHeight] = useState(() => {
+    return Number(localStorage.getItem("tech_discussion_output_height")) || 240;
+  });
+  const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
+
+  // Auto-expand output drawer when execution starts or finishes with result
+  useEffect(() => {
+    if (isRunning || isSubmitting || executionResult) {
+      setIsOutputCollapsed(false);
+      window.dispatchEvent(new Event("resize"));
+      if (editorRef.current) editorRef.current.layout();
+    }
+  }, [isRunning, isSubmitting, executionResult]);
+
+  const handleMouseDownOutputResize = (e) => {
+    e.preventDefault();
+    isResizingOutput.current = true;
+    document.addEventListener("mousemove", handleMouseMoveOutputResize);
+    document.addEventListener("mouseup", handleMouseUpOutputResize);
+  };
+
+  const handleMouseMoveOutputResize = (e) => {
+    if (isResizingOutput.current && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const newHeight = Math.max(36, Math.min(rect.bottom - e.clientY, rect.height - 100));
+      setOutputHeight(newHeight);
+      localStorage.setItem("tech_discussion_output_height", newHeight);
+      window.dispatchEvent(new Event("resize"));
+      if (editorRef.current) editorRef.current.layout();
+    }
+  };
+
+  const handleMouseUpOutputResize = () => {
+    isResizingOutput.current = false;
+    document.removeEventListener("mousemove", handleMouseMoveOutputResize);
+    document.removeEventListener("mouseup", handleMouseUpOutputResize);
+    window.dispatchEvent(new Event("resize"));
+    if (editorRef.current) editorRef.current.layout();
+  };
+
   return (
-    <section className="flex h-full w-full flex-col overflow-hidden bg-transparent">
+    <section ref={containerRef} className="flex h-full w-full flex-col overflow-hidden bg-transparent relative">
       <EditorToolbar
         language={language}
         languages={availableLanguages}
@@ -298,7 +341,7 @@ export default function CodeEditor({
         onSubmit={handleSubmit}
       />
 
-      <div className="min-h-0 flex-1 relative">
+      <div className="min-h-0 flex-1 relative overflow-hidden">
         <Editor
           height="100%"
           language={language}
@@ -319,19 +362,64 @@ export default function CodeEditor({
         />
       </div>
 
-      <div className="border-t border-[#2A3143] bg-[#0B0F19]">
-        <TestCasesPanel
-          testCases={testCases}
-          activeTestCase={activeTestCase}
-          onSelectTestCase={setActiveTestCase}
-          executionResult={executionResult}
-        />
+      {/* DRAGGABLE HORIZONTAL SPLITTER BAR FOR TEST CASES / OUTPUT PANEL */}
+      <div
+        onMouseDown={handleMouseDownOutputResize}
+        className="h-2 bg-[#1A2234] hover:bg-primary cursor-row-resize z-20 transition-colors shrink-0 flex items-center justify-center group border-t border-b border-[#2A3143]"
+        title="Drag up/down to resize Test Cases & Output Panel"
+      >
+        <div className="w-10 h-1 rounded-full bg-gray-500 group-hover:bg-white transition-colors" />
+      </div>
 
-        <OutputPanel
-          result={executionResult}
-          isRunning={isRunning}
-          isSubmitting={isSubmitting}
-        />
+      {/* RESIZABLE TEST CASES & OUTPUT PANEL CONTAINER */}
+      <div
+        style={{ height: isOutputCollapsed ? "36px" : `${outputHeight}px` }}
+        className="border-t border-[#2A3143] bg-[#0B0F19] flex flex-col shrink-0 overflow-hidden transition-all duration-75 relative"
+      >
+        <div className="flex items-center justify-between px-4 py-1.5 bg-[#151B2B] border-b border-[#2A3143] shrink-0 text-xs font-bold text-gray-300">
+          <span className="flex items-center gap-2">
+            <span>Test Cases & Execution Output</span>
+            {executionResult?.status && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${
+                executionResult.status === "SUCCESS" && executionResult.allPassed
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                  : executionResult.status === "COMPILE_ERROR"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+              }`}>
+                {executionResult.verdict || executionResult.status}
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsOutputCollapsed(!isOutputCollapsed);
+              window.dispatchEvent(new Event("resize"));
+              if (editorRef.current) editorRef.current.layout();
+            }}
+            className="px-2 py-0.5 rounded bg-[#2A3143] hover:bg-gray-700 text-gray-300 text-[10px] uppercase font-bold transition-colors"
+          >
+            {isOutputCollapsed ? "▲ Expand Panel" : "▼ Collapse Panel"}
+          </button>
+        </div>
+
+        {!isOutputCollapsed && (
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <TestCasesPanel
+              testCases={testCases}
+              activeTestCase={activeTestCase}
+              onSelectTestCase={setActiveTestCase}
+              executionResult={executionResult}
+            />
+
+            <OutputPanel
+              result={executionResult}
+              isRunning={isRunning}
+              isSubmitting={isSubmitting}
+            />
+          </div>
+        )}
       </div>
     </section>
   );

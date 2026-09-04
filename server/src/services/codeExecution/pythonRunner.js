@@ -55,7 +55,7 @@ try:
     else:
         result = target_fn(input_data)
         
-    print(json.dumps(result))
+    print("__CP_OUTPUT_START__" + json.dumps(result) + "__CP_OUTPUT_END__")
 except Exception as e:
     print(str(e), file=sys.stderr)
     sys.exit(1)

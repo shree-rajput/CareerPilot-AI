@@ -29,9 +29,12 @@ export async function createRoomController(req, res) {
     }
 
     const {
+      category,
+      experienceLevel,
       topic,
       problemType,
       selectedProblemId,
+      selectedProblem,
       customProblem,
       difficulty,
       language,
@@ -41,9 +44,12 @@ export async function createRoomController(req, res) {
     const result = await createTechDiscussionRoom({
       userId,
       clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+      category,
+      experienceLevel,
       topic,
       problemType,
       selectedProblemId,
+      selectedProblem,
       customProblem,
       difficulty,
       language,
