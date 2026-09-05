@@ -487,8 +487,18 @@
     }
   }
 
-  // 7. Job Page Detection Engine
+    // 7. Job Page Detection Engine
   function detectJobPage() {
+    // Guardrail: Never run job posting detection on Gmail tabs
+    if (window.__CAREERPILOT_CONTEXT_DETECTOR__?.isGmail() || window.location.hostname.includes("mail.google.com")) {
+      return {
+        isJobPage: false,
+        confidence: 0,
+        reason: "Gmail tab active - Gmail Email Detector pipeline activated",
+        detectedPlatform: "gmail",
+      };
+    }
+
     const url = window.location.href;
     const host = window.location.hostname.toLowerCase();
     const path = window.location.pathname.toLowerCase();
@@ -687,10 +697,76 @@
 
   observeSpaNavigation();
 
-  // 9. Message Listener
+  // 10. Gmail Email Observer Pipeline
+  let lastProcessedGmailMsgId = "";
+  let gmailDebounceTimer = null;
+
+  function checkAndProcessGmailEmail() {
+    if (!window.__CAREERPILOT_GMAIL_EXTRACTOR__?.isGmail()) return;
+
+    const emailPayload = window.__CAREERPILOT_GMAIL_EXTRACTOR__.extractOpenedGmailMessage();
+    if (!emailPayload || !emailPayload.messageId || emailPayload.messageId === lastProcessedGmailMsgId) {
+      return;
+    }
+
+    lastProcessedGmailMsgId = emailPayload.messageId;
+
+    chrome.runtime.sendMessage({ type: "PROCESS_EMAIL_EVENT", payload: emailPayload }, (res) => {
+      if (chrome.runtime.lastError) {
+        console.warn("CareerPilot Gmail message error:", chrome.runtime.lastError.message);
+        return;
+      }
+      if (res?.success && res.data && window.__CAREERPILOT_GMAIL_OVERLAY__) {
+        window.__CAREERPILOT_GMAIL_OVERLAY__.renderGmailOverlay({
+          response: res.data,
+          onConfirm: (resp) => {},
+          onUndo: (resp) => {},
+          onIgnore: () => {},
+        });
+      }
+    });
+  }
+
+  function observeGmailChanges() {
+    if (!window.location.hostname.includes("mail.google.com")) return;
+
+    const observer = new MutationObserver(() => {
+      if (gmailDebounceTimer) clearTimeout(gmailDebounceTimer);
+      gmailDebounceTimer = setTimeout(() => {
+        checkAndProcessGmailEmail();
+      }, 1000);
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(checkAndProcessGmailEmail, 1500);
+  }
+
+  observeGmailChanges();
+
+  // 9. Message Listener with Context Awareness
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === "GET_JOB_DATA") {
-      const result = extractCurrentJob();
+    const isGmail = window.__CAREERPILOT_CONTEXT_DETECTOR__?.isGmail() || window.location.hostname.includes("mail.google.com");
+
+    if (request.type === "GET_PAGE_CONTEXT") {
+      const context = isGmail ? "GMAIL_EMAIL" : detectJobPage().isJobPage ? "JOB_POSTING" : "OTHER";
+      sendResponse({ context });
+    } else if (request.type === "GET_JOB_DATA") {
+      if (isGmail) {
+        const emailData = window.__CAREERPILOT_GMAIL_EXTRACTOR__?.extractOpenedGmailMessage();
+        sendResponse({
+          context: "GMAIL_EMAIL",
+          isJobPage: false,
+          isGmail: true,
+          emailData,
+          status: emailData ? "GMAIL_EMAIL_DETECTED" : "GMAIL_NO_EMAIL_OPENED",
+          reason: emailData ? "Opened Gmail email detected." : "Gmail tab active but no opened email found.",
+        });
+      } else {
+        const result = extractCurrentJob();
+        sendResponse({ context: "JOB_POSTING", ...result });
+      }
+    } else if (request.type === "GET_GMAIL_EVENT") {
+      const result = window.__CAREERPILOT_GMAIL_EXTRACTOR__?.extractOpenedGmailMessage();
       sendResponse(result);
     } else if (request.type === "PING") {
       sendResponse({ status: "PONG", ok: true });

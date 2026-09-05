@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { InterviewSession } from "../models/InterviewSession.js";
 import { InterviewQuestion } from "../models/InterviewQuestion.js";
 import { InterviewChallenge } from "../models/InterviewChallenge.js";
@@ -22,12 +23,14 @@ import { AppError } from "../utils/errors.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { env } from "../config/env.js";
 import { groqTranscribe } from "../services/ai/groqProvider.js";
+import { normalizeCodingQuestion } from "../services/codeExecution/questionNormalizationService.js";
 import fs from "fs";
 import crypto from "crypto";
 import { isNovelQuestion, fingerprintQuestion, getNextDiverseCategory } from "../services/interview/questionNoveltyService.js";
 import { validateGeneratedQuestion } from "../services/interview/questionValidationService.js";
 import { executeCode } from "../services/codeExecution/executionService.js";
 import { calculateSessionScores, normalizeQuestionEvaluation, safeScore } from "../services/interview/reportScoringService.js";
+import { scoreQuestionFromEvidence } from "../services/interview/deterministicScoringEngine.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // INTERVIEW STATE MACHINE
@@ -163,11 +166,42 @@ export async function createSession(req, res, next) {
     }
 
     let candidateContext = { summary: "", relevantSkills: [], potentialGaps: [] };
+    let jdContext = {
+      role: finalTargetRole,
+      level: "fresher",
+      responsibilities: [],
+      requiredSkills: finalTechStack,
+      preferredSkills: [],
+      technologies: finalTechStack,
+      domain: "",
+      interviewRelevantTopics: finalTechStack
+    };
+
     if (extractedResumeText || jobDescription) {
       try {
         candidateContext = await extractCandidateContext({ resumeText: extractedResumeText, jobDescription, targetRole: finalTargetRole });
       } catch (err) {
         console.error("Failed to extract candidate context", err);
+      }
+    }
+
+    if (jobDescription) {
+      try {
+        const parsedJd = await extractJobDescription(jobDescription);
+        if (parsedJd) {
+          jdContext = {
+            role: parsedJd.role || finalTargetRole,
+            level: parsedJd.level || "fresher",
+            responsibilities: Array.isArray(parsedJd.responsibilities) ? parsedJd.responsibilities : [],
+            requiredSkills: Array.isArray(parsedJd.requiredSkills) ? parsedJd.requiredSkills : finalTechStack,
+            preferredSkills: Array.isArray(parsedJd.preferredSkills) ? parsedJd.preferredSkills : [],
+            technologies: Array.isArray(parsedJd.technologies) ? parsedJd.technologies : finalTechStack,
+            domain: parsedJd.domain || "",
+            interviewRelevantTopics: Array.isArray(parsedJd.interviewRelevantTopics) ? parsedJd.interviewRelevantTopics : finalTechStack
+          };
+        }
+      } catch (jdErr) {
+        console.warn("Failed to parse JD context cleanly:", jdErr.message);
       }
     }
 
@@ -198,6 +232,11 @@ export async function createSession(req, res, next) {
 
     const greeting = generatePersonalizedGreeting(req.user, finalTargetRole);
 
+    const candidateExp = req.body.candidateExperience || (
+      /(senior|lead|staff|principal)/i.test(finalTargetRole) ? "senior" :
+      /(junior|associate|intern|fresher|entry|student)/i.test(finalTargetRole) ? "fresher" : "fresher"
+    );
+
     const session = new InterviewSession({
       userId: req.user._id,
       applicationId: applicationId || null,
@@ -205,7 +244,18 @@ export async function createSession(req, res, next) {
       technologyStack: finalTechStack,
       interviewType: finalInterviewType,
       difficulty: finalDifficulty,
+      candidateExperience: candidateExp,
+      currentTopicCategory: "Backend",
+      currentConcept: "REST Endpoints",
+      coveredConcepts: [],
+      followUpDepth: 0,
+      lastAnswerQuality: "strong",
       jobDescription: jobDescription || "",
+      jdContext,
+      presenceSignals: {
+        enabled: Boolean(req.body.enableVideoPresence),
+        cameraAvailable: Boolean(req.body.enableVideoPresence)
+      },
       numberOfQuestions: clampedQuestions,
       mode: mode || "realistic",
       status: "in_progress",
@@ -343,15 +393,19 @@ export async function getNextQuestion(req, res, next) {
               evaluationCriteria: ["Correctness", "Complexity", "Edge cases"]
             };
 
-        stub.question = aiChallenge.question || "Coding Challenge";
-        stub.technology = aiChallenge.technology || "Algorithms";
-        stub.language = aiChallenge.language || "javascript";
-        stub.difficulty = aiChallenge.difficulty || session.difficulty;
-        stub.starterCode = aiChallenge.starterCode || {};
-        stub.requirements = aiChallenge.requirements || [];
-        stub.constraints = aiChallenge.constraints || [];
-        stub.evaluationCriteria = aiChallenge.evaluationCriteria || [];
-        stub.testCases = aiChallenge.testCases || [];
+        const normalizedChallenge = normalizeCodingQuestion(aiChallenge);
+
+        stub.question = normalizedChallenge.question;
+        stub.description = normalizedChallenge.description;
+        stub.technology = normalizedChallenge.technology;
+        stub.language = normalizedChallenge.language;
+        stub.difficulty = normalizedChallenge.difficulty;
+        stub.starterCode = normalizedChallenge.starterCode;
+        stub.execution = normalizedChallenge.execution;
+        stub.requirements = normalizedChallenge.requirements;
+        stub.constraints = normalizedChallenge.constraints;
+        stub.evaluationCriteria = normalizedChallenge.evaluationCriteria;
+        stub.testCases = normalizedChallenge.testCases;
         stub.generatedBy = "ai";
         stub.validationStatus = "valid";
         stub.status = "active";
@@ -399,11 +453,81 @@ export async function getNextQuestion(req, res, next) {
       }).select('questionText').lean();
       const previousQuestionTexts = crossSessionQuestions.map(q => q.questionText);
 
+      // Full-Stack topic distribution map for progressive, single-concept interviewing
+      const FULLSTACK_TOPIC_MAP = {
+        Backend: ["REST API Endpoints", "HTTP Status Codes & Methods", "Input Validation & Sanitization", "Database Queries", "Authentication Basics", "Error Handling & Logging"],
+        Frontend: ["React State Management", "Component Props & Design", "API Fetching & Async Data", "Loading & Error States", "Basic Client-side Caching"],
+        Database: ["Database Schema Design", "Basic SQL / NoSQL Queries", "Entity Relationships", "Indexing Fundamentals"],
+        Architecture: ["Separation of Concerns", "Client-Server Data Flow", "Basic Application Structure"],
+        Behavioral: ["Teamwork & Collaboration", "Debugging Complex Bugs", "Handling Technical Disagreements"]
+      };
+
+      let targetCategory = session.currentTopicCategory || "Backend";
+      let targetConcept = session.currentConcept || "REST API Endpoints";
+      let followUpDepth = session.followUpDepth || 0;
+      let coveredConcepts = session.coveredConcepts || [];
+
+      if (completedQuestions.length > 0) {
+        const lastQ = completedQuestions[completedQuestions.length - 1];
+        const correctness = lastQ?.evaluation?.correctness || (lastQ?.analysis?.technicalAccuracy > 60 ? "High" : lastQ?.analysis?.technicalAccuracy > 30 ? "Medium" : "Low");
+        const status = lastQ?.evaluation?.answerStatus || "CORRECT_ANSWER";
+
+        if (status === "NO_ANSWER" || correctness === "Low") {
+          session.lastAnswerQuality = status === "NO_ANSWER" ? "no_answer" : "weak";
+          if (followUpDepth >= 1) {
+            if (!coveredConcepts.includes(targetConcept)) coveredConcepts.push(targetConcept);
+            followUpDepth = 0;
+            const categories = Object.keys(FULLSTACK_TOPIC_MAP);
+            const currentIdx = categories.indexOf(targetCategory);
+            targetCategory = categories[(currentIdx + 1) % categories.length];
+            const availableConcepts = FULLSTACK_TOPIC_MAP[targetCategory] || ["General Concepts"];
+            targetConcept = availableConcepts.find(c => !coveredConcepts.includes(c)) || availableConcepts[0];
+          } else {
+            followUpDepth += 1;
+          }
+        } else if (status === "PARTIAL_ANSWER" || correctness === "Medium") {
+          session.lastAnswerQuality = "partial";
+          followUpDepth += 1;
+          if (followUpDepth >= 2) {
+            if (!coveredConcepts.includes(targetConcept)) coveredConcepts.push(targetConcept);
+            followUpDepth = 0;
+            const categories = Object.keys(FULLSTACK_TOPIC_MAP);
+            const currentIdx = categories.indexOf(targetCategory);
+            targetCategory = categories[(currentIdx + 1) % categories.length];
+            const availableConcepts = FULLSTACK_TOPIC_MAP[targetCategory] || ["General Concepts"];
+            targetConcept = availableConcepts.find(c => !coveredConcepts.includes(c)) || availableConcepts[0];
+          }
+        } else {
+          session.lastAnswerQuality = "strong";
+          if (followUpDepth < 1) {
+            followUpDepth += 1;
+          } else {
+            if (!coveredConcepts.includes(targetConcept)) coveredConcepts.push(targetConcept);
+            followUpDepth = 0;
+            const categories = Object.keys(FULLSTACK_TOPIC_MAP);
+            const currentIdx = categories.indexOf(targetCategory);
+            targetCategory = categories[(currentIdx + 1) % categories.length];
+            const availableConcepts = FULLSTACK_TOPIC_MAP[targetCategory] || ["General Concepts"];
+            targetConcept = availableConcepts.find(c => !coveredConcepts.includes(c)) || availableConcepts[0];
+          }
+        }
+      }
+
+      session.currentTopicCategory = targetCategory;
+      session.currentConcept = targetConcept;
+      session.followUpDepth = followUpDepth;
+      session.coveredConcepts = coveredConcepts;
+      await session.save();
+
       const questionContext = {
         targetRole: session.targetRole,
         technologyStack: session.technologyStack,
         interviewType: session.interviewType,
         difficulty: session.difficulty,
+        candidateExperience: session.candidateExperience || "fresher",
+        targetCategory,
+        targetConcept,
+        followUpDepth,
         jobDescription: session.jobDescription,
         previousQuestions: completedQuestions,
         conceptsTested: session.conceptsTested,
@@ -426,12 +550,14 @@ export async function getNextQuestion(req, res, next) {
         if (completedQuestions.length > 0) {
           const lastQ = completedQuestions[completedQuestions.length - 1];
 
-          // For CODING_REVIEW: pass the coding context so the AI generates a targeted follow-up
-          let enrichedContext = questionContext;
+          let enrichedContext = {
+            ...questionContext,
+            candidateExperience: session.candidateExperience || "fresher"
+          };
           if (nextState === "CODING_REVIEW") {
             const lastCodingChallenge = completedChallenges[completedChallenges.length - 1];
             enrichedContext = {
-              ...questionContext,
+              ...enrichedContext,
               codingContext: lastCodingChallenge ? {
                 question: lastCodingChallenge.question,
                 aiFollowUp: lastCodingChallenge.aiReview?.followUpComment || ""
@@ -443,11 +569,13 @@ export async function getNextQuestion(req, res, next) {
             ? await adaptiveNextAction({
                 targetRole: session.targetRole,
                 technologyStack: session.technologyStack,
+                candidateExperience: session.candidateExperience || "fresher",
                 previousQuestions: completedQuestions,
                 previousQuestionText: lastQ.questionText,
                 transcript: lastQ.transcript,
                 evaluation: lastQ.evaluation,
-                currentState: nextState
+                currentState: nextState,
+                codingContext: enrichedContext.codingContext
               })
             : {
                 action: "MOVE_FORWARD",
@@ -457,7 +585,7 @@ export async function getNextQuestion(req, res, next) {
 
           aiQuestion = {
             questionText: adaptiveRes.nextQuestionText,
-            category: adaptiveRes.action,
+            category: targetCategory,
             difficulty: session.difficulty,
             expectedConcepts: adaptiveRes.expectedConcepts,
             generationSource: "ai"
@@ -480,7 +608,8 @@ export async function getNextQuestion(req, res, next) {
             targetRole: session.targetRole,
             technologyStack: session.technologyStack,
             difficulty: session.difficulty,
-            interviewType: session.interviewType
+            interviewType: session.interviewType,
+            candidateExperience: session.candidateExperience || "fresher"
           });
         } else {
           console.log(`[Interview] AI generation failed or returned empty question:`, aiQuestion);
@@ -601,14 +730,136 @@ export async function getNextQuestion(req, res, next) {
 export async function submitAnswer(req, res, next) {
   try {
     const { questionId } = req.params;
-    const { transcript, metrics, videoMetrics } = req.body;
 
-    const question = await InterviewQuestion.findById(questionId).populate("sessionId");
-    if (!question || question.sessionId.userId.toString() !== req.user._id.toString()) {
-      throw new AppError("Question not found", 404);
+    // 1. Validate questionId format
+    if (!questionId || !mongoose.Types.ObjectId.isValid(questionId)) {
+      const err = new AppError("Invalid question ID format", 400, "INVALID_QUESTION_ID");
+      err.field = "questionId";
+      throw err;
     }
 
-    const rawClean = (transcript || "").trim().toLowerCase().replace(/[^a-z0-9\s]/g, "");
+    // 2. Validate payload: support transcript OR answer OR text
+    const rawAnswer = req.body?.transcript ?? req.body?.answer ?? req.body?.text;
+    const transcript = String(rawAnswer || "").trim();
+    const { metrics } = req.body;
+
+    if (!transcript) {
+      const err = new AppError("Answer text cannot be empty. Please type or speak your answer.", 400, "MISSING_ANSWER_TEXT");
+      err.field = "transcript";
+      throw err;
+    }
+
+    // 3. Query Question & Session Ownership
+    const question = await InterviewQuestion.findById(questionId).populate("sessionId");
+    if (!question) {
+      // Check if it's an InterviewChallenge instead
+      const challenge = await InterviewChallenge.findById(questionId);
+      if (challenge) {
+        const err = new AppError("This is a coding challenge question. Use submitCodingAnswer instead.", 400, "WRONG_ENDPOINT_FOR_CHALLENGE");
+        err.field = "questionId";
+        throw err;
+      }
+      const err = new AppError("Interview question not found", 404, "QUESTION_NOT_FOUND");
+      err.field = "questionId";
+      throw err;
+    }
+
+    if (!question.sessionId) {
+      const err = new AppError("Associated interview session was not found", 404, "SESSION_NOT_FOUND");
+      err.field = "sessionId";
+      throw err;
+    }
+
+    if (question.sessionId.userId.toString() !== req.user._id.toString()) {
+      const err = new AppError("You do not have permission to access this interview session", 403, "UNAUTHORIZED_QUESTION_ACCESS");
+      err.field = "sessionId";
+      throw err;
+    }
+
+    if (question.sessionId.status === "completed") {
+      const err = new AppError("Interview session is already completed", 409, "SESSION_ALREADY_COMPLETED");
+      err.field = "sessionId";
+      throw err;
+    }
+
+    // 4. Idempotency & Duplicate Submission check
+    if (question.status === "answered") {
+      const existingClean = (question.transcript || "").trim().toLowerCase();
+      const submittedClean = transcript.toLowerCase();
+      if (existingClean === submittedClean) {
+        console.log(`[Interview] Idempotent retry detected for question ${questionId}. Returning saved evaluation.`);
+        let interviewerReaction = null;
+        try {
+          interviewerReaction = await generateInterviewerReaction({
+            questionText: question.questionText,
+            transcript: question.transcript,
+            evaluation: question.evaluation
+          });
+        } catch (rErr) {
+          interviewerReaction = { reaction: "Answer already analyzed. Moving forward.", tone: "affirming" };
+        }
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            question,
+            interviewerReaction,
+            isIdempotentRetry: true
+          }
+        });
+      }
+
+      const err = new AppError("This question has already been answered and evaluated", 409, "QUESTION_ALREADY_ANSWERED");
+      err.field = "questionId";
+      throw err;
+    }
+
+    // 5. Persist Answer FIRST (Candidate work is safe in DB before AI processing!)
+    question.transcript = transcript;
+    question.communicationMetrics = metrics || {};
+    question.status = "answered";
+
+    if (req.body.deliverySignals && typeof req.body.deliverySignals === "object") {
+      question.deliverySignals = {
+        speakingPace: Number(req.body.deliverySignals.speakingPace || metrics?.speakingPace || 0),
+        fillerWords: Number(req.body.deliverySignals.fillerWords || metrics?.fillerWords || 0),
+        longPauses: Number(req.body.deliverySignals.longPauses || metrics?.longPauses || 0),
+        hesitationScore: Number(req.body.deliverySignals.hesitationScore || 0),
+        observedNotes: String(req.body.deliverySignals.observedNotes || ""),
+        suggestion: String(req.body.deliverySignals.suggestion || ""),
+        unavailable: Boolean(req.body.deliverySignals.unavailable)
+      };
+    } else if (metrics && (metrics.speakingPace || metrics.fillerWords || metrics.longPauses)) {
+      question.deliverySignals = {
+        speakingPace: Number(metrics.speakingPace || 0),
+        fillerWords: Number(metrics.fillerWords || 0),
+        longPauses: Number(metrics.longPauses || 0),
+        hesitationScore: Math.min(100, ((metrics.fillerWords || 0) * 10) + ((metrics.longPauses || 0) * 15)),
+        observedNotes: `Observed pace: ${metrics.speakingPace || 130} WPM with ${metrics.fillerWords || 0} filler words and ${metrics.longPauses || 0} pauses.`,
+        suggestion: (metrics.longPauses || 0) > 2 ? "Take a short pause before answering and structure into 2-3 key points." : "Good, steady delivery pace.",
+        unavailable: false
+      };
+    } else {
+      question.deliverySignals = { unavailable: true };
+    }
+
+    if (req.body.presenceSignals && typeof req.body.presenceSignals === "object") {
+      question.presenceSignals = {
+        cameraAvailable: Boolean(req.body.presenceSignals.cameraAvailable),
+        gazeConsistency: String(req.body.presenceSignals.gazeConsistency || "Consistent"),
+        postureNotes: String(req.body.presenceSignals.postureNotes || "Upright"),
+        observedNotes: String(req.body.presenceSignals.observedNotes || ""),
+        suggestion: String(req.body.presenceSignals.suggestion || ""),
+        unavailable: Boolean(req.body.presenceSignals.unavailable)
+      };
+    } else {
+      question.presenceSignals = { unavailable: true };
+    }
+
+    await question.save();
+
+    // 6. Perform Evaluation & Scoring
+    const rawClean = transcript.toLowerCase().replace(/[^a-z0-9\s]/g, "");
     const nonAnswerPhrases = [
       "no", "no idea", "idk", "dont know", "i dont know", "i do not know",
       "not sure", "no clue", "none", "pass", "skip", "n a", "na", "dunno",
@@ -616,89 +867,111 @@ export async function submitAnswer(req, res, next) {
       "nothing", "cant answer", "i cant answer", "i cannot answer"
     ];
 
-    const isNonAnswer = !rawClean || rawClean.length < 3 || nonAnswerPhrases.some(p => rawClean === p || rawClean.startsWith("i dont know") || rawClean.startsWith("i do not know") || rawClean.startsWith("no idea"));
+    const isNonAnswer = rawClean.length < 3 || nonAnswerPhrases.some(p => rawClean === p || rawClean.startsWith("i dont know") || rawClean.startsWith("i do not know") || rawClean.startsWith("no idea"));
 
-    let evaluation = null;
+    let stage1Output = null;
 
     if (isNonAnswer) {
-      console.log(`[Interview] Non-answer detected for question ${questionId}: "${transcript}". Assigning 0 score deterministically.`);
-      evaluation = {
+      console.log(`[Interview] Non-answer detected for question ${questionId}: "${transcript}". Processing deterministically.`);
+      stage1Output = {
         answerStatus: "NO_ANSWER",
-        correctnessScore: 0,
-        relevance: "Low",
-        correctness: "Low",
-        depth: "Low",
-        specificity: "Low",
-        structure: "Low",
-        communication: {
-          score: 0,
-          clarity: 0,
-          relevance: 0,
-          structure: 0,
-          conciseness: 0,
-          fillerUsage: 100,
-          evidence: ["Candidate stated they do not know the answer or declined to answer."]
+        evidence: {
+          demonstratedConcepts: [],
+          missingConcepts: question.expectedConcepts || [],
+          incorrectClaims: [],
+          reasoningSignals: [],
+          practicalSignals: [],
+          communicationSignals: { clarity: "Candidate stated uncertainty or declined answer" },
+          uncertaintyExpressed: true,
+          isCorruptedTranscription: false
         },
-        evidenceCollected: ["Candidate gave a non-answer."],
+        evidenceCollected: ["Candidate gave a non-answer response."],
         strengths: [],
-        weaknesses: ["Unable to answer the question or demonstrate knowledge on this concept."],
+        weaknesses: ["Unable to demonstrate technical knowledge on this question."],
         missingConcepts: question.expectedConcepts || [],
         confidence: "HIGH",
         idealAnswer: {
           text: "A complete answer would cover: " + (question.expectedConcepts || []).join(", "),
-          explanation: "Key concepts expected for this question."
+          explanation: "Core expected concepts."
         },
-        analysisSource: "deterministic_non_answer",
-        fallbackReason: "Candidate provided a non-answer."
+        analysisSource: "deterministic_non_answer"
       };
     } else {
-      const limitCheck = await checkAiLimit(req.user._id, "mock_evaluation", env.aiLimitMockEvaluations);
-      const evaluationContext = {
-        questionText: question.questionText,
-        category: question.category,
-        difficulty: question.difficulty,
-        expectedConcepts: question.expectedConcepts,
-        transcript,
-        metrics
-      };
-      evaluation = limitCheck.allowed
-        ? await evaluateInterviewAnswer(evaluationContext)
-        : buildFallbackInterviewEvaluation(evaluationContext, `Daily mock evaluation AI limit reached.`);
+      try {
+        const limitCheck = await checkAiLimit(req.user._id, "mock_evaluation", env.aiLimitMockEvaluations);
+        const evaluationContext = {
+          questionText: question.questionText,
+          category: question.category,
+          difficulty: question.difficulty,
+          expectedConcepts: question.expectedConcepts,
+          transcript,
+          metrics
+        };
+        stage1Output = limitCheck.allowed
+          ? await evaluateInterviewAnswer(evaluationContext)
+          : buildFallbackInterviewEvaluation(evaluationContext, `Daily mock evaluation AI limit reached.`);
+      } catch (aiErr) {
+        console.error("[Interview] AI evaluation error. Falling back gracefully:", aiErr.message);
+        stage1Output = buildFallbackInterviewEvaluation({
+          questionText: question.questionText,
+          expectedConcepts: question.expectedConcepts,
+          transcript,
+          metrics
+        }, "AI service error during evaluation");
+      }
     }
 
-    question.transcript = transcript;
-    question.communicationMetrics = metrics;
-    question.evaluation = {
-      answerStatus: evaluation.answerStatus || (isNonAnswer ? "NO_ANSWER" : "CORRECT"),
-      correctnessScore: typeof evaluation.correctnessScore === "number" ? evaluation.correctnessScore : (isNonAnswer ? 0 : 75),
-      relevance: evaluation.relevance || (isNonAnswer ? "Low" : "Medium"),
-      correctness: evaluation.correctness || (isNonAnswer ? "Low" : "Medium"),
-      depth: evaluation.depth || (isNonAnswer ? "Low" : "Medium"),
-      specificity: evaluation.specificity || (isNonAnswer ? "Low" : "Medium"),
-      structure: evaluation.structure || (isNonAnswer ? "Low" : "Medium"),
-      evidenceCollected: evaluation.evidenceCollected || [],
-      strengths: evaluation.strengths || [],
-      weaknesses: evaluation.weaknesses || [],
-      missingConcepts: evaluation.missingConcepts || []
-    };
-    question.confidence = evaluation.confidence || "MEDIUM";
-    question.idealAnswer = evaluation.idealAnswer;
-    question.analysisSource = evaluation.analysisSource || (isNonAnswer ? "deterministic_non_answer" : "ai");
-    question.analysisFallbackReason = evaluation.fallbackReason || "";
-    question.status = "answered";
+    const deterministicResult = scoreQuestionFromEvidence(stage1Output, {
+      expectedConcepts: question.expectedConcepts,
+      questionType: question.category,
+      isFollowUp: Boolean(question.followUpStrategy && question.followUpStrategy.length > 0)
+    });
 
-    // Compute canonical numeric analysis & feedback matching frontend contracts
-    const normalized = normalizeQuestionEvaluation(question.toObject ? question.toObject() : question);
-    question.analysis = normalized.analysis;
-    question.feedback = normalized.feedback;
+    question.evaluation = {
+      answerStatus: stage1Output.answerStatus || (isNonAnswer ? "NO_ANSWER" : "CORRECT_ANSWER"),
+      correctnessScore: deterministicResult.analysis.technicalAccuracy,
+      relevance: deterministicResult.analysis.technicalAccuracy !== null && deterministicResult.analysis.technicalAccuracy > 60 ? "High" : deterministicResult.analysis.technicalAccuracy > 30 ? "Medium" : "Low",
+      correctness: deterministicResult.analysis.technicalAccuracy !== null && deterministicResult.analysis.technicalAccuracy > 60 ? "High" : deterministicResult.analysis.technicalAccuracy > 30 ? "Medium" : "Low",
+      depth: deterministicResult.analysis.depth !== null && deterministicResult.analysis.depth > 60 ? "High" : deterministicResult.analysis.depth > 30 ? "Medium" : "Low",
+      specificity: deterministicResult.analysis.technicalAccuracy !== null && deterministicResult.analysis.technicalAccuracy > 60 ? "High" : "Low",
+      structure: deterministicResult.analysis.communication !== null && deterministicResult.analysis.communication > 60 ? "High" : "Low",
+      evidenceCollected: stage1Output.evidenceCollected || [],
+      strengths: deterministicResult.feedback.strengths,
+      weaknesses: deterministicResult.feedback.weaknesses,
+      missingConcepts: deterministicResult.feedback.missingConcepts
+    };
+    question.confidence = deterministicResult.confidence;
+    question.idealAnswer = deterministicResult.idealAnswer || question.idealAnswer;
+    question.analysisSource = stage1Output.analysisSource || (isNonAnswer ? "deterministic_non_answer" : "ai");
+    question.analysisFallbackReason = stage1Output.fallbackReason || "";
+    question.analysis = deterministicResult.analysis;
+    question.feedback = deterministicResult.feedback;
 
     await question.save();
+
+    // 7. Update Session State Machine
+    try {
+      const sess = question.sessionId;
+      if (sess && sess.save) {
+        const status = question.evaluation?.answerStatus;
+        const correctness = question.evaluation?.correctness;
+        if (status === "NO_ANSWER" || correctness === "Low") {
+          sess.lastAnswerQuality = status === "NO_ANSWER" ? "no_answer" : "weak";
+        } else if (status === "PARTIAL_ANSWER" || correctness === "Medium") {
+          sess.lastAnswerQuality = "partial";
+        } else {
+          sess.lastAnswerQuality = "strong";
+        }
+        await sess.save();
+      }
+    } catch (sErr) {
+      console.warn("[Interview] Failed to update session answer quality:", sErr.message);
+    }
 
     if (question.analysisSource === "ai") {
       await incrementAiUsage(req.user._id, "mock_evaluation");
     }
 
-    // Generate natural interviewer reaction (conversational layer)
     let interviewerReaction = null;
     try {
       interviewerReaction = await generateInterviewerReaction({
@@ -707,35 +980,33 @@ export async function submitAnswer(req, res, next) {
         evaluation: question.evaluation
       });
     } catch (reactionErr) {
-      console.warn("[Interview] Reaction generation failed:", reactionErr.message);
-      // Fallback reaction based on evaluation
       const { correctness } = question.evaluation;
       if (correctness === 'High') {
-        interviewerReaction = { reaction: "Good. Let's take that a step further.", tone: "affirming" };
+        interviewerReaction = { reaction: "Good explanation. Let me ask a follow-up on that.", tone: "affirming" };
       } else if (correctness === 'Low') {
-        interviewerReaction = { reaction: "There's a small gap there — let me come at it from a different angle.", tone: "probing" };
+        interviewerReaction = { reaction: "I see your approach. Let's look at another aspect.", tone: "probing" };
       } else {
-        interviewerReaction = { reaction: "Okay. Moving on.", tone: "neutral" };
+        interviewerReaction = { reaction: "Okay. Let's build on that concept.", tone: "neutral" };
       }
     }
 
-    // Update skill evidence in career profile
+    // 8. Update Skill Evidence
     try {
-      if (evaluation.correctness === "Medium" || evaluation.correctness === "High") {
+      if (question.evaluation.correctness === "Medium" || question.evaluation.correctness === "High") {
         const { UserSkill } = await import("../models/UserSkill.js");
         const { normalizeSkill } = await import("../services/career/taxonomyService.js");
         const normalizedCategory = normalizeSkill(question.category);
         if (normalizedCategory && normalizedCategory.isKnown) {
           const existingSkill = await UserSkill.findOne({ userId: req.user._id, canonicalName: normalizedCategory.canonicalName });
           const newEvidence = {
-            description: `Answered interview question on ${question.category} with ${evaluation.correctness} correctness`,
+            description: `Answered interview question on ${question.category} with ${question.evaluation.correctness} correctness`,
             source: "interview",
             date: new Date(),
-            weight: evaluation.correctness === "High" ? 1.5 : 1
+            weight: question.evaluation.correctness === "High" ? 1.5 : 1
           };
           if (existingSkill) {
             existingSkill.evidence.push(newEvidence);
-            existingSkill.confidence = Math.min(100, existingSkill.confidence + (evaluation.correctness === "High" ? 10 : 5));
+            existingSkill.confidence = Math.min(100, existingSkill.confidence + (question.evaluation.correctness === "High" ? 10 : 5));
             await existingSkill.save();
           }
         }
@@ -748,7 +1019,7 @@ export async function submitAnswer(req, res, next) {
       success: true,
       data: {
         question,
-        interviewerReaction  // ← The conversational response to show before "Next Question"
+        interviewerReaction
       }
     });
   } catch (error) {
@@ -785,13 +1056,21 @@ export async function runCode(req, res, next) {
     const rawLang = String(language || challenge.language || "javascript").toLowerCase();
     const cleanLanguage = rawLang === "js" ? "javascript" : rawLang === "py" ? "python" : rawLang;
 
+    const executionContract = {
+      mode: challenge.execution?.mode || "FUNCTION",
+      functionName: challenge.execution?.functionName || challenge.functionName || "solution",
+      parameters: challenge.execution?.parameters || challenge.parameters || [],
+      returnType: challenge.execution?.returnType || challenge.returnType || "AUTO"
+    };
+
     // Only run public test cases (hidden: false) during Run
     const publicTestCases = (challenge.testCases || []).filter(tc => !tc.hidden);
 
     const executionResult = await executeCode({
       language: cleanLanguage,
       code: code || "",
-      testCases: publicTestCases.length > 0 ? publicTestCases : challenge.testCases || []
+      testCases: publicTestCases.length > 0 ? publicTestCases : challenge.testCases || [],
+      executionContract
     });
 
     res.status(200).json({
@@ -838,11 +1117,19 @@ export async function submitCodingAnswer(req, res, next) {
     const rawLang = String(language || challenge.language || "javascript").toLowerCase();
     const cleanLanguage = rawLang === "js" ? "javascript" : rawLang === "py" ? "python" : rawLang;
 
+    const executionContract = {
+      mode: challenge.execution?.mode || "FUNCTION",
+      functionName: challenge.execution?.functionName || challenge.functionName || "solution",
+      parameters: challenge.execution?.parameters || challenge.parameters || [],
+      returnType: challenge.execution?.returnType || challenge.returnType || "AUTO"
+    };
+
     // Execute against ALL test cases (including hidden)
     const executionResult = await executeCode({
       language: cleanLanguage,
       code: code || "",
-      testCases: challenge.testCases || []
+      testCases: challenge.testCases || [],
+      executionContract
     });
 
     const totalTests = challenge.testCases?.length || 0;
@@ -1067,6 +1354,139 @@ export async function transcribeAudio(req, res, next) {
     if (req.file && req.file.path) {
       fs.unlink(req.file.path, () => {});
     }
+    next(error);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 10. Get History & Progression Analytics (/interview-history)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export async function getHistory(req, res, next) {
+  try {
+    const { role, type, status, search } = req.query;
+    const filter = { userId: req.user._id };
+
+    if (status) {
+      filter.status = status;
+    }
+    if (type) {
+      filter.interviewType = type;
+    }
+    if (role) {
+      filter.targetRole = { $regex: role, $options: "i" };
+    }
+    if (search) {
+      filter.$or = [
+        { targetRole: { $regex: search, $options: "i" } },
+        { technologyStack: { $elemMatch: { $regex: search, $options: "i" } } }
+      ];
+    }
+
+    const sessions = await InterviewSession.find(filter).sort({ createdAt: -1 }).lean();
+
+    const { calculateCandidateProgression } = await import("../services/interview/interviewAnalyticsService.js");
+    const progression = await calculateCandidateProgression(req.user._id, { role });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        sessions,
+        progression
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 11. Get Interview Replay (/interview-replay/:sessionId)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export async function getReplay(req, res, next) {
+  try {
+    const { sessionId } = req.params;
+    const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user._id }).lean();
+
+    if (!session) {
+      throw new AppError("Interview session not found", 404);
+    }
+
+    const rawQuestions = await InterviewQuestion.find({ sessionId }).sort({ createdAt: 1 }).lean();
+    const challenges = await InterviewChallenge.find({ interviewSessionId: sessionId }).sort({ createdAt: 1 }).lean();
+
+    const normalizedQuestions = rawQuestions.map(normalizeQuestionEvaluation);
+
+    // Merge verbal questions and coding challenges into single chronological timeline
+    const timeline = [];
+
+    normalizedQuestions.forEach((q, idx) => {
+      timeline.push({
+        id: q._id,
+        createdAt: q.createdAt,
+        type: "VERBAL",
+        questionType: q.questionType,
+        category: q.category,
+        technology: q.technology,
+        concept: q.concept,
+        difficulty: q.difficulty,
+        questionText: q.questionText,
+        expectedConcepts: q.expectedConcepts || [],
+        userAnswer: {
+          transcript: q.transcript || "",
+          userAudioUrl: q.userAnswerAudioUrl || null,
+        },
+        evaluation: {
+          technicalAccuracy: q.analysis?.technicalAccuracy ?? 70,
+          communication: q.analysis?.communication ?? 75,
+          correctness: q.evaluation?.correctness || "Medium",
+          relevance: q.evaluation?.relevance || "Medium",
+          strengths: q.feedback?.strengths || q.evaluation?.strengths || [],
+          weaknesses: q.feedback?.weaknesses || q.evaluation?.weaknesses || [],
+          missingConcepts: q.feedback?.missingConcepts || q.evaluation?.missingConcepts || [],
+          idealAnswer: q.idealAnswer || { text: "Direct concise answer explaining key mechanics.", explanation: "" },
+        },
+        deliverySignals: q.deliverySignals || { unavailable: true },
+        presenceSignals: q.presenceSignals || { unavailable: true }
+      });
+    });
+
+    challenges.forEach((c) => {
+      timeline.push({
+        id: c._id,
+        createdAt: c.createdAt,
+        type: "CODING",
+        category: "Coding",
+        difficulty: c.difficulty || "medium",
+        questionText: c.question || "Coding Challenge",
+        description: c.description || c.question,
+        userAnswer: {
+          code: c.userCode || "",
+          language: c.language || "javascript",
+        },
+        executionSummary: c.executionSummary || { passedTests: 0, totalTests: 0 },
+        codeReview: c.aiReview || {
+          metrics: { correctness: 70, efficiency: 70, codeQuality: 70 },
+          timeComplexity: "O(N)",
+          spaceComplexity: "O(1)",
+          strengths: ["Implemented working solution"],
+          potentialIssues: []
+        }
+      });
+    });
+
+    timeline.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        session,
+        timeline,
+        turnsCount: timeline.length
+      }
+    });
+  } catch (error) {
     next(error);
   }
 }

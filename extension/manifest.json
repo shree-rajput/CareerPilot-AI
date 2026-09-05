@@ -42,6 +42,9 @@
         "https://*/*"
       ],
       "js": [
+        "content/contextDetector.js",
+        "content/gmailExtractor.js",
+        "content/gmailOverlay.js",
         "content/content_script.js"
       ],
       "type": "module",

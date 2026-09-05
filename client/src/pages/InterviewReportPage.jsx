@@ -80,15 +80,26 @@ export function InterviewReportPage() {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-surface p-6 sm:p-8 rounded-2xl border border-border shadow-sm">
         <div className="flex flex-col items-start gap-4">
-          <button 
-            className="inline-flex items-center gap-2 text-text-secondary hover:text-primary font-bold text-sm bg-bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-primary/30 transition-colors"
-            onClick={() => navigate("/interview")}
-          >
-            <ArrowLeft size={16} /> Back to Setup
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button 
+              className="inline-flex items-center gap-2 text-text-secondary hover:text-primary font-bold text-sm bg-bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-primary/30 transition-colors"
+              onClick={() => navigate("/interview")}
+            >
+              <ArrowLeft size={16} /> Back to Setup
+            </button>
+            <button 
+              className="inline-flex items-center gap-2 text-white bg-primary hover:bg-primary/90 font-bold text-sm px-3.5 py-1.5 rounded-lg shadow-sm transition-colors"
+              onClick={() => navigate(`/interview-replay/${sessionId}`)}
+            >
+              <BrainCircuit size={16} /> Replay Interview
+            </button>
+          </div>
           <div>
-            <h2 className="text-3xl font-extrabold text-text mb-1 tracking-tight">Interview Performance Report</h2>
-            <p className="text-text-secondary text-sm font-medium">Detailed breakdown of your session for <strong className="text-text">{session.targetRole}</strong></p>
+            <h2 className="text-3xl font-extrabold text-text mb-1 tracking-tight">Interview Readiness & Performance Report</h2>
+            <p className="text-text-secondary text-sm font-medium">
+              Detailed unified analysis for <strong className="text-text">{session.targetRole}</strong> 
+              {session.candidateExperience ? ` (${session.candidateExperience === 'fresher' ? 'Student / Fresher' : 'Junior Developer'})` : ''}
+            </p>
           </div>
           <button
             onClick={async () => {
@@ -107,35 +118,52 @@ export function InterviewReportPage() {
                 toast.success("Synced weak topics to Preparation checklist.");
               }
             }}
-            className="mt-2 inline-flex items-center gap-2 text-xs font-bold bg-primary text-white px-4 py-2 rounded-xl shadow-sm hover:bg-primary/90 transition-colors"
+            className="mt-1 inline-flex items-center gap-2 text-xs font-bold bg-bg-secondary text-primary border border-primary/30 px-3.5 py-2 rounded-xl shadow-sm hover:bg-primary/10 transition-colors"
           >
             <Lightbulb size={14} /> Sync Weak Topics to Preparation Plan
           </button>
         </div>
-        <div className="flex flex-col items-center justify-center bg-bg-secondary p-5 rounded-2xl border border-border min-w-[160px] shadow-inner">
-          <div className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Overall Score</div>
-          <div className={`text-4xl font-extrabold px-6 py-2 rounded-xl border ${getScoreBg(overallSessionScore)} shadow-sm`}>
-            {overallSessionScore}
+        <div className="flex flex-col items-center justify-center bg-bg-secondary p-5 rounded-2xl border border-border min-w-[170px] shadow-inner">
+          <div className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1.5">Overall Readiness</div>
+          <div className={`text-4xl font-extrabold px-6 py-2 rounded-xl border ${getScoreBg(session.scores?.overallReadiness ?? overallSessionScore)} shadow-sm`}>
+            {session.scores?.overallReadiness ?? overallSessionScore}
           </div>
         </div>
       </div>
 
-      {/* CATEGORIES */}
+      {/* RECURRING WEAKNESSES ALERT */}
+      {session.recurringWeaknesses && session.recurringWeaknesses.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl p-5 shadow-sm">
+          <h3 className="text-amber-800 dark:text-amber-300 font-bold text-sm uppercase tracking-wider flex items-center gap-2 mb-2">
+            <AlertTriangle size={18} /> Recurring Weakness Detected Across Sessions
+          </h3>
+          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-3">
+            The system identified these topics as recurring weak areas in your recent interview practice:
+          </p>
+          <ul className="list-disc list-inside text-xs text-amber-800 dark:text-amber-300 font-semibold space-y-1">
+            {session.recurringWeaknesses.map((rw, idx) => (
+              <li key={idx} className="capitalize">{rw}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* UNIFIED CATEGORIES */}
       <div>
         <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
           <div className="h-5 w-1.5 bg-primary rounded-full"></div>
-          Performance Categories
+          Unified Interview Analysis
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
-            { label: "Answer Quality", value: getFiniteScore(session.scores?.technical ? (session.scores.technical + (session.scores.structure || 70)) / 2 : 72), icon: BrainCircuit },
+            { label: "Technical", value: getFiniteScore(session.scores?.technical, 75), icon: BrainCircuit },
+            { label: "Coding", value: session.scores?.problemSolving != null ? getFiniteScore(session.scores.problemSolving) : null, icon: Target },
             { label: "Communication", value: getFiniteScore(session.scores?.communication, 75), icon: Mic },
-            { label: "Clarity", value: getFiniteScore(session.scores?.clarity, 75), icon: Target },
-            { label: "Video/Presence", value: session.scores?.videoPresence != null ? getFiniteScore(session.scores.videoPresence) : null, isUnavailable: true, icon: Video },
-            { label: "Technical", value: getFiniteScore(session.scores?.technical, 70), icon: BrainCircuit },
+            { label: "Delivery", value: session.scores?.delivery != null ? getFiniteScore(session.scores.delivery) : getFiniteScore(session.scores?.clarity, 70), icon: Video },
+            { label: "JD Alignment", value: session.scores?.jdAlignment != null ? getFiniteScore(session.scores.jdAlignment) : 80, icon: Target },
           ].map((cat, i) => {
             const Icon = cat.icon;
-            const isNullValue = cat.value === null || (cat.label === "Video/Presence" && (cat.value === null || cat.isUnavailable));
+            const isNullValue = cat.value === null;
             return (
               <Card key={i} className="shadow-sm border-border">
                 <CardContent className="p-5 flex flex-col items-center justify-center text-center gap-3">

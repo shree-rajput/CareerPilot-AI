@@ -46,9 +46,11 @@ const normalizeLanguage = (language) => {
 };
 
 const DEFAULT_STARTER_CODES = {
-  javascript: `/**\n * @param {any} input\n * @return {any}\n */\nfunction solution(input) {\n  // Write your JavaScript code here\n  return input;\n}`,
-  python: `# Solution function\ndef solution(input):\n    # Write your Python code here\n    return input\n`,
-  java: `public class Solution {\n    public Object solve(Object input) {\n        // Write your Java code here\n        return input;\n    }\n}`
+  javascript: `function solution(arr) {\n  // Write your JavaScript code here\n}`,
+  typescript: `function solution(arr: any): any {\n  // Write your TypeScript code here\n}`,
+  python: `def solution(arr):\n    # Write your Python code here\n    pass\n`,
+  java: `class Solution {\n    public Object solution(Object arr) {\n        // Write your Java code here\n        return null;\n    }\n}`,
+  cpp: `class Solution {\npublic:\n    auto solution(auto arr) {\n        // Write your C++ code here\n    }\n};`
 };
 
 const getStarterCode = (question, language) => {
@@ -90,7 +92,7 @@ export default function CodeEditor({
       ? question.supportedLanguages
       : question?.languages?.length > 0
       ? question.languages
-      : ["javascript", "python", "java"]);
+      : ["javascript", "python", "java", "cpp"]);
     return raw.map(normalizeLanguage);
   }, [question]);
 
@@ -100,12 +102,15 @@ export default function CodeEditor({
     ) || "javascript";
 
   const [language, setLanguage] = useState(firstLanguage);
+  const codeByLanguageRef = useRef({});
 
   const [code, setCode] = useState(() => {
     if (typeof value === "string") {
       return value;
     }
-    return getStarterCode(question, firstLanguage);
+    const starter = getStarterCode(question, firstLanguage);
+    codeByLanguageRef.current[firstLanguage] = starter;
+    return starter;
   });
 
   const [activeTestCase, setActiveTestCase] = useState(0);
@@ -120,6 +125,8 @@ export default function CodeEditor({
   }, [value]);
 
   useEffect(() => {
+    codeByLanguageRef.current = {};
+
     const newLanguage = normalizeLanguage(
       initialLanguage ||
       question?.defaultLanguage ||
@@ -129,12 +136,16 @@ export default function CodeEditor({
 
     setLanguage(newLanguage);
     const starter = getStarterCode(question, newLanguage);
-    setCode(starter);
+    codeByLanguageRef.current[newLanguage] = starter;
+
+    if (typeof value !== "string" || !value) {
+      setCode(starter);
+    }
 
     if (yjsProvider) {
       yjsProvider.resetCode(starter);
     }
-  }, [question?.id, question?._id, question?.title]);
+  }, [question?.id, question?._id, question?.title, question?.question]);
 
   // Setup Monaco mount handler
   const handleEditorMount = (editor, monaco) => {
@@ -230,8 +241,16 @@ export default function CodeEditor({
   const handleLanguageChange = (newLanguage) => {
     const normalizedLanguage = normalizeLanguage(newLanguage);
 
+    // Cache current language code before switching
+    if (code) {
+      codeByLanguageRef.current[language] = code;
+    }
+
     setLanguage(normalizedLanguage);
-    const newStarterCode = getStarterCode(question, normalizedLanguage);
+
+    const cachedCode = codeByLanguageRef.current[normalizedLanguage];
+    const newStarterCode = cachedCode || getStarterCode(question, normalizedLanguage);
+    codeByLanguageRef.current[normalizedLanguage] = newStarterCode;
 
     setCode(newStarterCode);
 
@@ -251,6 +270,7 @@ export default function CodeEditor({
     const updatedCode = newValue || "";
 
     setCode(updatedCode);
+    codeByLanguageRef.current[language] = updatedCode;
 
     // Only emit if the change originated from THIS user's keyboard
     if (updatedCode !== remoteCode.current && socket) {

@@ -64,7 +64,7 @@ export const interviewChallengeSchema = z.object({
   technology: z.string().describe("The primary technology or framework (e.g. 'React', 'Node.js', or just 'Algorithms')."),
   language: z.string().describe("The primary language expected (e.g. 'javascript', 'python')."),
   difficulty: z.enum(["easy", "medium", "hard"]).describe("Difficulty level."),
-  starterCode: z.record(z.string()).describe("A dictionary mapping language string (e.g., 'javascript') to the starting code string."),
+  starterCode: z.union([z.record(z.string()), z.string()]).optional().default({}),
   requirements: z.array(z.string()).describe("List of functional requirements."),
   constraints: z.array(z.string()).describe("List of technical constraints (e.g., O(n) time complexity)."),
   evaluationCriteria: z.array(z.string()).describe("What to look for when reviewing the code."),
@@ -100,36 +100,40 @@ export const adaptiveActionSchema = z.object({
 });
 
 export const evidenceEvaluationSchema = z.object({
-  overallScore: z.number().min(0).max(100).default(75),
-  answerStatus: z.enum(["NO_ANSWER", "INCORRECT", "PARTIAL", "CORRECT"]).default("CORRECT"),
-  correctnessScore: z.number().min(0).max(100).default(75),
-  relevance: z.enum(["High", "Medium", "Low"]).default("Medium"),
-  correctness: z.enum(["High", "Medium", "Low"]).default("Medium"),
-  depth: z.enum(["High", "Medium", "Low"]).default("Medium"),
-  specificity: z.enum(["High", "Medium", "Low"]).default("Medium"),
-  communication: z.object({
-    score: z.number().min(0).max(100).default(75),
-    clarity: z.number().min(0).max(100).default(75),
-    relevance: z.number().min(0).max(100).default(75),
-    structure: z.number().min(0).max(100).default(70),
-    conciseness: z.number().min(0).max(100).default(75),
-    fillerUsage: z.number().min(0).max(100).default(80),
-    evidence: z.array(z.string()).default([])
-  }).optional(),
-  technicalKnowledge: z.record(z.any()).default({}),
-  problemSolving: z.record(z.any()).default({}),
+  answerStatus: z.enum([
+    "CORRECT_ANSWER",
+    "PARTIAL_ANSWER",
+    "INCORRECT_ANSWER",
+    "NO_ANSWER",
+    "IRRELEVANT_ANSWER",
+    "TRANSCRIPTION_FAILURE"
+  ]).default("CORRECT_ANSWER"),
+  evidence: z.object({
+    demonstratedConcepts: z.array(z.string()).default([]),
+    missingConcepts: z.array(z.string()).default([]),
+    incorrectClaims: z.array(z.string()).default([]),
+    reasoningSignals: z.array(z.string()).default([]),
+    practicalSignals: z.array(z.string()).default([]),
+    communicationSignals: z.object({
+      clarity: z.string().default("Answer point is clear"),
+      structure: z.string().default("Logical sequence"),
+      relevance: z.string().default("Stays on topic"),
+      conciseness: z.string().default("Concise and direct"),
+      explanationQuality: z.string().default("Explains reasoning effectively")
+    }).default({}),
+    uncertaintyExpressed: z.boolean().default(false),
+    isCorruptedTranscription: z.boolean().default(false)
+  }).default({}),
   evidenceCollected: z.array(z.string()).default([]),
   strengths: z.array(z.string()).default([]),
   weaknesses: z.array(z.string()).default([]),
-  improvements: z.array(z.string()).default([]),
   missingConcepts: z.array(z.string()).default([]),
-  nextQuestion: z.string().nullable().default(null),
   confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
   idealAnswer: z.object({
     text: z.string().default(""),
     explanation: z.string().default("")
-  }).optional(),
-  analysisSource: z.enum(["ai", "deterministic_fallback", "deterministic_non_answer"]).default("ai"),
+  }).default({ text: "", explanation: "" }),
+  analysisSource: z.enum(["ai", "deterministic_fallback", "deterministic_non_answer", "deterministic_transcription_failure"]).default("ai"),
   fallbackReason: z.string().default("")
 });
 

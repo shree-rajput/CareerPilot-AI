@@ -146,6 +146,54 @@
           <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Application Workspace</button>
         </div>
       </div>
+
+      <!-- Gmail Email Lifecycle State -->
+      <div id="stateGmailEmail" class="state-card hidden">
+        <div class="email-header-badge">
+          <span class="badge badge-success">✉️ Application Email Detected</span>
+          <span id="gmailConfidenceBadge" class="badge badge-primary">High Confidence</span>
+        </div>
+
+        <div class="email-info-card mt-8">
+          <h2 id="gmailExtractedCompany" class="job-title">Company Name</h2>
+          <p id="gmailExtractedRole" class="job-company">Role Title</p>
+          
+          <div class="email-meta-grid mt-12">
+            <div class="meta-item">
+              <span class="meta-label">Email Event:</span>
+              <span id="gmailEventType" class="meta-value font-semibold">Application Received</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">CareerPilot Status:</span>
+              <span id="gmailTargetStatus" class="status-pill">APPLIED</span>
+            </div>
+            <div class="meta-item full-width">
+              <span class="meta-label">Sender:</span>
+              <span id="gmailSenderText" class="meta-value text-muted">notifications@recooty.com</span>
+            </div>
+          </div>
+
+          <div id="gmailMatchContainer" class="gmail-match-box mt-12">
+            <p id="gmailMatchText" class="hint">Matching application found: <strong>Company — Role</strong></p>
+          </div>
+
+          <!-- Ambiguous Match Selector -->
+          <div id="gmailAmbiguousSelector" class="ambiguous-selector hidden mt-12">
+            <p class="hint font-semibold text-warning">Multiple applications match this company. Select one:</p>
+            <select id="gmailAppSelect" class="input mt-8"></select>
+          </div>
+        </div>
+
+        <div class="action-bar mt-12">
+          <button id="gmailProcessBtn" class="btn btn-primary">Update Application Status</button>
+        </div>
+
+        <!-- Debug / Diagnostics Section -->
+        <div class="debug-section mt-12">
+          <button id="toggleDebugBtn" class="btn-link text-xs">Show Diagnostics</button>
+          <pre id="gmailDebugPanel" class="debug-panel hidden text-xs mt-8"></pre>
+        </div>
+      </div>
     </main>
   </div>
 

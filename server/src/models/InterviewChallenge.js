@@ -76,6 +76,15 @@ const interviewChallengeSchema = new mongoose.Schema(
       type: starterCodeSchema,
       default: () => ({})
     },
+    execution: {
+      mode: { type: String, enum: ["FUNCTION", "STDIN"], default: "FUNCTION" },
+      functionName: { type: String, default: "search" },
+      parameters: [{
+        name: { type: String },
+        type: { type: String }
+      }],
+      returnType: { type: String, default: "AUTO" }
+    },
     testCases: {
       type: [testCaseSchema],
       default: []

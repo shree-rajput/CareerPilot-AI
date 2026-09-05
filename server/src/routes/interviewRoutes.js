@@ -9,7 +9,9 @@ import {
   listSessions,
   transcribeAudio,
   submitCodingAnswer,
-  runCode
+  runCode,
+  getHistory,
+  getReplay
 } from "../controllers/interviewController.js";
 import multer from "multer";
 
@@ -21,7 +23,10 @@ router.use(requireAuth);
 
 router.post("/", createSession);
 router.get("/", listSessions);
+router.get("/history", getHistory);
 router.get("/:sessionId/report", getSessionReport);
+router.get("/:sessionId/replay", getReplay);
+router.get("/replay/:sessionId", getReplay);
 router.post("/:sessionId/question", getNextQuestion);
 router.post("/question/:questionId/answer", submitAnswer);
 router.post("/question/:questionId/run", runCode);

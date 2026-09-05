@@ -30,6 +30,8 @@ export function InterviewSetupPage() {
     technologyStack: defaultTechs,
     interviewType: user?.interviewPreferences?.defaultInterviewType || "mixed",
     difficulty: user?.interviewPreferences?.defaultDifficulty || "medium",
+    candidateExperience: "fresher", // fresher (0-1 YOE) | junior (1-2 YOE)
+    enableVideoPresence: true,
     jobDescription: "",
     numberOfQuestions: 5
   });
@@ -101,9 +103,19 @@ export function InterviewSetupPage() {
           </span>
           <h1 className="text-xl font-bold text-text m-0 tracking-tight">Solo Technical Interview Practice</h1>
           <p className="text-xs text-text-secondary mt-0.5 m-0 font-medium">
-            Simulate real interview environments with AI-driven adaptive question prompts and scoring.
+            Simulate real interview environments with AI-driven adaptive question prompts and scoring for students & freshers.
           </p>
         </div>
+        <Button 
+          type="button" 
+          variant="secondary" 
+          size="sm"
+          onClick={() => navigate('/interview-history')}
+          className="flex items-center gap-1.5"
+        >
+          <BrainCircuit size={14} className="text-primary" />
+          <span>View History & Progress</span>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -154,6 +166,17 @@ export function InterviewSetupPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Candidate Experience</label>
+                  <select
+                    className="w-full bg-surface border border-border rounded-lg h-9 px-2.5 text-xs font-semibold text-text outline-none cursor-pointer"
+                    value={form.candidateExperience}
+                    onChange={e => setForm({ ...form, candidateExperience: e.target.value })}
+                  >
+                    <option value="fresher">Student / Fresher (0–1 YOE)</option>
+                    <option value="junior">Junior Developer (1–2 YOE)</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-text-secondary mb-1.5">Interview Format</label>
                   <select
                     className="w-full bg-surface border border-border rounded-lg h-9 px-2.5 text-xs font-semibold text-text outline-none cursor-pointer"
@@ -166,29 +189,43 @@ export function InterviewSetupPage() {
                     <option value="project">Project Architecture</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Difficulty</label>
-                  <select
-                    className="w-full bg-surface border border-border rounded-lg h-9 px-2.5 text-xs font-semibold text-text outline-none cursor-pointer"
-                    value={form.difficulty}
-                    onChange={e => setForm({ ...form, difficulty: e.target.value })}
-                  >
-                    <option value="easy">Easy (Junior)</option>
-                    <option value="medium">Medium (Mid-level)</option>
-                    <option value="hard">Hard (Senior)</option>
-                  </select>
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1.5">Difficulty</label>
+                <select
+                  className="w-full bg-surface border border-border rounded-lg h-9 px-2.5 text-xs font-semibold text-text outline-none cursor-pointer"
+                  value={form.difficulty}
+                  onChange={e => setForm({ ...form, difficulty: e.target.value })}
+                >
+                  <option value="easy">Easy (Fundamentals & Conceptual)</option>
+                  <option value="medium">Medium (Standard Practical Interview)</option>
+                  <option value="hard">Hard (Advanced Edge Cases)</option>
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-text-secondary mb-1.5">Job Description (Optional)</label>
                 <textarea
                   className="w-full bg-surface border border-border rounded-lg p-3 text-xs text-text placeholder-text-muted focus:border-primary outline-none"
-                  placeholder="Paste job description for targeted questions..."
+                  placeholder="Paste Job Description (JD) to tailor questions to requested skills..."
                   value={form.jobDescription}
                   onChange={e => setForm({ ...form, jobDescription: e.target.value })}
                   rows={3}
                 />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border">
+                <input
+                  type="checkbox"
+                  id="enableVideoPresence"
+                  checked={form.enableVideoPresence}
+                  onChange={e => setForm({ ...form, enableVideoPresence: e.target.checked })}
+                  className="rounded accent-primary"
+                />
+                <label htmlFor="enableVideoPresence" className="text-xs font-semibold text-text cursor-pointer">
+                  Enable Browser-Side Video Presence Coaching (Eye contact, posture notes)
+                </label>
               </div>
 
               <div>

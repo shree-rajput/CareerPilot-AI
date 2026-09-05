@@ -10,6 +10,8 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { InterviewReportPage } from "./pages/InterviewReportPage";
 import { InterviewSessionPage } from "./pages/InterviewSessionPage";
 import { InterviewSetupPage } from "./pages/InterviewSetupPage";
+import { InterviewHistoryPage } from "./pages/InterviewHistoryPage";
+import { InterviewReplayPage } from "./pages/InterviewReplayPage";
 import { MatchResultPage } from "./pages/MatchResultPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ResumePage } from "./pages/ResumePage";
@@ -76,6 +78,7 @@ export function App() {
 
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/interview" element={<InterviewSetupPage />} />
+            <Route path="/interview-history" element={<InterviewHistoryPage />} />
             <Route
               path="/interview/:sessionId"
               element={<InterviewSessionPage />}
@@ -83,6 +86,10 @@ export function App() {
             <Route
               path="/interview/:sessionId/report"
               element={<InterviewReportPage />}
+            />
+            <Route
+              path="/interview-replay/:sessionId"
+              element={<InterviewReplayPage />}
             />
 
             <Route

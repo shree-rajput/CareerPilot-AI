@@ -101,6 +101,25 @@ const interviewQuestionSchema = new mongoose.Schema(
       fillerWords: { type: Number, default: 0 },
       longPauses: { type: Number, default: 0 }
     },
+
+    deliverySignals: {
+      speakingPace: { type: Number, default: 0 },
+      fillerWords: { type: Number, default: 0 },
+      longPauses: { type: Number, default: 0 },
+      hesitationScore: { type: Number, default: 0 },
+      observedNotes: { type: String, default: "" },
+      suggestion: { type: String, default: "" },
+      unavailable: { type: Boolean, default: false }
+    },
+
+    presenceSignals: {
+      cameraAvailable: { type: Boolean, default: false },
+      gazeConsistency: { type: String, default: "" },
+      postureNotes: { type: String, default: "" },
+      observedNotes: { type: String, default: "" },
+      suggestion: { type: String, default: "" },
+      unavailable: { type: Boolean, default: false }
+    },
     
     // For coaching/practice mode
     idealAnswer: {

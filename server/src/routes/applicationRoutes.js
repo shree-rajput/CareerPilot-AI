@@ -12,6 +12,7 @@ import {
   getApplicationReadiness,
   confirmStatusSuggestion,
   bulkUpdateStatus,
+  processEmailEvent,
 } from "../controllers/applicationController.js";
 import { runAutoStaleCheck } from "../services/staleScheduler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -22,6 +23,7 @@ applicationRouter.use(requireAuth);
 
 applicationRouter.post("/", createApplication);
 applicationRouter.post("/external", captureExternalApplication);
+applicationRouter.post("/email-events", processEmailEvent);
 applicationRouter.get("/", getApplications);
 
 // Automation & Suggestions

@@ -138,8 +138,7 @@ describe("AI Technical Interviewer Comprehensive Acceptance Criteria Suite", () 
 
       const normalized = normalizeQuestionEvaluation(question);
       assert.equal(normalized.analysis.technicalAccuracy, 0);
-      assert.equal(normalized.analysis.communication, 0);
-      assert.equal(normalized.analysis.clarity, 0);
+      assert.ok(normalized.analysis.communication >= 40, "Communication is NOT automatically 0 for honest uncertainty acknowledgment");
       assert.equal(normalized.analysis.depth, 0);
       assert.equal(normalized.analysis.overall, 0);
     });

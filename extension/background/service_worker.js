@@ -24,6 +24,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === "PROCESS_EMAIL_EVENT") {
+    handleEmailEventProcessing(request.payload)
+      .then((res) => sendResponse({ success: true, data: res }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (request.type === "CHECK_AUTH") {
     checkAuthStatus()
       .then((authStatus) => sendResponse(authStatus))
@@ -131,3 +138,33 @@ async function handleJobIngestion(jobPayload) {
 
   return resData;
 }
+
+async function handleEmailEventProcessing(emailPayload) {
+  const { apiUrl, token } = await getApiConfig();
+
+  if (!token) {
+    throw new Error("AUTH_REQUIRED: Connect CareerPilot to process email events.");
+  }
+
+  const response = await fetch(`${apiUrl}/applications/email-events`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(emailPayload),
+  });
+
+  const resData = await response.json();
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await chrome.storage.local.remove(["token", "user"]);
+      throw new Error("SESSION_EXPIRED: Your CareerPilot session expired.");
+    }
+    throw new Error(resData.message || `Email processing failed (${response.status})`);
+  }
+
+  return resData;
+}
+

@@ -11,7 +11,8 @@ import {
   FolderGit2,
   GraduationCap,
   Code2,
-  Inbox
+  Inbox,
+  History
 } from "lucide-react";
 
 export const FEATURE_STATUS = {
@@ -95,6 +96,13 @@ export const NAVIGATION_CATEGORIES = [
         to: "/interview",
         label: "AI Interviewer",
         icon: Mic,
+        status: FEATURE_STATUS.WORKING
+      },
+      {
+        id: "interview-history",
+        to: "/interview-history",
+        label: "Interview History",
+        icon: History,
         status: FEATURE_STATUS.WORKING
       }
     ]

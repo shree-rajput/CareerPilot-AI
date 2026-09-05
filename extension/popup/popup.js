@@ -1,5 +1,6 @@
 /**
  * CareerPilot AI Extension Popup Script
+ * Universal Job Capture & Gmail Application Lifecycle Detection
  */
 
 let extractedPayload = null;
@@ -15,6 +16,7 @@ async function initUI() {
   const stateRestricted = document.getElementById("stateRestricted");
   const stateInjectionFailed = document.getElementById("stateInjectionFailed");
   const statePreview = document.getElementById("statePreview");
+  const stateGmailEmail = document.getElementById("stateGmailEmail");
   const stateAuth = document.getElementById("stateAuth");
   const connectionBadge = document.getElementById("connectionBadge");
   const disconnectBtn = document.getElementById("disconnectBtn");
@@ -42,13 +44,13 @@ async function initUI() {
 
   // 2. Check authentication status
   const authRes = await chrome.runtime.sendMessage({ type: "CHECK_AUTH" }).catch(() => ({ isAuthenticated: false }));
-  
+
   if (!authRes.isAuthenticated) {
     connectionBadge.innerText = "● Disconnected";
     connectionBadge.className = "badge badge-neutral";
     disconnectBtn.classList.add("hidden");
     showState(stateAuth);
-    
+
     document.getElementById("connectAppBtn").onclick = () => {
       const connectUrl = `${DEFAULT_APP_URL}/extension/connect?extensionId=${chrome.runtime.id}`;
       chrome.tabs.create({ url: connectUrl });
@@ -65,9 +67,21 @@ async function initUI() {
     initUI();
   };
 
-  // 3. Content Script Extraction Inspection
+  // 3. Page Context & Extraction Inspection
   try {
+    const isGmailTab = tab.url.includes("mail.google.com");
+
+    if (isGmailTab) {
+      await renderGmailState(tab);
+      return;
+    }
+
     const jobResult = await getJobDataFromTab(tab);
+
+    if (jobResult.context === "GMAIL_EMAIL" || jobResult.isGmail) {
+      await renderGmailState(tab, jobResult);
+      return;
+    }
 
     if (jobResult.status === "INJECTION_FAILED") {
       document.getElementById("injectionErrorMsg").innerText = "CareerPilot couldn't access this page tab.";
@@ -94,8 +108,125 @@ async function initUI() {
   }
 }
 
+async function renderGmailState(tab, initialResult = null) {
+  const stateGmailEmail = document.getElementById("stateGmailEmail");
+  showState(stateGmailEmail);
+
+  // Request extracted Gmail message from tab
+  let emailData = initialResult?.emailData;
+  if (!emailData) {
+    try {
+      emailData = await chrome.tabs.sendMessage(tab.id, { type: "GET_GMAIL_EVENT" });
+    } catch (e) {
+      console.warn("[CareerPilot] Failed to query Gmail message from tab:", e);
+    }
+  }
+
+  if (!emailData || (!emailData.subject && !emailData.bodyText)) {
+    document.getElementById("gmailExtractedCompany").innerText = "No Email Message Opened";
+    document.getElementById("gmailExtractedRole").innerText = "Open a job application email in Gmail to inspect.";
+    document.getElementById("gmailEventType").innerText = "N/A";
+    document.getElementById("gmailTargetStatus").innerText = "NONE";
+    document.getElementById("gmailSenderText").innerText = "N/A";
+    document.getElementById("gmailMatchText").innerText = "Open an application email in your inbox.";
+    document.getElementById("gmailProcessBtn").disabled = true;
+    return;
+  }
+
+  // Populate extracted fields
+  document.getElementById("gmailSenderText").innerText = emailData.senderEmail || emailData.senderName || "Unknown Sender";
+
+  // Send to backend via background worker
+  try {
+    const backendRes = await chrome.runtime.sendMessage({
+      type: "PROCESS_EMAIL_EVENT",
+      payload: emailData,
+    });
+
+    const data = backendRes?.data || {};
+    const classified = data.classified || {};
+    const matchResult = data.matchResult || {};
+
+    const company = classified.detectedCompany || emailData.extractedCompanyHints || "Unknown Company";
+    const role = classified.detectedRole || emailData.extractedRoleHints || "Unknown Role";
+    const eventType = (classified.eventType || "APPLICATION_RECEIVED").replace(/_/g, " ");
+    const targetStatus = (classified.detectedStatus || "applied").toUpperCase();
+    const eventConfidence = classified.eventConfidence || "HIGH";
+
+    document.getElementById("gmailExtractedCompany").innerText = company;
+    document.getElementById("gmailExtractedRole").innerText = role;
+    document.getElementById("gmailEventType").innerText = eventType;
+    document.getElementById("gmailTargetStatus").innerText = targetStatus;
+
+    const confBadge = document.getElementById("gmailConfidenceBadge");
+    confBadge.innerText = `${eventConfidence} Confidence`;
+    confBadge.className = eventConfidence === "HIGH" ? "badge badge-success" : "badge badge-info";
+
+    // Setup diagnostics panel
+    const debugPanel = document.getElementById("gmailDebugPanel");
+    debugPanel.innerText = JSON.stringify(
+      {
+        context: "GMAIL_EMAIL",
+        extractedSubject: emailData.subject,
+        extractedSender: emailData.senderEmail,
+        extractedCompany: company,
+        extractedRole: role,
+        detectedEvent: classified.eventType,
+        detectedStatus: classified.detectedStatus,
+        eventConfidence: classified.eventConfidence,
+        matchResultStatus: data.status,
+        matchConfidence: matchResult.confidence,
+        matchSignals: matchResult.matchSignals,
+      },
+      null,
+      2
+    );
+
+    document.getElementById("toggleDebugBtn").onclick = () => {
+      debugPanel.classList.toggle("hidden");
+    };
+
+    // Handle Match Outcomes
+    const matchText = document.getElementById("gmailMatchText");
+    const ambSelector = document.getElementById("gmailAmbiguousSelector");
+    const processBtn = document.getElementById("gmailProcessBtn");
+
+    if (data.status === "ALREADY_PROCESSED") {
+      matchText.innerHTML = `✓ <strong>Already Processed</strong>: Email event recorded in timeline.`;
+      ambSelector.classList.add("hidden");
+      processBtn.disabled = true;
+      processBtn.innerText = "✓ Application Updated";
+    } else if (data.status === "AUTOMATIC_UPDATE") {
+      matchText.innerHTML = `✓ Matched application: <strong>${data.application?.company} — ${data.application?.role}</strong>`;
+      ambSelector.classList.add("hidden");
+      processBtn.disabled = true;
+      processBtn.innerText = "✓ Status Updated to " + targetStatus;
+    } else if (data.status === "AMBIGUOUS_MATCH") {
+      matchText.innerHTML = `⚠️ <strong>Ambiguous Match</strong>: Multiple candidate applications found.`;
+      ambSelector.classList.remove("hidden");
+      const select = document.getElementById("gmailAppSelect");
+      select.innerHTML = (data.matchingCandidates || [])
+        .map((c) => `<option value="${c._id}">${c.company} — ${c.role} (${c.status.toUpperCase()})</option>`)
+        .join("");
+      processBtn.disabled = false;
+      processBtn.innerText = "Confirm Update for Selected App";
+    } else if (data.status === "NO_MATCHING_APPLICATION") {
+      matchText.innerHTML = `ℹ️ No existing workspace application matched. Click below to create application.`;
+      ambSelector.classList.add("hidden");
+      processBtn.disabled = false;
+      processBtn.innerText = "Create New Application from Email";
+    } else {
+      matchText.innerHTML = `Event detected: <strong>${eventType}</strong>`;
+      ambSelector.classList.add("hidden");
+      processBtn.disabled = false;
+      processBtn.innerText = "Update Application Status";
+    }
+  } catch (err) {
+    console.error("[CareerPilot] Gmail backend event processing error:", err);
+  }
+}
+
 async function getJobDataFromTab(tab) {
-  // Attempt 1: Direct message to pre-injected content script
   try {
     const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_JOB_DATA" });
     if (res && res.status) return res;
@@ -103,16 +234,18 @@ async function getJobDataFromTab(tab) {
     console.warn("[CareerPilot] Content script listener not active on tab:", tab.id, msgErr?.message);
   }
 
-  // Attempt 2: Dynamic Injection via chrome.scripting.executeScript
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["content/content_script.js"],
+      files: [
+        "content/contextDetector.js",
+        "content/gmailExtractor.js",
+        "content/gmailOverlay.js",
+        "content/content_script.js",
+      ],
     });
 
-    // Brief pause for listener registration
     await new Promise((r) => setTimeout(r, 60));
-
     const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_JOB_DATA" });
     return res || { status: "JOB_NOT_DETECTED", isJobPage: false, reason: "No response from content script." };
   } catch (injErr) {
@@ -132,6 +265,7 @@ function showState(targetState) {
     document.getElementById("stateNotJob"),
     document.getElementById("stateRestricted"),
     document.getElementById("statePreview"),
+    document.getElementById("stateGmailEmail"),
     document.getElementById("stateDuplicate"),
     document.getElementById("stateSuccess"),
     document.getElementById("stateAuth"),
@@ -163,7 +297,6 @@ function renderPreview(payload) {
     salaryBadge.classList.add("hidden");
   }
 
-  // Pre-fill review form
   document.getElementById("editTitle").value = payload.title || "";
   document.getElementById("editCompany").value = payload.company || "";
   document.getElementById("editLocation").value = payload.location || "";
@@ -195,18 +328,16 @@ function renderPreview(payload) {
   };
 
   document.getElementById("saveJobBtn").onclick = handleSaveJob;
-
   showState(statePreview);
 }
 
 async function handleSaveJob() {
   const saveBtn = document.getElementById("saveJobBtn");
-  if (saveBtn.disabled) return; // Idempotency guard
+  if (saveBtn.disabled) return;
 
   saveBtn.disabled = true;
   saveBtn.innerText = "Saving...";
 
-  // Merge edits if form is visible
   const reviewForm = document.getElementById("reviewForm");
   if (!reviewForm.classList.contains("hidden")) {
     extractedPayload.title = document.getElementById("editTitle").value;
@@ -250,7 +381,7 @@ function renderDuplicateState(data) {
   document.getElementById("dupTitle").innerText = data.job?.title || extractedPayload.title;
   document.getElementById("dupCompany").innerText = data.job?.company || extractedPayload.company;
   document.getElementById("dupStatus").innerText = (data.application?.status || "saved").toUpperCase();
-  
+
   const score = data.matchResult?.overallScore;
   if (typeof score === "number" && score > 0) {
     document.getElementById("dupMatch").innerText = `${score}%`;
@@ -269,7 +400,7 @@ function renderDuplicateState(data) {
 
 function renderSuccessState(data) {
   const stateSuccess = document.getElementById("stateSuccess");
-  
+
   const score = data.matchScore || data.matchResult?.overallScore;
   if (typeof score === "number" && score > 0) {
     document.getElementById("resMatchScore").innerText = `${score}%`;

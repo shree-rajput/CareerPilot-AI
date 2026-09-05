@@ -413,7 +413,90 @@ body {
   margin-top: 2px;
 }
 
+/* Gmail Email View */
+.email-header-badge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.email-info-card {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: left;
+}
+
+.email-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.meta-item.full-width {
+  grid-column: span 2;
+}
+
+.meta-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.meta-value {
+  color: var(--text-main);
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.status-pill {
+  display: inline-block;
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.gmail-match-box {
+  background-color: var(--bg-surface);
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.debug-panel {
+  background-color: #020617;
+  border: 1px solid var(--border-color);
+  color: #a7f3d0;
+  padding: 8px;
+  border-radius: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-align: left;
+  font-family: monospace;
+}
+
 /* Utilities */
 .hidden { display: none !important; }
 .mt-8 { margin-top: 8px; }
 .mt-12 { margin-top: 12px; }
+.font-semibold { font-weight: 600; }
+.text-warning { color: var(--accent-amber); }
+.text-muted { color: var(--text-muted); }
+.text-xs { font-size: 11px; }
+

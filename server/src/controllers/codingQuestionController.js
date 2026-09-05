@@ -1,5 +1,6 @@
 import CodingQuestion from "../models/CodingQuestions.js";
 import { InterviewSession } from "../models/InterviewSession.js";
+import { InterviewChallenge } from "../models/InterviewChallenge.js";
 import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
 import mongoose from "mongoose";
 
@@ -16,20 +17,30 @@ export const getCodingQuestion = async (req, res) => {
     }
 
     let interviewExists = false;
+    let question = null;
 
     // Check if it's a regular InterviewSession (24 char hex / valid ObjectId)
     if (mongoose.Types.ObjectId.isValid(sessionId) && sessionId.length === 24) {
       const interview = await InterviewSession.findById(sessionId)
         .select("_id userId type status")
         .lean();
-      if (interview) interviewExists = true;
+      if (interview) {
+        interviewExists = true;
+        const challenge = await InterviewChallenge.findOne({ interviewSessionId: sessionId })
+          .sort({ createdAt: -1 })
+          .lean();
+        if (challenge) question = challenge;
+      }
     } 
     // Otherwise check if it's a PeerInterviewRoom (usually 16 char hex)
     else {
       const peerRoom = await PeerInterviewRoom.findOne({ roomId: sessionId })
-        .select("_id roomId status")
+        .select("_id roomId status problem")
         .lean();
-      if (peerRoom) interviewExists = true;
+      if (peerRoom) {
+        interviewExists = true;
+        if (peerRoom.problem) question = peerRoom.problem;
+      }
     }
 
     if (!interviewExists) {
@@ -40,18 +51,15 @@ export const getCodingQuestion = async (req, res) => {
       });
     }
 
-    /*
-     * For now we select an active coding question.
-     */
-    const question = await CodingQuestion.findOne({
-      isActive: true,
-    })
-      .sort({ createdAt: 1 })
-      .lean();
+    if (!question) {
+      question = await CodingQuestion.findOne({
+        isActive: true,
+      })
+        .sort({ createdAt: 1 })
+        .lean();
+    }
 
     if (!question) {
-      // Gracefully return null instead of 404 to avoid breaking the frontend
-      // Peer interviews can still proceed without a coding question.
       return res.status(200).json(null);
     }
 

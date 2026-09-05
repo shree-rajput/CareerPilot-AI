@@ -2,6 +2,7 @@ import CodingQuestion from "../models/CodingQuestions.js";
 import CodingSubmission from "../models/CodingSubmission.js";
 import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
 import { InterviewSession } from "../models/InterviewSession.js";
+import { InterviewChallenge } from "../models/InterviewChallenge.js";
 import { executeCode } from "../services/codeExecution/executionService.js";
 
 const ALLOWED_LANGUAGES = new Set([
@@ -118,17 +119,32 @@ export const executeRoomCodeController = async (req, res) => {
       );
     }
 
-    // 2. Resolve Test Cases based on runMode ('run' vs 'submit')
+    // 2. Resolve Test Cases & Execution Contract based on questionId
     const runMode = req.body?.runMode || "run";
     let testCasesToRun = [];
+    let executionContract = null;
+    let targetQuestion = null;
 
     if (questionId && typeof questionId === "string" && questionId.match(/^[0-9a-fA-F]{24}$/)) {
-      const dbQuestion = await CodingQuestion.findById(questionId).lean();
-      if (dbQuestion?.testCases?.length > 0) {
-        testCasesToRun = runMode === "run"
-          ? dbQuestion.testCases.filter((tc) => !tc.hidden)
-          : dbQuestion.testCases;
+      targetQuestion = await CodingQuestion.findById(questionId).lean();
+      if (!targetQuestion) {
+        targetQuestion = await InterviewChallenge.findById(questionId).lean();
       }
+    }
+
+    if (targetQuestion) {
+      if (targetQuestion.testCases?.length > 0) {
+        testCasesToRun = runMode === "run"
+          ? targetQuestion.testCases.filter((tc) => !tc.hidden)
+          : targetQuestion.testCases;
+      }
+
+      executionContract = {
+        mode: targetQuestion.execution?.mode || "FUNCTION",
+        functionName: targetQuestion.execution?.functionName || targetQuestion.functionName || "solution",
+        parameters: targetQuestion.execution?.parameters || targetQuestion.parameters || [],
+        returnType: targetQuestion.execution?.returnType || targetQuestion.returnType || "AUTO"
+      };
     }
 
     if (testCasesToRun.length === 0 && roomProblem?.testCases?.length > 0) {
@@ -158,6 +174,7 @@ export const executeRoomCodeController = async (req, res) => {
         language: normLang,
         code,
         testCases: testCasesToRun,
+        executionContract,
       });
     } catch (execError) {
       console.error("Sandbox execution error:", execError);

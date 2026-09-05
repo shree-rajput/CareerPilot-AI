@@ -79,6 +79,35 @@ const interviewSessionSchema = new mongoose.Schema(
       ],
       default: "CREATED"
     },
+    // Candidate Experience Tier (Student/Fresher 0-1 yoe, Junior 1-2 yoe, Mid, Senior)
+    candidateExperience: {
+      type: String,
+      enum: ["fresher", "junior", "mid", "senior"],
+      default: "fresher"
+    },
+    // Conversation State Machine fields
+    currentTopicCategory: {
+      type: String,
+      enum: ["Backend", "Frontend", "Database", "Architecture", "Behavioral", "Coding"],
+      default: "Backend"
+    },
+    currentConcept: {
+      type: String,
+      default: ""
+    },
+    coveredConcepts: {
+      type: [String],
+      default: []
+    },
+    followUpDepth: {
+      type: Number,
+      default: 0
+    },
+    lastAnswerQuality: {
+      type: String,
+      enum: ["strong", "partial", "weak", "no_answer"],
+      default: "strong"
+    },
     // Compact context extracted from Resume, JD, and Role
     candidateContext: {
       summary: { type: String, default: "" },
@@ -138,7 +167,39 @@ const interviewSessionSchema = new mongoose.Schema(
       clarity: { type: Number, default: 0 },
       videoPresence: { type: Number, default: 0 },
       structure: { type: Number, default: 0 },
-      problemSolving: { type: Number, default: 0 }
+      problemSolving: { type: Number, default: 0 },
+      delivery: { type: Number, default: 0 },
+      jdAlignment: { type: Number, default: 0 },
+      overallReadiness: { type: Number, default: 0 }
+    },
+    // Structured JD context parsed from job description
+    jdContext: {
+      role: { type: String, default: "" },
+      level: { type: String, default: "" },
+      responsibilities: { type: [String], default: [] },
+      requiredSkills: { type: [String], default: [] },
+      preferredSkills: { type: [String], default: [] },
+      technologies: { type: [String], default: [] },
+      domain: { type: String, default: "" },
+      interviewRelevantTopics: { type: [String], default: [] }
+    },
+    // Passive Confidence & Delivery signals collected across session
+    deliverySignals: {
+      speakingPace: { type: Number, default: 0 },
+      fillerWords: { type: Number, default: 0 },
+      longPauses: { type: Number, default: 0 },
+      hesitationScore: { type: Number, default: 0 },
+      summaryText: { type: String, default: "" },
+      unavailable: { type: Boolean, default: false }
+    },
+    // Passive Body Language & Interview Presence signals collected across session
+    presenceSignals: {
+      enabled: { type: Boolean, default: false },
+      cameraAvailable: { type: Boolean, default: false },
+      gazeConsistency: { type: String, default: "" },
+      postureNotes: { type: String, default: "" },
+      summaryText: { type: String, default: "" },
+      unavailable: { type: Boolean, default: false }
     },
     // Final actionable coaching report
     finalReport: {
@@ -147,6 +208,7 @@ const interviewSessionSchema = new mongoose.Schema(
       whatWentWrong: { type: [String], default: [] },
       whyItWentWrong: { type: String, default: "" },
       howToImprove: { type: [String], default: [] },
+      recurringWeaknesses: { type: [String], default: [] },
       practicePlan: [{
         day: Number,
         focus: String,

@@ -1,13 +1,11 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { executeAiTask } from "../src/services/ai/orchestrator.js";
 import { validateEvidence } from "../src/services/ai/evidenceValidator.js";
 
-// Mock the AI Task router and dependencies
-jest.mock("../src/services/ai/groqProvider.js");
-
 describe("AI Orchestrator Pipeline", () => {
-  it("should successfully execute an AI task and return validated JSON", async () => {
-    // This test ensures the pipeline: Context -> Prompt -> Model -> Validation works
-    expect(true).toBe(true); // placeholder for actual Jest mock setup
+  it("should successfully execute an AI task placeholder", async () => {
+    assert.equal(true, true);
   });
 });
 
@@ -21,8 +19,8 @@ describe("Evidence Validator (Hallucination Control)", () => {
     };
 
     const validated = validateEvidence(evidenceData, sourceContext);
-    expect(validated.classification).toBe("strong");
-    expect(validated.resumeEvidence).toBe("built scalable APIs with Node.js");
+    assert.equal(validated.classification, "strong");
+    assert.equal(validated.resumeEvidence, "built scalable APIs with Node.js");
   });
 
   it("should downgrade to missing if evidence is hallucinated", () => {
@@ -32,8 +30,9 @@ describe("Evidence Validator (Hallucination Control)", () => {
     };
 
     const validated = validateEvidence(evidenceData, sourceContext);
-    expect(validated.classification).toBe("missing");
-    expect(validated.resumeEvidence).toBe("");
-    expect(validated._hallucinationDetected).toBe(true);
+    assert.equal(validated.classification, "missing");
+    assert.equal(validated.resumeEvidence, "");
+    assert.equal(validated._hallucinationDetected, true);
   });
 });
+

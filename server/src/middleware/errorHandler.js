@@ -9,7 +9,8 @@ export function errorHandler(error, _req, res, _next) {
   let statusCode = error.statusCode || 500;
   let message = error.message || "Something went wrong";
   let code = error.code || "SERVER_ERROR";
-  let details = undefined;
+  let field = error.field || undefined;
+  let details = error.details || undefined;
 
   // Handle AI Provider & AI Validation Errors safely without leaking stack traces/API keys to user
   const isAiError = 
@@ -32,6 +33,7 @@ export function errorHandler(error, _req, res, _next) {
     message = "Validation Error";
     code = "VALIDATION_ERROR";
     details = error.errors.map(e => ({ path: e.path.join('.'), message: e.message }));
+    if (details.length > 0) field = details[0].path;
   }
   
   // Handle Mongoose Validation Errors
@@ -41,23 +43,33 @@ export function errorHandler(error, _req, res, _next) {
     details = Object.values(error.errors).map(e => ({ path: e.path, message: e.message }));
     const firstDetail = details.length > 0 ? `${details[0].path}: ${details[0].message}` : "";
     message = firstDetail ? `Database Validation Error (${firstDetail})` : "Database Validation Error";
+    if (details.length > 0) field = details[0].path;
     console.error("[errorHandler] Mongoose ValidationError details:", details);
   }
   
   if (error.name === "CastError") {
     statusCode = 400;
-    message = `Invalid value for ${error.path}`;
-    code = "CAST_ERROR";
+    message = `Invalid ID or value for ${error.path}`;
+    code = "INVALID_OBJECT_ID";
+    field = error.path;
   }
 
   if (statusCode >= 500 && !isAiError) {
-    console.error(error);
+    console.error("[Server Error]", error);
   }
 
+  // Standardized response compatible with legacy and structured clients
   res.status(statusCode).json({
+    success: false,
     message,
     code,
     details,
+    error: {
+      code,
+      message,
+      field,
+      details
+    },
     stack: env.nodeEnv === "development" && !isAiError ? error.stack : undefined
   });
 }

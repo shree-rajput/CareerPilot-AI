@@ -14,7 +14,12 @@ export const interviewApi = {
     return res.data.data;
   },
   submitAnswer: async (questionId, data) => {
-    const res = await http.post(`/interview/question/${questionId}/answer`, data);
+    const payload = typeof data === "string" ? { transcript: data, answer: data } : {
+      transcript: data?.transcript || data?.answer || data?.text || "",
+      answer: data?.answer || data?.transcript || data?.text || "",
+      ...(typeof data === "object" ? data : {})
+    };
+    const res = await http.post(`/interview/question/${questionId}/answer`, payload);
     // Returns { question, interviewerReaction }
     return res.data.data;
   },
@@ -33,6 +38,14 @@ export const interviewApi = {
   },
   getSessionReport: async (sessionId) => {
     const res = await http.get(`/interview/${sessionId}/report`);
+    return res.data.data;
+  },
+  getHistory: async (params = {}) => {
+    const res = await http.get("/interview/history", { params });
+    return res.data.data;
+  },
+  getReplay: async (sessionId) => {
+    const res = await http.get(`/interview/${sessionId}/replay`);
     return res.data.data;
   },
   transcribeAudio: async (formData) => {

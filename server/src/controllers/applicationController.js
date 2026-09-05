@@ -6,6 +6,11 @@ import { MatchResult } from "../models/MatchResult.js";
 import { extractJobDescription } from "../services/ai/aiService.js";
 import { getApplicationIntelligence } from "../services/career/careerIntelligenceService.js";
 import { executeAiTask } from "../services/ai/orchestrator.js";
+import { EmailEventRecord } from "../models/EmailEventRecord.js";
+import { Notification } from "../models/Notification.js";
+import { classifyEmailEvent } from "../services/career/emailClassificationService.js";
+import { matchEmailToApplication } from "../services/career/applicationMatchingService.js";
+import { validateAndApplyTransition, canTransitionStatus } from "../services/career/statusTransitionEngine.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
@@ -475,4 +480,258 @@ export const bulkUpdateStatus = asyncHandler(async (req, res) => {
     updatedCount: apps.length,
   });
 });
+
+/**
+ * POST /api/applications/email-events
+ * Process email lifecycle events with multi-signal classification, matching, idempotency, and transition validation.
+ */
+export const processEmailEvent = asyncHandler(async (req, res) => {
+  const {
+    messageId,
+    threadId,
+    senderName,
+    senderEmail,
+    senderDomain,
+    subject,
+    bodyText,
+    links,
+    timestamp,
+  } = req.body || {};
+
+  if (!messageId || typeof messageId !== "string") {
+    throw new AppError("messageId string is required.", 400, "VALIDATION_ERROR");
+  }
+
+  // 1. Idempotency Check: Prevent duplicate processing of the same email
+  const existingRecord = await EmailEventRecord.findOne({ userId: req.user._id, messageId }).lean();
+  if (existingRecord) {
+    return res.status(200).json({
+      status: "ALREADY_PROCESSED",
+      message: "Email message already processed.",
+      record: existingRecord,
+    });
+  }
+
+  // 2. Classify Event
+  const emailData = {
+    messageId,
+    threadId: threadId || "",
+    senderName: senderName || "",
+    senderEmail: senderEmail || "",
+    senderDomain: senderDomain || (senderEmail ? senderEmail.split("@")[1] : ""),
+    subject: subject || "",
+    bodyText: bodyText || "",
+    links: Array.isArray(links) ? links : [],
+    timestamp: timestamp ? new Date(timestamp) : new Date(),
+  };
+
+  const classified = classifyEmailEvent(emailData);
+
+  if (!classified.isApplicationRelevant) {
+    const record = await EmailEventRecord.create({
+      userId: req.user._id,
+      messageId,
+      threadId: emailData.threadId,
+      eventType: "NOT_APPLICATION_RELEVANT",
+      detectedStatus: "saved",
+      confidence: "low",
+      confidenceScore: 0,
+      sender: emailData.senderName,
+      senderEmail: emailData.senderEmail,
+      senderDomain: emailData.senderDomain,
+      subject: emailData.subject,
+      receivedAt: emailData.timestamp,
+      actionTaken: "IGNORED_NOT_RELEVANT",
+    });
+
+    return res.status(200).json({
+      status: "NOT_APPLICATION_RELEVANT",
+      classified,
+      record,
+    });
+  }
+
+  // 3. Application Matching
+  const matchResult = await matchEmailToApplication(req.user._id, emailData, classified);
+
+  if (matchResult.isAmbiguous) {
+    const record = await EmailEventRecord.create({
+      userId: req.user._id,
+      messageId,
+      threadId: emailData.threadId,
+      eventType: classified.eventType,
+      detectedStatus: classified.detectedStatus,
+      confidence: "medium",
+      confidenceScore: matchResult.confidenceScore,
+      sender: emailData.senderName,
+      senderEmail: emailData.senderEmail,
+      senderDomain: emailData.senderDomain,
+      subject: emailData.subject,
+      receivedAt: emailData.timestamp,
+      evidence: classified.evidenceSnippet,
+      matchSignals: matchResult.matchSignals,
+      actionTaken: "AMBIGUOUS_MATCH_REQUIRES_SELECTION",
+    });
+
+    return res.status(200).json({
+      status: "AMBIGUOUS_MATCH",
+      classified,
+      matchResult,
+      matchingCandidates: matchResult.matchingCandidates,
+      record,
+    });
+  }
+
+  if (!matchResult.matchedApplication || matchResult.confidence?.toUpperCase() === "LOW") {
+    const record = await EmailEventRecord.create({
+      userId: req.user._id,
+      messageId,
+      threadId: emailData.threadId,
+      eventType: classified.eventType,
+      detectedStatus: classified.detectedStatus,
+      confidence: matchResult.confidence?.toLowerCase() || "low",
+      confidenceScore: matchResult.confidenceScore,
+      sender: emailData.senderName,
+      senderEmail: emailData.senderEmail,
+      senderDomain: emailData.senderDomain,
+      subject: emailData.subject,
+      receivedAt: emailData.timestamp,
+      evidence: classified.evidenceSnippet,
+      matchSignals: matchResult.matchSignals,
+      actionTaken: "IGNORED_LOW_CONFIDENCE",
+    });
+
+    return res.status(200).json({
+      status: "NO_MATCHING_APPLICATION",
+      classified,
+      matchResult,
+      record,
+    });
+  }
+
+  const app = await Application.findOne({ _id: matchResult.matchedApplication._id, userId: req.user._id });
+
+  // 4. Validate Status Transition
+  const canTransition = canTransitionStatus(app.status, classified.detectedStatus, "email");
+  if (!canTransition) {
+    const record = await EmailEventRecord.create({
+      userId: req.user._id,
+      messageId,
+      threadId: emailData.threadId,
+      eventType: classified.eventType,
+      detectedStatus: classified.detectedStatus,
+      confidence: matchResult.confidence?.toLowerCase() || "low",
+      confidenceScore: matchResult.confidenceScore,
+      matchedApplicationId: app._id,
+      sender: emailData.senderName,
+      senderEmail: emailData.senderEmail,
+      senderDomain: emailData.senderDomain,
+      subject: emailData.subject,
+      receivedAt: emailData.timestamp,
+      evidence: classified.evidenceSnippet,
+      matchSignals: matchResult.matchSignals,
+      actionTaken: "IGNORED_FORBIDDEN_TRANSITION",
+    });
+
+    return res.status(200).json({
+      status: "FORBIDDEN_TRANSITION",
+      reason: `Cannot transition application from '${app.status}' to '${classified.detectedStatus}'.`,
+      application: app,
+      classified,
+      record,
+    });
+  }
+
+  // 5. Apply Automatic Update (HIGH Confidence) or Pending Suggestion (MEDIUM Confidence)
+  const isHighMatch = matchResult.confidence?.toUpperCase() === "HIGH";
+  const isHighEvent = classified.eventConfidence?.toUpperCase() === "HIGH";
+
+  if (isHighMatch && isHighEvent) {
+    const transition = validateAndApplyTransition(app, {
+      targetStatus: classified.detectedStatus,
+      source: "email",
+      confidence: "high",
+      evidence: classified.evidenceSnippet,
+      note: `Email event: ${classified.eventType} (${classified.evidenceSnippet})`,
+    });
+
+    await app.save();
+
+    // Create In-App Notification
+    await Notification.create({
+      userId: req.user._id,
+      type: "APPLICATION_STATUS",
+      title: `${app.company} Application Updated`,
+      message: `Status for ${app.role} at ${app.company} updated to ${classified.detectedStatus.toUpperCase()} based on email event.`,
+      entityType: "application",
+      entityId: app._id.toString(),
+      actionUrl: `/applications/${app._id}`,
+      idempotencyKey: `email-${messageId}`,
+    }).catch(() => {});
+
+    const record = await EmailEventRecord.create({
+      userId: req.user._id,
+      messageId,
+      threadId: emailData.threadId,
+      eventType: classified.eventType,
+      detectedStatus: classified.detectedStatus,
+      confidence: "high",
+      confidenceScore: matchResult.confidenceScore,
+      matchedApplicationId: app._id,
+      sender: emailData.senderName,
+      senderEmail: emailData.senderEmail,
+      senderDomain: emailData.senderDomain,
+      subject: emailData.subject,
+      receivedAt: emailData.timestamp,
+      evidence: classified.evidenceSnippet,
+      matchSignals: matchResult.matchSignals,
+      actionTaken: "AUTOMATIC_UPDATE",
+    });
+
+    return res.status(200).json({
+      status: "AUTOMATIC_UPDATE",
+      application: app,
+      classified,
+      record,
+    });
+  } else {
+    // Medium confidence -> create pending suggestion
+    app.pendingStatusSuggestions.push({
+      suggestedStatus: classified.detectedStatus,
+      reason: classified.evidenceSnippet || `Email event detected: ${classified.eventType}`,
+      source: "email",
+      status: "pending",
+      createdAt: new Date(),
+    });
+
+    await app.save();
+
+    const record = await EmailEventRecord.create({
+      userId: req.user._id,
+      messageId,
+      threadId: emailData.threadId,
+      eventType: classified.eventType,
+      detectedStatus: classified.detectedStatus,
+      confidence: "medium",
+      confidenceScore: matchResult.confidenceScore,
+      matchedApplicationId: app._id,
+      sender: emailData.senderName,
+      senderEmail: emailData.senderEmail,
+      senderDomain: emailData.senderDomain,
+      subject: emailData.subject,
+      receivedAt: emailData.timestamp,
+      evidence: classified.evidenceSnippet,
+      matchSignals: matchResult.matchSignals,
+      actionTaken: "SUGGESTION_CREATED",
+    });
+
+    return res.status(200).json({
+      status: "SUGGESTION_CREATED",
+      application: app,
+      classified,
+      record,
+    });
+  }
+});
+
 

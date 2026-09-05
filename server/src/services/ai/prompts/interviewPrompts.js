@@ -2,7 +2,6 @@ export const generateQuestionPrompt = (params) => {
   const questionNumber = params.questionNumber || (params.previousQuestions ? params.previousQuestions.length + 1 : 1);
   const totalQuestions = params.totalQuestions || 10;
   
-  // Format previous questions context (combines current session and cross-session history)
   let historyContext = "No previous questions.";
   if (params.previousQuestions && params.previousQuestions.length > 0) {
     historyContext = params.previousQuestions.map((q, i) => 
@@ -10,17 +9,14 @@ export const generateQuestionPrompt = (params) => {
     ).join("\n");
   }
 
-  // Format concepts already tested
   const testedConcepts = params.conceptsTested && params.conceptsTested.length > 0
     ? params.conceptsTested.map(c => c.concept).join(", ")
     : "None";
 
-  // Format cross-session history
   const crossSessionHistory = params.crossSessionPreviousQuestions && params.crossSessionPreviousQuestions.length > 0
     ? params.crossSessionPreviousQuestions.map(q => `- ${q}`).join("\n")
     : "None";
 
-  // Format candidate context (projects, skills)
   let candidateProfile = `Target Role: ${params.targetRole}\nTechnology Stack: ${params.technologyStack.join(", ")}`;
   if (params.candidateProfile) {
     if (params.candidateProfile.projects?.length > 0) {
@@ -30,17 +26,23 @@ export const generateQuestionPrompt = (params) => {
     }
   }
 
-  return `You are an expert technical interviewer conducting a realistic, adaptive mock interview.
+  const experience = params.candidateExperience || "fresher";
+  const targetCategory = params.targetCategory || "Backend";
+  const targetConcept = params.targetConcept || "General Concept";
 
-CANDIDATE PROFILE:
+  return `You are a professional senior software engineer conducting a realistic, natural technical interview with a candidate.
+
+CANDIDATE PROFILE & EXPERIENCE LEVEL:
+Candidate Level: ${experience.toUpperCase()} (Primary Target: Student / Fresher / Placement Prep / Junior 0-2 YOE)
 ${candidateProfile}
 
 INTERVIEW CONFIGURATION:
 Requested Type: ${params.interviewType}
 Requested Difficulty: ${params.difficulty}
+Target Topic Area: ${targetCategory}
+Target Concept to Test: ${targetConcept}
 Current Question: ${questionNumber} of ${totalQuestions}
 ${params.jobDescription ? `Target Job Context:\n${params.jobDescription}` : ""}
-Session Seed: ${params.interviewSeed || "random"}
 
 PREVIOUS QUESTIONS HISTORY (THIS SESSION - DO NOT REPEAT):
 ${historyContext}
@@ -51,85 +53,86 @@ ${crossSessionHistory}
 CONCEPTS ALREADY TESTED (AVOID REPEATING):
 ${testedConcepts}
 
-Based on the candidate's profile, requested difficulty, and PREVIOUS PERFORMANCE, generate ONE highly relevant and UNIQUE interview question.
+CRITICAL RULES (MUST FOLLOW):
+1. ONE FOCUSED QUESTION (1-2 SENTENCES MAX): Ask EXACTLY ONE focused question at a time. The question text MUST be 1 to 2 sentences maximum (under 40 words).
+2. NO MULTI-PART ASSIGNMENTS: NEVER ask long assignment-style questions (e.g. DO NOT ask for API design + validation + error handling + frontend consumption + caching + trade-offs in one turn). Test ONE primary concept now; follow-ups will come in subsequent turns.
+3. STUDENT / JUNIOR APPROPRIATE: The candidate is preparing for entry-level roles. Ask practical, foundational questions (e.g. "How would you design a login API using Express?"). Avoid deep distributed systems, microservices at scale, or complex enterprise architecture unless explicitly configured for senior roles.
+4. NATURAL INTERVIEW VOICE: Write like a real human engineer having a conversation. Avoid robotic exam phrasing.
+5. NOVELTY: Do NOT ask any question from the history or a paraphrased version.
 
-CRITICAL GUIDELINES:
-1. NOVELTY: Do NOT ask any question from the history. Do NOT ask a paraphrased version. Do NOT test the exact same concept unless explicitly following up.
-2. STRICT DIFFICULTY CALIBRATION:
-   - EASY: Focus on core fundamentals, clear definitions, basic framework mechanics, and approachable concepts.
-   - MEDIUM: Focus on practical implementation, common patterns, real-world scenario trade-offs, and state/error handling.
-   - HARD: Focus on advanced optimization, deep internal mechanics, scalability under load, or complex system trade-offs.
-3. ADAPTIVE DIFFICULTY: If the candidate answered previous questions well (high correctness), ask a slightly deeper question. If they struggled, step down difficulty or ask a concept-building question.
-4. PERSONALIZATION: Strongly prefer asking questions based on the Candidate Projects provided above. Ask about their specific architecture, choices, or challenges in those projects instead of generic definitions.
-5. TYPE: Vary the question type. Use a mix of CONCEPTUAL, PRACTICAL, SCENARIO, and BEHAVIORAL based on the interview type.
-6. Make it sound like a real question spoken by a human interviewer.
-7. Return exactly one question.
-
-You MUST respond with ONLY a valid JSON object — no markdown, no explanation.
-The JSON object must use EXACTLY these field names:
-
+You MUST respond with ONLY a valid JSON object — no markdown, no explanation:
 {
-  "questionText": "<the full interview question as a string>",
-  "category": "<topic category, e.g. React, System Design, Behavioral>",
-  "difficulty": "<easy | medium | hard>",
-  "expectedConcepts": ["<concept 1>", "<concept 2>", "..."],
-  "followUpStrategy": "<how to adapt after this answer>",
+  "questionText": "<the 1-2 sentence focused interview question>",
+  "category": "${targetCategory}",
+  "difficulty": "${params.difficulty}",
+  "expectedConcepts": ["<concept 1>", "<concept 2>"],
+  "followUpStrategy": "<how to adapt after candidate's response>",
   "generationSource": "ai",
   "fallbackReason": ""
 }`;
 };
 
 export const evaluateAnswerPrompt = (params) => {
-  return `You are an expert technical interviewer evaluating a candidate's answer.
+  return `You are an expert AI Evaluation Architect extracting observable technical and communication evidence from an interview answer.
 
 Question Asked: ${params.questionText}
 Category: ${params.category}
 Difficulty: ${params.difficulty}
-Expected Concepts: ${params.expectedConcepts.join(", ")}
+Expected Concepts: ${(params.expectedConcepts || []).join(", ")}
 
 Candidate's Answer Transcript:
 "${params.transcript}"
 
-Communication Metrics (computed locally):
-- Speaking Pace: ${params.metrics?.speakingPace || "N/A"} wpm
-- Filler Words Detected: ${params.metrics?.fillerWords || 0}
-- Long Pauses: ${params.metrics?.longPauses || 0}
-
-Evaluate the candidate's answer comprehensively.
-
-CRITICAL EVALUATION GUIDELINES:
-1. STRICT NON-ANSWER ASSESSMENT: If the candidate answered "No", "I don't know", "No idea", "I'm not sure", or provided empty/irrelevant gibberish, you MUST set answerStatus to "NO_ANSWER", correctnessScore to 0, correctness to "Low", relevance to "Low", depth to "Low", and communication.score to 0.
+CRITICAL STAGE-1 EVIDENCE EXTRACTION RULES:
+1. DO NOT GENERATE NUMERIC SCORES. All numeric scores will be computed deterministically by downstream code.
 2. ANSWER CLASSIFICATION:
-   - "NO_ANSWER": Candidate declined to answer, stated they don't know, or gave a non-response (score = 0).
-   - "INCORRECT": Candidate attempted but gave factually wrong or completely off-target information (score = 1-30).
-   - "PARTIAL": Candidate covered some expected concepts accurately but missed important details or trade-offs (score = 31-70).
-   - "CORRECT": Candidate answered accurately, clearly, and addressed core technical concepts (score = 71-100).
-3. Generate a highly structured "ideal answer" that the candidate can learn from.
+   - "NO_ANSWER": Candidate stated "I don't know", "no idea", "not sure", blank response, refusal, or unintelligible response.
+   - "TRANSCRIPTION_FAILURE": Speech-to-text is garbled, corrupted, or missing critical words.
+   - "IRRELEVANT_ANSWER": Answer is off-topic or fails to address the question asked.
+   - "INCORRECT_ANSWER": Answer contains factually wrong claims or fundamentally incorrect technical logic.
+   - "PARTIAL_ANSWER": Answer accurately addresses some expected concepts but misses key details or trade-offs.
+   - "CORRECT_ANSWER": Answer accurately addresses expected concepts with valid technical reasoning.
 
-You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
-The JSON object must use EXACTLY these field names:
+3. EVIDENCE EXTRACTION:
+   - demonstratedConcepts: List exact concepts demonstrated in the transcript.
+   - missingConcepts: List expected concepts that were NOT demonstrated.
+   - incorrectClaims: List any factually wrong claims made by the candidate.
+   - reasoningSignals: List observable technical reasoning signals.
+   - practicalSignals: List concrete practical/real-world application signals.
+   - communicationSignals:
+     * clarity: Can the listener understand the candidate's point? (Evaluate directness without penalizing brevity)
+     * structure: Does the answer have logical flow and sequence?
+     * relevance: Does the answer stay connected to the question?
+     * conciseness: Does the answer avoid unnecessary repetition? (Do NOT reward length for length's sake)
+     * explanationQuality: Can the candidate articulate their reasoning?
 
+4. SEPARATION OF CONFLICTING SIGNALS:
+   - Do NOT penalize technical score for simple language or short answers if correct.
+   - Do NOT reward technical score for fluent speech if technical content is wrong.
+
+You MUST respond with ONLY a valid JSON object matching this exact structure:
 {
-  "answerStatus": "<NO_ANSWER | INCORRECT | PARTIAL | CORRECT>",
-  "correctnessScore": <0-100 numeric correctness score, 0 for NO_ANSWER>,
-  "relevance": "<High | Medium | Low>",
-  "correctness": "<High | Medium | Low>",
-  "depth": "<High | Medium | Low>",
-  "specificity": "<High | Medium | Low>",
-  "structure": "<High | Medium | Low>",
-  "communication": {
-    "score": <0-100 overall communication score>,
-    "clarity": <0-100 rating on directness and understandability>,
-    "relevance": <0-100 rating on staying on topic>,
-    "structure": <0-100 rating on logical flow and sequencing>,
-    "conciseness": <0-100 rating on efficiency without rambling>,
-    "fillerUsage": <0-100 rating for minimal filler words>,
-    "evidence": ["<specific observation 1>", "<specific observation 2>"]
+  "answerStatus": "<CORRECT_ANSWER | PARTIAL_ANSWER | INCORRECT_ANSWER | NO_ANSWER | IRRELEVANT_ANSWER | TRANSCRIPTION_FAILURE>",
+  "evidence": {
+    "demonstratedConcepts": ["<concept 1>", "<concept 2>"],
+    "missingConcepts": ["<concept 1>", "<concept 2>"],
+    "incorrectClaims": ["<incorrect claim 1>"],
+    "reasoningSignals": ["<reasoning signal 1>"],
+    "practicalSignals": ["<practical signal 1>"],
+    "communicationSignals": {
+      "clarity": "<observation on clarity>",
+      "structure": "<observation on flow>",
+      "relevance": "<observation on relevance>",
+      "conciseness": "<observation on conciseness>",
+      "explanationQuality": "<observation on explanation depth>"
+    },
+    "uncertaintyExpressed": <true | false>,
+    "isCorruptedTranscription": <true | false>
   },
-  "evidenceCollected": ["<quote or specific point 1>", "<quote or specific point 2>"],
-  "strengths": ["<strength 1>", "..."],
-  "weaknesses": ["<weakness 1>", "..."],
-  "missingConcepts": ["<concept 1>", "..."],
+  "evidenceCollected": ["<quote 1>", "<quote 2>"],
+  "strengths": ["<observable strength 1>"],
+  "weaknesses": ["<observable weakness 1>"],
+  "missingConcepts": ["<concept 1>"],
   "confidence": "<HIGH | MEDIUM | LOW>",
   "idealAnswer": {
     "text": "<well-structured example answer>",
@@ -169,9 +172,12 @@ export const adaptiveActionPrompt = (params) => {
     ? `\nCoding Challenge Just Completed: "${params.codingContext.question}"\nAI Follow-up Hint: "${params.codingContext.aiFollowUp}"\n`
     : "";
 
-  return `You are an expert technical interviewer adapting an ongoing interview.
+  const experience = params.candidateExperience || "fresher";
+
+  return `You are a professional senior software engineer conducting an adaptive technical interview.
 
 Session Context:
+Candidate Experience: ${experience.toUpperCase()} (Primary Target: Student / Fresher / Placement Prep / Junior 0-2 YOE)
 Target Role: ${params.targetRole}
 Technology Stack: ${params.technologyStack?.join(", ") || "Unknown"}
 Current Interview State: ${params.currentState || "THEORY"}
@@ -183,18 +189,21 @@ Candidate's Answer Transcript: "${params.transcript}"
 Recent Evaluation: ${JSON.stringify(params.evaluation)}
 
 Decide the next logical step. Based on the evaluation AND the current state:
-- If current state is CODING_REVIEW → generate a follow-up question specifically about their code approach, complexity, or design choices.
-- If the answer was weak/shallow → CLARIFY or ask a fundamental question.
-- If the answer was strong/deep → INCREASE_DIFFICULTY or ask a deeper practical SCENARIO.
-- If the topic is exhausted → MOVE_FORWARD to a new topic.
+- If current state is CODING_REVIEW → generate ONE focused verbal follow-up question specifically about their code approach or complexity.
+- If answer was weak/shallow → ask ONE simpler probing or concept-building question.
+- If answer was strong → ask ONE deeper follow-up question or introduce ONE realistic edge case.
+- If topic is exhausted → MOVE_FORWARD to next uncovered topic.
 
-Provide the specific next question text ensuring it is NOVEL and does not repeat previous questions.
+CRITICAL RULES:
+1. ASK EXACTLY ONE FOCUSED QUESTION (1-2 SENTENCES MAX, UNDER 40 WORDS).
+2. DO NOT GENERATE MULTI-PART ASSIGNMENTS (no long lists of requirements!).
+3. KEEP IT APPROPRIATE FOR STUDENTS / FRESHERS / JUNIOR DEVELOPERS.
 
 You MUST respond with ONLY a valid JSON object matching this structure:
 {
   "action": "<FOLLOW_UP | MOVE_FORWARD | INCREASE_DIFFICULTY | CLARIFY | WRAP_UP>",
   "reason": "<Internal reasoning>",
-  "nextQuestionText": "<The actual text of the next question or follow-up>",
+  "nextQuestionText": "<The 1-2 sentence focused next question>",
   "expectedConcepts": ["<concept1>", "<concept2>"]
 }`;
 };
@@ -305,37 +314,41 @@ You MUST respond with ONLY a valid JSON object matching this structure:
 };
 
 export const generateInterviewChallengePrompt = (params) => {
-  return `You are an expert technical interviewer creating a dynamic coding challenge for a candidate.
+  return `You are an expert technical interviewer creating an approachable, realistic coding challenge for a candidate.
 
 Target Role: ${params.targetRole || "Software Engineer"}
 Technology Stack: ${Array.isArray(params.technologyStack) ? params.technologyStack.join(", ") : (params.technology || "Algorithms")}
 Requested Difficulty: ${params.difficulty || "medium"}
 
-DIFFICULTY GUIDELINES:
-- EASY: Basic array/string manipulation, hash map lookup, simple loops, or basic utility functions. Solvable in < 10 mins.
-- MEDIUM: Two-pointers, sliding window, stack/queue, basic tree traversal, or practical API/state manipulation. Solvable in 15 mins.
-- HARD: Algorithmic optimization, advanced data structures, dynamic programming, or complex graph problems.
+TARGET AUDIENCE & DIFFICULTY CALIBRATION:
+CareerPilot AI's primary candidates are College Students, Freshers, Internship Applicants, and Junior Developers (0-2 YOE).
+- EASY: Basic array/string manipulation, hash map lookup, simple loops, or basic utility functions (e.g. reverse string, find max, valid palindrome). Solvable in 5-10 mins.
+- MEDIUM (DEFAULT): Approachable problem solving testing arrays, strings, hash maps, two pointers, sliding window, stacks, queues, linked lists, or basic binary tree traversal (e.g. two sum, valid anagram, merge sorted arrays, max subarray sum, reverse linked list). Solvable in 10-15 mins.
+- HARD: Only generate when explicitly requested. Avoid obscure dynamic programming, segment trees, complex graph tricks, or competitive programming puzzles unless explicitly selected.
 
 Make sure the challenge is directly relevant to ${params.targetRole}.
 Include 2-3 public test cases and 1-2 hidden test cases.
-Make sure the starter code defines a valid function named solution(input).
+Define clear parameter names (e.g. "nums", "target", "s", "arr") and return type.
 
 You MUST respond with ONLY a valid JSON object matching this structure:
 {
-  "question": "<The full problem description>",
+  "question": "<The clear, concise problem description>",
   "technology": "<e.g., Algorithms, React, Node.js>",
   "language": "${params.language || "javascript"}",
-  "difficulty": "${params.difficulty}",
-  "starterCode": {
-    "javascript": "function solution(input) { \\n  // Your code here\\n}"
-  },
+  "difficulty": "${params.difficulty || "medium"}",
+  "functionName": "solution",
+  "parameters": [
+    { "name": "nums", "type": "integer[]" },
+    { "name": "target", "type": "integer" }
+  ],
+  "returnType": "integer[]",
   "requirements": ["<req1>", "<req2>"],
   "constraints": ["<constraint1>"],
   "evaluationCriteria": ["<criteria1>"],
   "testCases": [
     {
-      "input": {"nums": [1,2], "target": 3},
-      "expectedOutput": [0,1],
+      "input": [[2, 7, 11, 15], 9],
+      "expectedOutput": [0, 1],
       "explanation": "<why>",
       "hidden": false
     }
