@@ -325,7 +325,7 @@
     }
   }
 
-  // 5. Greenhouse & Lever Adapters
+  // 5. Specialized ATS Adapters (Greenhouse, Lever, Workday, Ashby, SmartRecruiters)
   class GreenhouseAdapter extends BaseAdapter {
     constructor() {
       super("greenhouse");
@@ -360,6 +360,100 @@
         company: companyEl,
         location: locationEl ? locationEl.textContent : "",
         description: descEl ? descEl.innerText || descEl.textContent : "",
+      });
+    }
+  }
+
+  class WorkdayAdapter extends BaseAdapter {
+    constructor() {
+      super("workday");
+    }
+    extractJobId() {
+      try {
+        const match = window.location.pathname.match(/_([A-Za-z0-9_-]+)$/) || window.location.pathname.match(/\/job\/([A-Za-z0-9_-]+)/);
+        if (match) return match[1];
+      } catch (e) {}
+      return "";
+    }
+    extract() {
+      const titleEl = document.querySelector('[data-automation-id="jobPostingHeader"]') || document.querySelector("h1");
+      const companyEl = document.querySelector('[data-automation-id="company-name"]') || document.querySelector('[data-automation-id="jobPostingCompany"]');
+      const locationEl = document.querySelector('[data-automation-id="locations"]');
+      const descEl = document.querySelector('[data-automation-id="jobPostingDescription"]') || document.querySelector("#jobDescriptionText");
+
+      let company = companyEl ? cleanText(companyEl.textContent) : "";
+      if (!company) {
+        const part = window.location.hostname.split(".")[0];
+        if (part && part.length > 2) company = part.charAt(0).toUpperCase() + part.slice(1);
+      }
+
+      return this.createNormalizedPayload({
+        externalJobId: this.extractJobId(),
+        title: titleEl ? titleEl.textContent : "",
+        company,
+        location: locationEl ? cleanText(locationEl.textContent) : "",
+        description: descEl ? descEl.innerText || descEl.textContent : "",
+        applicationMethod: "external",
+      });
+    }
+  }
+
+  class AshbyAdapter extends BaseAdapter {
+    constructor() {
+      super("ashby");
+    }
+    extractJobId() {
+      try {
+        const parts = window.location.pathname.split("/").filter(Boolean);
+        if (parts.length > 0 && /[0-9a-f-]{10,}/i.test(parts[parts.length - 1])) return parts[parts.length - 1];
+      } catch (e) {}
+      return "";
+    }
+    extract() {
+      const titleEl = document.querySelector("h1") || document.querySelector(".ashby-job-posting-heading");
+      const companyEl = document.querySelector('[class*="CompanyHeader"]') || document.querySelector(".ashby-job-posting-company-name");
+      const descEl = document.querySelector(".ashby-job-posting-description") || document.querySelector("[class*='JobPostingDescription']");
+
+      let company = companyEl ? cleanText(companyEl.textContent) : "";
+      if (!company) {
+        const parts = window.location.pathname.split("/").filter(Boolean);
+        if (parts.length >= 1 && parts[0] !== "jobs") company = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      }
+
+      return this.createNormalizedPayload({
+        externalJobId: this.extractJobId(),
+        title: titleEl ? titleEl.textContent : "",
+        company,
+        description: descEl ? descEl.innerText || descEl.textContent : "",
+        applicationMethod: "external",
+      });
+    }
+  }
+
+  class SmartRecruitersAdapter extends BaseAdapter {
+    constructor() {
+      super("smartrecruiters");
+    }
+    extractJobId() {
+      try {
+        const match = window.location.pathname.match(/\/([0-9a-f-]{10,})/i) || window.location.pathname.match(/\/([0-9]{8,})/);
+        if (match) return match[1];
+      } catch (e) {}
+      return "";
+    }
+    extract() {
+      const titleEl = document.querySelector("#job-title") || document.querySelector("h1");
+      const companyEl = document.querySelector(".company-name") || document.querySelector('[data-qa="company-name"]');
+      const locationEl = document.querySelector('[itemprop="jobLocation"]') || document.querySelector(".job-detail .location");
+      const descEl = document.querySelector("#job-description") || document.querySelector(".job-sections");
+
+      return this.createNormalizedPayload({
+        externalJobId: this.extractJobId(),
+        title: titleEl ? titleEl.textContent : "",
+        company: companyEl ? cleanText(companyEl.textContent) : "",
+        location: locationEl ? cleanText(locationEl.textContent) : "",
+        description: descEl ? descEl.innerText || descEl.textContent : "",
+        applicationMethod: "external",
       });
     }
   }
@@ -540,6 +634,9 @@
       /gh_jid=/.test(url) ||
       /lever\.co/.test(host) ||
       /greenhouse\.io/.test(host) ||
+      /workday\.com|myworkdayjobs\.com/.test(host) ||
+      /ashbyhq\.com/.test(host) ||
+      /smartrecruiters\.com/.test(host) ||
       /naukri\.com\/job-listings/.test(url) ||
       /wellfound\.com\/jobs/.test(url);
 
@@ -554,6 +651,9 @@
       document.querySelector(".jobsearch-JobInfoHeader-title") ||
       document.querySelector('[itemprop="title"]') ||
       document.querySelector('[data-qa="job-title"]') ||
+      document.querySelector('[data-automation-id="jobPostingHeader"]') ||
+      document.querySelector(".ashby-job-posting-heading") ||
+      document.querySelector("#job-title") ||
       document.querySelector(".job-title") ||
       document.querySelector("h1");
 
@@ -568,6 +668,8 @@
       document.querySelector(".jobs-description__content") ||
       document.querySelector("#jobDescriptionText") ||
       document.querySelector('[itemprop="description"]') ||
+      document.querySelector('[data-automation-id="jobPostingDescription"]') ||
+      document.querySelector(".ashby-job-posting-description") ||
       document.querySelector("#job-description") ||
       document.querySelector(".job-description") ||
       document.querySelector("article");
@@ -583,6 +685,9 @@
     else if (host.includes("indeed.com")) detectedPlatform = "indeed";
     else if (host.includes("greenhouse.io")) detectedPlatform = "greenhouse";
     else if (host.includes("lever.co")) detectedPlatform = "lever";
+    else if (host.includes("workday.com") || host.includes("myworkdayjobs.com")) detectedPlatform = "workday";
+    else if (host.includes("ashbyhq.com")) detectedPlatform = "ashby";
+    else if (host.includes("smartrecruiters.com")) detectedPlatform = "smartrecruiters";
 
     const isJobPage = confidence >= 30 && Boolean(titleText) && Boolean(descText);
 
@@ -606,6 +711,12 @@
         return new GreenhouseAdapter();
       case "lever":
         return new LeverAdapter();
+      case "workday":
+        return new WorkdayAdapter();
+      case "ashby":
+        return new AshbyAdapter();
+      case "smartrecruiters":
+        return new SmartRecruitersAdapter();
       default:
         return new GenericAdapter();
     }

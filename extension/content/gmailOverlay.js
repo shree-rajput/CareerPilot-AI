@@ -1,6 +1,7 @@
 /**
  * CareerPilot AI Gmail Notification Overlay
- * Renders non-intrusive floating card in Gmail for detected application lifecycle events.
+ * Renders non-intrusive floating card in Gmail for detected application lifecycle events,
+ * including AUTOMATIC_UPDATE, SUGGESTION_CREATED, and UNTRACKED_APPLICATION (Forgot-To-Save recovery).
  */
 
 (function () {
@@ -13,7 +14,7 @@
     }
   }
 
-  function renderGmailOverlay({ response, onConfirm, onUndo, onIgnore }) {
+  function renderGmailOverlay({ response, onConfirm, onUndo, onIgnore, onAddUntracked }) {
     removeExistingOverlay();
 
     if (!response || response.status === "NOT_APPLICATION_RELEVANT" || response.status === "FORBIDDEN_TRANSITION") {
@@ -73,6 +74,26 @@
           <button id="cp-undo-btn" style="flex: 1; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Undo Update</button>
         </div>
       `;
+    } else if (response.status === "UNTRACKED_APPLICATION" || response.status === "NO_MATCHING_APPLICATION") {
+      contentHtml = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #7c3aed; background: #f3e8ff; padding: 2px 6px; border-radius: 4px;">Application Found</span>
+          <button id="cp-close-overlay" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px;">✕</button>
+        </div>
+        <h4 style="margin: 0 0 2px 0; font-size: 14px; font-weight: 700; color: #0f172a;">${classified?.detectedCompany || "Job Application"}</h4>
+        <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">${classified?.detectedRole || "Position"}</p>
+        
+        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">
+          Detected Stage: ${status.toUpperCase()} (Gmail)
+        </div>
+
+        <p style="font-size: 11px; color: #475569; margin: 0 0 10px 0; font-style: italic;">"${classified?.evidenceSnippet || "Email event detected"}"</p>
+
+        <div style="display: flex; gap: 8px;">
+          <button id="cp-add-untracked-btn" style="flex: 1; background: #7c3aed; color: #ffffff; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Add to CareerPilot</button>
+          <button id="cp-ignore-untracked-btn" style="flex: 1; background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Ignore</button>
+        </div>
+      `;
     } else if (response.status === "SUGGESTION_CREATED") {
       contentHtml = `
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -120,11 +141,29 @@
       onIgnore?.(response);
       removeExistingOverlay();
     });
+    document.getElementById("cp-add-untracked-btn")?.addEventListener("click", () => {
+      const payload = {
+        messageId: response.record?.messageId || response.classified?.messageId || "",
+        company: classified?.detectedCompany || "Job Application",
+        role: classified?.detectedRole || "Position",
+        detectedStatus: classified?.detectedStatus || "applied",
+        eventType: classified?.eventType || "APPLICATION_RECEIVED",
+        evidence: classified?.evidenceSnippet || "",
+        source: "email_auto_discovered",
+      };
+      chrome.runtime.sendMessage({ type: "CREATE_APPLICATION_FROM_EMAIL", payload }, (res) => {
+        if (res?.success) {
+          onAddUntracked?.(res.data);
+        }
+      });
+      removeExistingOverlay();
+    });
+    document.getElementById("cp-ignore-untracked-btn")?.addEventListener("click", removeExistingOverlay);
 
-    // Auto dismiss after 15 seconds
+    // Auto dismiss after 20 seconds
     setTimeout(() => {
       removeExistingOverlay();
-    }, 15000);
+    }, 20000);
   }
 
   window.__CAREERPILOT_GMAIL_OVERLAY__ = {

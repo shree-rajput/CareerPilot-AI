@@ -7,6 +7,8 @@ import {
   getApplicationIntelligenceSummary,
   getApplications,
   updateApplication,
+  updateApplicationStatus,
+  createApplicationFromEmail,
   generateCoverLetter,
   generateRecruiterMessage,
   getApplicationReadiness,
@@ -24,6 +26,7 @@ applicationRouter.use(requireAuth);
 applicationRouter.post("/", createApplication);
 applicationRouter.post("/external", captureExternalApplication);
 applicationRouter.post("/email-events", processEmailEvent);
+applicationRouter.post("/create-from-email", createApplicationFromEmail);
 applicationRouter.get("/", getApplications);
 
 // Automation & Suggestions
@@ -38,9 +41,11 @@ applicationRouter.get("/:id/intelligence", getApplicationIntelligenceSummary);
 applicationRouter.get("/:id/readiness", getApplicationReadiness);
 applicationRouter.get("/:id", getApplication);
 applicationRouter.patch("/:id", updateApplication);
+applicationRouter.post("/:id/status", updateApplicationStatus);
 applicationRouter.delete("/:id", deleteApplication);
 
 // AI generation endpoints
 applicationRouter.post("/:id/cover-letter", generateCoverLetter);
 applicationRouter.post("/:id/recruiter-message", generateRecruiterMessage);
+
 

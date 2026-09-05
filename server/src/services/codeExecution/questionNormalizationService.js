@@ -3,6 +3,7 @@
  * Enforces a strict data contract for coding questions before persistence or execution.
  */
 
+import mongoose from "mongoose";
 import { generateAllStarterCodes } from "./starterCodeGenerator.js";
 
 /**
@@ -147,14 +148,18 @@ export function normalizeCodingQuestion(rawQuestion = {}) {
     }
   });
 
-  const testCases = (rawQuestion.testCases || []).map((tc, index) => ({
-    _id: tc._id || tc.id || `tc-${index + 1}`,
-    input: tc.input !== undefined ? tc.input : [],
-    expectedOutput: tc.expectedOutput !== undefined ? tc.expectedOutput : null,
-    explanation: tc.explanation || "",
-    hidden: Boolean(tc.hidden),
-    weight: typeof tc.weight === "number" ? tc.weight : 1,
-  }));
+  const testCases = (rawQuestion.testCases || []).map((tc, index) => {
+    const validId = tc._id && mongoose.Types.ObjectId.isValid(tc._id) ? tc._id : new mongoose.Types.ObjectId();
+    return {
+      _id: validId,
+      id: tc.id || `tc-${index + 1}`,
+      input: tc.input !== undefined ? tc.input : [],
+      expectedOutput: tc.expectedOutput !== undefined ? tc.expectedOutput : null,
+      explanation: tc.explanation || "",
+      hidden: Boolean(tc.hidden),
+      weight: typeof tc.weight === "number" ? tc.weight : 1,
+    };
+  });
 
   return {
     ...rawQuestion,

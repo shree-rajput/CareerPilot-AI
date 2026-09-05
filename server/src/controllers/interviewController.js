@@ -383,10 +383,16 @@ export async function getNextQuestion(req, res, next) {
               technology: "Algorithms",
               language: "javascript",
               difficulty: session.difficulty,
+              functionName: "twoSum",
+              parameters: [
+                { name: "nums", type: "integer[]" },
+                { name: "target", type: "integer" }
+              ],
+              returnType: "integer[]",
               starterCode: { javascript: "function twoSum(nums, target) {\n  // Your code here\n}" },
               testCases: [
-                { input: { nums: [2, 7, 11, 15], target: 9 }, expectedOutput: [0, 1], explanation: "nums[0] + nums[1] = 2 + 7 = 9", hidden: false },
-                { input: { nums: [3, 2, 4], target: 6 }, expectedOutput: [1, 2], explanation: "nums[1] + nums[2] = 2 + 4 = 6", hidden: false }
+                { input: [[2, 7, 11, 15], 9], expectedOutput: [0, 1], explanation: "nums[0] + nums[1] = 2 + 7 = 9", hidden: false },
+                { input: [[3, 2, 4], 6], expectedOutput: [1, 2], explanation: "nums[1] + nums[2] = 2 + 4 = 6", hidden: false }
               ],
               requirements: ["Return the indices as an array [i, j]"],
               constraints: ["O(n) time complexity preferred"],
@@ -400,6 +406,9 @@ export async function getNextQuestion(req, res, next) {
         stub.technology = normalizedChallenge.technology;
         stub.language = normalizedChallenge.language;
         stub.difficulty = normalizedChallenge.difficulty;
+        stub.functionName = normalizedChallenge.functionName;
+        stub.parameters = normalizedChallenge.parameters;
+        stub.returnType = normalizedChallenge.returnType;
         stub.starterCode = normalizedChallenge.starterCode;
         stub.execution = normalizedChallenge.execution;
         stub.requirements = normalizedChallenge.requirements;
@@ -1438,14 +1447,14 @@ export async function getReplay(req, res, next) {
           userAudioUrl: q.userAnswerAudioUrl || null,
         },
         evaluation: {
-          technicalAccuracy: q.analysis?.technicalAccuracy ?? 70,
-          communication: q.analysis?.communication ?? 75,
-          correctness: q.evaluation?.correctness || "Medium",
-          relevance: q.evaluation?.relevance || "Medium",
+          technicalAccuracy: q.analysis?.technicalAccuracy ?? null,
+          communication: q.analysis?.communication ?? null,
+          correctness: q.analysis?.scoreBand || q.evaluation?.correctness || "N/A",
+          relevance: q.evaluation?.relevance || "N/A",
           strengths: q.feedback?.strengths || q.evaluation?.strengths || [],
           weaknesses: q.feedback?.weaknesses || q.evaluation?.weaknesses || [],
           missingConcepts: q.feedback?.missingConcepts || q.evaluation?.missingConcepts || [],
-          idealAnswer: q.idealAnswer || { text: "Direct concise answer explaining key mechanics.", explanation: "" },
+          idealAnswer: q.idealAnswer || { text: "N/A", explanation: "" },
         },
         deliverySignals: q.deliverySignals || { unavailable: true },
         presenceSignals: q.presenceSignals || { unavailable: true }
@@ -1467,10 +1476,10 @@ export async function getReplay(req, res, next) {
         },
         executionSummary: c.executionSummary || { passedTests: 0, totalTests: 0 },
         codeReview: c.aiReview || {
-          metrics: { correctness: 70, efficiency: 70, codeQuality: 70 },
-          timeComplexity: "O(N)",
-          spaceComplexity: "O(1)",
-          strengths: ["Implemented working solution"],
+          metrics: { correctness: null, efficiency: null, codeQuality: null },
+          timeComplexity: "N/A",
+          spaceComplexity: "N/A",
+          strengths: c.executionSummary?.passedTests > 0 ? [`Passed ${c.executionSummary.passedTests} test case(s)`] : [],
           potentialIssues: []
         }
       });

@@ -2,22 +2,22 @@
  * Deterministic Rubric & Scoring Engine (Stage 2)
  *
  * Implements pure deterministic, evidence-backed rubric evaluation for interview answers.
- * Replaces direct LLM numeric scores and speech WPM filler penalties.
  *
  * Principles:
  * 1. Evidence-based: Every score maps to observable transcript evidence.
  * 2. Dimension Separation: Technical correctness and Communication are 100% independent.
- * 3. Behavioral Score Anchors (0-5 scale mapped to 0-100):
- *    0 = No evidence / fundamentally incorrect (0)
- *    1 = Very weak / major technical errors (20)
- *    2 = Limited / some correct concepts, important gaps (40)
- *    3 = Adequate / correct answer at expected level (60)
- *    4 = Strong / accurate reasoning & relevant details (80)
- *    5 = Deep, precise understanding with trade-offs & edge cases (100)
+ * 3. Behavioral Score Anchors & Calibrated Bands:
+ *    - 90–100 (Anchor 4.5 - 5.0): Excellent (Correct, complete, precise, strong reasoning/example)
+ *    - 75–89  (Anchor 3.8 - 4.4): Strong (Mostly correct with minor omissions)
+ *    - 60–74  (Anchor 3.0 - 3.7): Developing (Basic understanding but meaningful gaps)
+ *    - 40–59  (Anchor 2.0 - 2.9): Weak (Partial understanding or significant omissions)
+ *    - 0–39   (Anchor 0.0 - 1.9): Insufficient (Incorrect, irrelevant, or no answer)
  * 4. Explicit non-answer handling: NO_ANSWER -> technical = 0, comm != 0.
- * 5. Audio corruption handling: TRANSCRIPTION_FAILURE -> technical = null, confidence = LOW.
- * 6. Follow-up prompted credit: Prompted correctness receives partial/scaled credit (promptedCorrectness = true).
+ * 5. Audio corruption handling: TRANSCRIPTION_FAILURE -> technical = null, confidence = NONE.
+ * 6. Question-Specific Rubrics: Evaluates against question-type specific criteria.
  */
+
+import { buildQuestionRubric } from "./questionRubricEngine.js";
 
 export function anchorToScore(anchor) {
   if (anchor === null || anchor === undefined || !Number.isFinite(anchor)) return null;
@@ -31,6 +31,15 @@ export function scoreToAnchor(score) {
   return Math.round((clamped / 20) * 10) / 10;
 }
 
+export function getScoreBand(score) {
+  if (score === null || score === undefined) return "N/A";
+  if (score >= 90) return "Excellent";
+  if (score >= 75) return "Strong";
+  if (score >= 60) return "Developing";
+  if (score >= 40) return "Weak";
+  return "Insufficient";
+}
+
 /**
  * Stage 2 Deterministic Scoring for a single verbal question.
  */
@@ -42,7 +51,9 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
   const status = (stage1Output.answerStatus || "CORRECT_ANSWER").toUpperCase();
   const evidence = stage1Output.evidence || {};
   const expectedConcepts = questionContext.expectedConcepts || stage1Output.missingConcepts || [];
-  const questionType = (questionContext.questionType || questionContext.category || "TECHNICAL").toUpperCase();
+  const questionText = questionContext.questionText || "";
+  const category = questionContext.category || "Technical";
+  const rubric = buildQuestionRubric(questionText, category, expectedConcepts);
   const isFollowUp = Boolean(questionContext.isFollowUp || questionContext.promptedCorrectness);
 
   // 1. TRANSCRIPTION_FAILURE
@@ -50,24 +61,27 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
     return {
       classification: "TRANSCRIPTION_FAILURE",
       scores: {
-        technicalCorrectness: { score: null, anchor: null, confidence: "LOW", evidenceIds: [] },
-        conceptualUnderstanding: { score: null, anchor: null, confidence: "LOW", evidenceIds: [] },
-        problemSolving: { score: null, anchor: null, confidence: "LOW", evidenceIds: [] },
-        communication: { score: null, anchor: null, confidence: "LOW", evidenceIds: [] }
+        technicalCorrectness: { score: null, anchor: null, confidence: "NONE", evidenceIds: [], availability: "UNAVAILABLE" },
+        conceptualUnderstanding: { score: null, anchor: null, confidence: "NONE", evidenceIds: [], availability: "UNAVAILABLE" },
+        problemSolving: { score: null, anchor: null, confidence: "NONE", evidenceIds: [], availability: "UNAVAILABLE" },
+        communication: { score: null, anchor: null, confidence: "NONE", evidenceIds: [], availability: "UNAVAILABLE" }
       },
       analysis: {
         technicalAccuracy: null,
         communication: null,
         clarity: null,
         depth: null,
-        overall: null
+        overall: null,
+        scoreBand: "N/A"
       },
-      confidence: "LOW",
-      reason: "Unable to evaluate technical correctness because transcript quality was insufficient or corrupted.",
+      confidence: "NONE",
+      availability: "UNAVAILABLE",
+      reason: "Unable to evaluate response because transcript quality was corrupted or unreadable.",
       feedback: {
         strengths: [],
-        weaknesses: ["Audio transcript quality was insufficient or corrupted for automatic evaluation."],
-        missingConcepts: expectedConcepts
+        weaknesses: ["Audio transcript quality was unreadable for automatic evaluation."],
+        missingConcepts: rubric.coreCheckpoints,
+        evidenceQuotes: []
       },
       idealAnswer: stage1Output.idealAnswer || { text: "N/A", explanation: "Transcript failure" }
     };
@@ -75,29 +89,32 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
 
   // 2. NO_ANSWER ("I don't know", refusal, blank)
   if (status === "NO_ANSWER") {
-    // Honest communication of uncertainty is adequate communication (Anchor 3.0 / score 60), not 0
     const commAnchor = evidence.uncertaintyExpressed ? 3.0 : 2.0;
+    const commScore = anchorToScore(commAnchor);
     return {
       classification: "NO_ANSWER",
       scores: {
-        technicalCorrectness: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: ["Candidate gave no-answer response"] },
-        conceptualUnderstanding: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: ["No conceptual understanding demonstrated"] },
-        problemSolving: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [] },
-        communication: { score: anchorToScore(commAnchor), anchor: commAnchor, confidence: "HIGH", evidenceIds: ["Honest communication of uncertainty"] }
+        technicalCorrectness: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: ["Candidate gave no-answer response"], availability: "AVAILABLE" },
+        conceptualUnderstanding: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [], availability: "AVAILABLE" },
+        problemSolving: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [], availability: "AVAILABLE" },
+        communication: { score: commScore, anchor: commAnchor, confidence: "HIGH", evidenceIds: ["Acknowledged knowledge boundary"], availability: "AVAILABLE" }
       },
       analysis: {
         technicalAccuracy: 0,
-        communication: anchorToScore(commAnchor),
-        clarity: anchorToScore(commAnchor),
+        communication: commScore,
+        clarity: commScore,
         depth: 0,
-        overall: 0
+        overall: 0,
+        scoreBand: "Insufficient"
       },
       confidence: "HIGH",
+      availability: "AVAILABLE",
       reason: "Candidate stated they did not know or provided a non-answer response.",
       feedback: {
         strengths: evidence.uncertaintyExpressed ? ["Honest acknowledgment of knowledge boundary"] : [],
         weaknesses: ["Candidate did not provide a technical answer for this question."],
-        missingConcepts: expectedConcepts
+        missingConcepts: rubric.coreCheckpoints,
+        evidenceQuotes: []
       },
       idealAnswer: stage1Output.idealAnswer || {
         text: "A complete answer requires explaining the core expected concepts.",
@@ -111,40 +128,43 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
     return {
       classification: "IRRELEVANT_ANSWER",
       scores: {
-        technicalCorrectness: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: ["Answer off-topic"] },
-        conceptualUnderstanding: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [] },
-        problemSolving: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [] },
-        communication: { score: 30, anchor: 1.5, confidence: "HIGH", evidenceIds: ["Off-topic response"] }
+        technicalCorrectness: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: ["Answer off-topic"], availability: "AVAILABLE" },
+        conceptualUnderstanding: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [], availability: "AVAILABLE" },
+        problemSolving: { score: 0, anchor: 0, confidence: "HIGH", evidenceIds: [], availability: "AVAILABLE" },
+        communication: { score: 30, anchor: 1.5, confidence: "HIGH", evidenceIds: ["Off-topic response"], availability: "AVAILABLE" }
       },
       analysis: {
         technicalAccuracy: 0,
         communication: 30,
         clarity: 30,
         depth: 0,
-        overall: 0
+        overall: 0,
+        scoreBand: "Insufficient"
       },
       confidence: "HIGH",
+      availability: "AVAILABLE",
       reason: "Candidate provided an off-topic response.",
       feedback: {
         strengths: [],
-        weaknesses: ["Answer was not relevant to the question asked."],
-        missingConcepts: expectedConcepts
+        weaknesses: ["Answer was off-topic and did not address the question asked."],
+        missingConcepts: rubric.coreCheckpoints,
+        evidenceQuotes: []
       },
       idealAnswer: stage1Output.idealAnswer || { text: "Focus directly on the question asked.", explanation: "Relevance gap" }
     };
   }
 
-  // 4. TECHNICAL EVALUATION (INCORRECT, PARTIAL, CORRECT)
+  // 4. TECHNICAL EVALUATION WITH QUESTION RUBRIC
   const demonstrated = evidence.demonstratedConcepts || [];
   const missing = evidence.missingConcepts || [];
   const incorrectClaims = evidence.incorrectClaims || [];
   const reasoning = evidence.reasoningSignals || [];
   const practical = evidence.practicalSignals || [];
   const commSignals = evidence.communicationSignals || {};
+  const quotes = stage1Output.evidenceCollected || [];
 
-  // Calculate Concept Coverage Ratio
-  const totalConcepts = Math.max(1, expectedConcepts.length || (demonstrated.length + missing.length));
-  const conceptRatio = Math.min(1.0, demonstrated.length / totalConcepts);
+  const totalCheckpoints = Math.max(1, rubric.coreCheckpoints.length || (demonstrated.length + missing.length));
+  const conceptRatio = Math.min(1.0, demonstrated.length / totalCheckpoints);
 
   let techAnchor = 0;
   let techScore = 0;
@@ -157,10 +177,10 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
       techAnchor = 4.0;
       if (reasoning.length > 0) techAnchor += 0.4;
       if (practical.length > 0) techAnchor += 0.4;
-      if (conceptRatio >= 0.9) techAnchor += 0.2;
+      if (conceptRatio >= 0.8) techAnchor += 0.2;
     } else if (status === "PARTIAL_ANSWER" || status === "PARTIAL") {
       techAnchor = 2.0 + (conceptRatio * 1.5);
-      if (reasoning.length > 0) techAnchor += 0.2;
+      if (reasoning.length > 0) techAnchor += 0.3;
     } else {
       techAnchor = 1.0;
       if (demonstrated.length > 0) techAnchor += 0.5;
@@ -179,22 +199,17 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
   }
 
   // 5. INDEPENDENT COMMUNICATION EVALUATION
-  // Communication evaluates observable structure, clarity, conciseness, and relevance
   let commAnchor = 3.0; // Default adequate (60)
 
-  // Clarity
   if (commSignals.clarity && /clear|direct|understandable|precise/i.test(commSignals.clarity)) commAnchor += 0.5;
   if (commSignals.clarity && /confusing|unclear|vague/i.test(commSignals.clarity)) commAnchor -= 0.5;
 
-  // Structure
   if (commSignals.structure && /logical|structured|sequence|flow/i.test(commSignals.structure)) commAnchor += 0.5;
   if (commSignals.structure && /disorganized|rambling|jumpy/i.test(commSignals.structure)) commAnchor -= 0.5;
 
-  // Conciseness (Short answers are NOT penalized; long rambling IS penalized)
   if (commSignals.conciseness && /concise|direct|no fluff/i.test(commSignals.conciseness)) commAnchor += 0.5;
   if (commSignals.conciseness && /rambling|repetitive|wordy/i.test(commSignals.conciseness)) commAnchor -= 0.5;
 
-  // Relevance
   if (commSignals.relevance && /connected|on topic|relevant/i.test(commSignals.relevance)) commAnchor += 0.5;
 
   commAnchor = Math.min(5.0, Math.max(1.0, Math.round(commAnchor * 10) / 10));
@@ -213,154 +228,54 @@ export function scoreQuestionFromEvidence(stage1Output, questionContext = {}) {
     depthScore = techScore;
   }
 
-  // Overall question score: Technical (60%) + Communication (25%) + Depth (15%)
-  const overallScore = Math.round((techScore * 0.60) + (commScore * 0.25) + (depthScore * 0.15));
+  const weights = rubric.scoringWeights;
+  const overallScore = Math.round((techScore * weights.technical) + (commScore * weights.communication) + (depthScore * weights.depth));
 
-  // Determine Confidence
   let confidence = stage1Output.confidence || "MEDIUM";
   if (demonstrated.length > 0 && expectedConcepts.length > 0) confidence = "HIGH";
   if (incorrectClaims.length > 0 && status === "CORRECT_ANSWER") confidence = "MEDIUM";
 
+  const strengthsList = stage1Output.strengths?.length > 0
+    ? stage1Output.strengths
+    : (demonstrated.length > 0 ? demonstrated.map(d => `Correctly identified and explained ${d}`) : ["Clear expression of answer"]);
+
+  const weaknessesList = stage1Output.weaknesses?.length > 0
+    ? stage1Output.weaknesses
+    : (missing.length > 0 ? missing.map(m => `Missed key concept: ${m}`) : []);
+
+  if (incorrectClaims.length > 0) {
+    incorrectClaims.forEach(ic => weaknessesList.unshift(`Inaccurate claim: "${ic}"`));
+  }
+
   return {
     classification: status,
+    questionType: rubric.classification,
     scores: {
-      technicalCorrectness: { score: techScore, anchor: techAnchor, confidence, evidenceIds: demonstrated },
-      conceptualUnderstanding: { score: Math.round(conceptRatio * 100), anchor: Math.round(conceptRatio * 5 * 10) / 10, confidence, evidenceIds: demonstrated },
-      problemSolving: { score: reasoning.length > 0 ? techScore : Math.round(techScore * 0.8), anchor: techAnchor, confidence, evidenceIds: reasoning },
-      communication: { score: commScore, anchor: commAnchor, confidence: "HIGH", evidenceIds: [commSignals.clarity, commSignals.structure].filter(Boolean) }
+      technicalCorrectness: { score: techScore, anchor: techAnchor, confidence, evidenceIds: demonstrated, availability: "AVAILABLE" },
+      conceptualUnderstanding: { score: Math.round(conceptRatio * 100), anchor: Math.round(conceptRatio * 5 * 10) / 10, confidence, evidenceIds: demonstrated, availability: "AVAILABLE" },
+      problemSolving: { score: reasoning.length > 0 ? techScore : Math.round(techScore * 0.8), anchor: techAnchor, confidence, evidenceIds: reasoning, availability: "AVAILABLE" },
+      communication: { score: commScore, anchor: commAnchor, confidence: "HIGH", evidenceIds: [commSignals.clarity, commSignals.structure].filter(Boolean), availability: "AVAILABLE" }
     },
     analysis: {
       technicalAccuracy: techScore,
       communication: commScore,
       clarity: commScore,
       depth: depthScore,
-      overall: overallScore
+      overall: overallScore,
+      scoreBand: getScoreBand(overallScore)
     },
     confidence,
+    availability: "AVAILABLE",
     promptedCorrectness: isFollowUp,
-    reason: `Evaluated ${status} with ${demonstrated.length} demonstrated concept(s) and ${incorrectClaims.length} incorrect claim(s).`,
+    reason: `Evaluated against ${rubric.classification} rubric (${getScoreBand(overallScore)} band). Demonstrated ${demonstrated.length}/${totalCheckpoints} concepts.`,
     feedback: {
-      strengths: stage1Output.strengths?.length > 0 ? stage1Output.strengths : (demonstrated.length > 0 ? [`Demonstrated understanding of ${demonstrated.slice(0, 2).join(", ")}`] : ["Clear communication"]),
-      weaknesses: stage1Output.weaknesses?.length > 0 ? stage1Output.weaknesses : (missing.length > 0 ? [`Missed core concepts: ${missing.slice(0, 2).join(", ")}`] : []),
-      missingConcepts: missing.length > 0 ? missing : stage1Output.missingConcepts || []
+      strengths: strengthsList,
+      weaknesses: weaknessesList,
+      missingConcepts: missing.length > 0 ? missing : (stage1Output.missingConcepts || []),
+      incorrectClaims,
+      evidenceQuotes: quotes
     },
     idealAnswer: stage1Output.idealAnswer || { text: "N/A", explanation: "" }
-  };
-}
-
-/**
- * Deterministic Session Level Aggregator
- * Calculates aggregate scores per dimension and overall session score.
- * Only includes dimensions with sufficient non-null evidence.
- */
-export function calculateAggregateSessionScores(session, questionEvaluations = [], challengeEvaluations = []) {
-  const validQuestions = (questionEvaluations || []).map(q => q.analysis ? q : (q.evaluation ? scoreQuestionFromEvidence(q.evaluation, q) : null)).filter(Boolean);
-  const validChallenges = (challengeEvaluations || []).filter(c => c.status === "answered" || c.executionSummary);
-
-  if (validQuestions.length === 0 && validChallenges.length === 0) {
-    return {
-      overallScore: 0,
-      confidence: "LOW",
-      scores: {
-        technical: { score: 0, confidence: "LOW", sampleCount: 0 },
-        communication: { score: 0, confidence: "LOW", sampleCount: 0 },
-        clarity: { score: 0, confidence: "LOW", sampleCount: 0 },
-        videoPresence: null, // explicitly null
-        structure: { score: 0, confidence: "LOW", sampleCount: 0 },
-        problemSolving: { score: 0, confidence: "LOW", sampleCount: 0 }
-      }
-    };
-  }
-
-  // Filter non-null technical scores (exclude TRANSCRIPTION_FAILURE)
-  const techValidQuestions = validQuestions.filter(q => q.analysis && q.analysis.technicalAccuracy !== null && q.analysis.technicalAccuracy !== undefined);
-  const commValidQuestions = validQuestions.filter(q => q.analysis && q.analysis.communication !== null && q.analysis.communication !== undefined);
-
-  const allNoAnswers = validQuestions.length > 0 && validQuestions.every(q => q.classification === "NO_ANSWER" || (q.analysis && q.analysis.technicalAccuracy === 0));
-
-  if (allNoAnswers && validChallenges.length === 0) {
-    return {
-      overallScore: 0,
-      confidence: "HIGH",
-      scores: {
-        technical: { score: 0, confidence: "HIGH", sampleCount: techValidQuestions.length },
-        communication: { score: 0, confidence: "HIGH", sampleCount: commValidQuestions.length },
-        clarity: { score: 0, confidence: "HIGH", sampleCount: validQuestions.length },
-        videoPresence: null,
-        structure: { score: 0, confidence: "HIGH", sampleCount: validQuestions.length },
-        problemSolving: { score: 0, confidence: "LOW", sampleCount: 0 }
-      }
-    };
-  }
-
-  // Technical Dimension
-  const techScores = techValidQuestions.map(q => q.analysis.technicalAccuracy);
-  const techAvg = techScores.length > 0 ? Math.round(techScores.reduce((a, b) => a + b, 0) / techScores.length) : null;
-  const techConfidence = techScores.length >= 3 ? "HIGH" : techScores.length >= 2 ? "MEDIUM" : "LOW";
-
-  // Communication Dimension
-  const commScores = commValidQuestions.map(q => q.analysis.communication);
-  const commAvg = commScores.length > 0 ? Math.round(commScores.reduce((a, b) => a + b, 0) / commScores.length) : null;
-  const commConfidence = commScores.length >= 3 ? "HIGH" : commScores.length >= 2 ? "MEDIUM" : "LOW";
-
-  // Clarity Dimension
-  const clarityScores = validQuestions.map(q => q.analysis?.clarity).filter(v => v !== null && v !== undefined);
-  const clarityAvg = clarityScores.length > 0 ? Math.round(clarityScores.reduce((a, b) => a + b, 0) / clarityScores.length) : null;
-
-  // Structure / Depth Dimension
-  const depthScores = validQuestions.map(q => q.analysis?.depth).filter(v => v !== null && v !== undefined);
-  const depthAvg = depthScores.length > 0 ? Math.round(depthScores.reduce((a, b) => a + b, 0) / depthScores.length) : null;
-
-  // Problem Solving / Coding Dimension
-  let problemSolvingAvg = null;
-  let hasCoding = false;
-  if (validChallenges.length > 0) {
-    hasCoding = true;
-    const challengeScores = validChallenges.map(c => {
-      const summary = c.executionSummary || {};
-      const passed = summary.passedTests || 0;
-      const total = Math.max(1, summary.totalTests || 1);
-      return Math.round((passed / total) * 100);
-    });
-    problemSolvingAvg = Math.round(challengeScores.reduce((a, b) => a + b, 0) / challengeScores.length);
-  }
-
-  // Weighted Overall Score Calculation (Only using available non-null dimensions)
-  let overallScore = 0;
-  let totalWeight = 0;
-
-  if (techAvg !== null) {
-    const weight = hasCoding ? 0.45 : 0.65;
-    overallScore += techAvg * weight;
-    totalWeight += weight;
-  }
-
-  if (commAvg !== null) {
-    const weight = hasCoding ? 0.25 : 0.35;
-    overallScore += commAvg * weight;
-    totalWeight += weight;
-  }
-
-  if (hasCoding && problemSolvingAvg !== null) {
-    const weight = 0.30;
-    overallScore += problemSolvingAvg * weight;
-    totalWeight += weight;
-  }
-
-  const finalOverall = techAvg === 0 ? 0 : (totalWeight > 0 ? Math.round(overallScore / totalWeight) : 0);
-  const overallConfidence = (techValidQuestions.length + validChallenges.length) >= 3 ? "HIGH" : "MEDIUM";
-
-  return {
-    overallScore: finalOverall,
-    confidence: overallConfidence,
-    scores: {
-      technical: { score: techAvg, confidence: techConfidence, sampleCount: techScores.length },
-      communication: { score: commAvg, confidence: commConfidence, sampleCount: commScores.length },
-      clarity: { score: clarityAvg, confidence: commConfidence, sampleCount: clarityScores.length },
-      videoPresence: null, // explicitly null — unavailable
-      structure: { score: depthAvg, confidence: techConfidence, sampleCount: depthScores.length },
-      problemSolving: { score: problemSolvingAvg, confidence: hasCoding ? "HIGH" : "LOW", sampleCount: validChallenges.length }
-    }
   };
 }
 
@@ -368,13 +283,14 @@ function buildFallbackEvaluation(reason) {
   return {
     classification: "INCORRECT_ANSWER",
     scores: {
-      technicalCorrectness: { score: 0, anchor: 0, confidence: "LOW", evidenceIds: [] },
-      communication: { score: 50, anchor: 2.5, confidence: "LOW", evidenceIds: [] }
+      technicalCorrectness: { score: 0, anchor: 0, confidence: "LOW", evidenceIds: [], availability: "AVAILABLE" },
+      communication: { score: 50, anchor: 2.5, confidence: "LOW", evidenceIds: [], availability: "AVAILABLE" }
     },
-    analysis: { technicalAccuracy: 0, communication: 50, clarity: 50, depth: 0, overall: 0 },
+    analysis: { technicalAccuracy: 0, communication: 50, clarity: 50, depth: 0, overall: 0, scoreBand: "Insufficient" },
     confidence: "LOW",
+    availability: "AVAILABLE",
     reason,
-    feedback: { strengths: [], weaknesses: [reason], missingConcepts: [] },
+    feedback: { strengths: [], weaknesses: [reason], missingConcepts: [], evidenceQuotes: [] },
     idealAnswer: { text: "N/A", explanation: "" }
   };
 }

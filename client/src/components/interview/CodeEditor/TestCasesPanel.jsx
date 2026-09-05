@@ -104,13 +104,9 @@ function getTestCaseResult(result, testCase, index) {
 }
 
 function formatValue(value) {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (value === undefined || value === null) {
-    return "";
-  }
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  if (typeof value === "string") return value === "" ? '""' : value;
 
   try {
     return JSON.stringify(value, null, 2);

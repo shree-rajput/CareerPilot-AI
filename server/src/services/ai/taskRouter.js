@@ -4,6 +4,8 @@ import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSche
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
 import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema, techDiscussionEvaluationSchema, techDiscussionNudgeSchema, techDiscussionContextActionSchema } from "./schemas/interviewSchema.js";
 import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema, coverLetterSchema, recruiterMessageSchema } from "./schemas/careerSchema.js";
+import { dynamicQuestionSchema } from "./schemas/dynamicQuestionSchema.js";
+import { DYNAMIC_QUESTION_SYSTEM, buildDynamicQuestionPrompt } from "./prompts/dynamicQuestionPrompt.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
 import { TAILORING_SYSTEM, buildTailoringPrompt, RESUME_SUGGESTIONS_SYSTEM, buildResumeSuggestionsPrompt } from "./prompts/resumeTailoring.js";
@@ -306,6 +308,15 @@ export const AI_TASKS = {
     systemPrompt: "You are a senior staff engineer evaluating a completed live technical discussion session. Analyze technical correctness, edge cases, complexity, and communication clarity. Return valid JSON matching the schema.",
     buildPrompt: (context) => context.prompt || "Evaluate technical performance across session.",
     schema: techDiscussionEvaluationSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  DYNAMIC_QUESTION_GENERATION: {
+    featureName: "dynamic AI question generation",
+    modelRole: MODEL_ROLES.COMPLEX_REASONING,
+    systemPrompt: DYNAMIC_QUESTION_SYSTEM,
+    buildPrompt: buildDynamicQuestionPrompt,
+    schema: dynamicQuestionSchema,
     buildContext: (params) => params,
     jsonMode: true
   }

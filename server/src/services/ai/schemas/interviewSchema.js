@@ -64,6 +64,12 @@ export const interviewChallengeSchema = z.object({
   technology: z.string().describe("The primary technology or framework (e.g. 'React', 'Node.js', or just 'Algorithms')."),
   language: z.string().describe("The primary language expected (e.g. 'javascript', 'python')."),
   difficulty: z.enum(["easy", "medium", "hard"]).describe("Difficulty level."),
+  functionName: z.string().default("solution").describe("The camelCase function name, e.g. 'solution', 'twoSum', 'findMax'."),
+  parameters: z.array(z.object({
+    name: z.string().describe("Parameter variable name, e.g. 'arr', 'nums', 'target', 's', 'a', 'b'."),
+    type: z.string().describe("Canonical language-agnostic type string: 'integer', 'float', 'boolean', 'string', 'integer[]', 'string[]', 'integer[][]', 'string[][]'. NEVER use 'Object' or 'any'.")
+  })).describe("List of parameter definitions with exact canonical types."),
+  returnType: z.string().describe("Canonical return type string: 'integer', 'float', 'boolean', 'string', 'integer[]', 'string[]', 'integer[][]', 'string[][]'."),
   starterCode: z.union([z.record(z.string()), z.string()]).optional().default({}),
   requirements: z.array(z.string()).describe("List of functional requirements."),
   constraints: z.array(z.string()).describe("List of technical constraints (e.g., O(n) time complexity)."),

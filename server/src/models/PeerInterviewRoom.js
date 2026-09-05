@@ -11,6 +11,14 @@ const participantSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    nameSnapshot: {
+      type: String,
+      default: "",
+    },
+    targetRole: {
+      type: String,
+      default: "",
+    },
     role: {
       type: String,
       default: "participant",
@@ -194,6 +202,32 @@ const techDiscussionRoomSchema = new mongoose.Schema(
       code: { type: String, default: "" },
       language: { type: String, default: "javascript" },
       updatedAt: { type: Date, default: Date.now },
+    },
+
+    draftCode: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    activeWorkspace: {
+      type: String,
+      enum: ["code", "canvas", "api_design", "sql", "conceptual", "spec"],
+      default: "code",
+    },
+
+    askedQuestionIds: {
+      type: [String],
+      default: [],
+    },
+
+    askedConceptIds: {
+      type: [String],
+      default: [],
+    },
+
+    recentQuestionFingerprints: {
+      type: [String],
+      default: [],
     },
 
     submissions: [

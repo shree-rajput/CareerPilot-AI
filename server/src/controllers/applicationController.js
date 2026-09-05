@@ -207,18 +207,18 @@ export const updateApplication = asyncHandler(async (req, res) => {
     throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
   }
 
-  // If status changed, append to history
+  // If status changed, validate transition and append to history
   if (updates.status && updates.status !== app.status) {
-    app.statusHistory.push({
-      status: updates.status,
-      changedAt: new Date(),
-      note: updates.statusNote || ""
+    const transitionResult = validateAndApplyTransition(app, {
+      targetStatus: updates.status,
+      source: updates.changedBy || updates.source || "user_manual_update",
+      confidence: "high",
+      evidence: updates.evidence || "",
+      note: updates.statusNote || `Manual update to ${updates.status}`,
     });
-    app.status = updates.status;
 
-    // Auto-set dateApplied when moving to "applied"
-    if (updates.status === "applied" && !app.dateApplied) {
-      app.dateApplied = new Date();
+    if (!transitionResult.success) {
+      throw new AppError(transitionResult.reason, 400, "FORBIDDEN_TRANSITION");
     }
   }
 
@@ -231,6 +231,153 @@ export const updateApplication = asyncHandler(async (req, res) => {
   await app.save();
 
   return res.json({ application: app });
+});
+
+/**
+ * POST /api/applications/:id/status
+ * Explicit endpoint for validated status transition (e.g. Saved -> Applied).
+ */
+export const updateApplicationStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { targetStatus, source = "manual", evidence = "", note = "", idempotencyKey } = req.body || {};
+
+  if (!targetStatus || !STATUS_VALUES.includes(targetStatus)) {
+    throw new AppError(`Invalid targetStatus '${targetStatus}'.`, 400, "VALIDATION_ERROR");
+  }
+
+  const app = await Application.findOne({ _id: id, userId: req.user._id });
+  if (!app) {
+    throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+  }
+
+  if (app.status === targetStatus) {
+    return res.status(200).json({
+      message: `Application status is already '${targetStatus}'.`,
+      application: app,
+    });
+  }
+
+  const transitionResult = validateAndApplyTransition(app, {
+    targetStatus,
+    source: source || "user_manual_update",
+    confidence: "high",
+    evidence: evidence || "User updated status in extension/dashboard",
+    note: note || `Status updated to ${targetStatus}`,
+  });
+
+  if (!transitionResult.success) {
+    throw new AppError(transitionResult.reason, 400, "FORBIDDEN_TRANSITION");
+  }
+
+  await app.save();
+
+  // Create notification for major status updates
+  await Notification.create({
+    userId: req.user._id,
+    type: "APPLICATION_STATUS",
+    title: `${app.company} Application Updated`,
+    message: `Application for ${app.role} at ${app.company} marked as ${targetStatus.toUpperCase()}.`,
+    entityType: "application",
+    entityId: app._id.toString(),
+    actionUrl: `/applications/${app._id}`,
+    idempotencyKey: idempotencyKey || `status-update-${app._id}-${targetStatus}-${Date.now()}`,
+  }).catch(() => {});
+
+  return res.status(200).json({
+    message: `Application status updated to ${targetStatus}.`,
+    application: app,
+  });
+});
+
+/**
+ * POST /api/applications/create-from-email
+ * Creates an application discovered from email without fabricating unobserved history.
+ */
+export const createApplicationFromEmail = asyncHandler(async (req, res) => {
+  const {
+    messageId,
+    company,
+    role,
+    detectedStatus = "applied",
+    eventType = "APPLICATION_RECEIVED",
+    evidence = "",
+    source = "email_auto_discovered",
+  } = req.body || {};
+
+  if (!company || typeof company !== "string" || !company.trim()) {
+    throw new AppError("Company name is required.", 400, "VALIDATION_ERROR");
+  }
+  if (!role || typeof role !== "string" || !role.trim()) {
+    throw new AppError("Role title is required.", 400, "VALIDATION_ERROR");
+  }
+
+  const targetStatus = STATUS_VALUES.includes(detectedStatus) ? detectedStatus : "applied";
+
+  // Check for duplicate application
+  let existingApp = await Application.findOne({
+    userId: req.user._id,
+    company: new RegExp(`^${company.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
+    role: new RegExp(`^${role.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
+  });
+
+  if (existingApp) {
+    return res.status(200).json({
+      message: "Matching application already exists in pipeline.",
+      application: existingApp,
+      isDuplicate: true,
+    });
+  }
+
+  const app = new Application({
+    userId: req.user._id,
+    company: company.trim().substring(0, 150),
+    role: role.trim().substring(0, 150),
+    position: role.trim().substring(0, 150),
+    status: targetStatus,
+    source,
+    statusHistory: [
+      {
+        fromStatus: "",
+        toStatus: targetStatus,
+        changedBy: "email",
+        source,
+        confidence: "high",
+        evidence: evidence || `Discovered from email event: ${eventType}`,
+        note: `Discovered from email: ${eventType} (${company} - ${role})`,
+        timestamp: new Date(),
+      },
+    ],
+  });
+
+  if (targetStatus === "applied") app.dateApplied = new Date();
+  if (targetStatus === "interview") app.interviewDate = new Date();
+
+  await app.save();
+
+  // Create Notification
+  await Notification.create({
+    userId: req.user._id,
+    type: "APPLICATION_STATUS",
+    title: `Untracked Application Added`,
+    message: `Added ${app.role} at ${app.company} (${targetStatus.toUpperCase()}) discovered from email.`,
+    entityType: "application",
+    entityId: app._id.toString(),
+    actionUrl: `/applications/${app._id}`,
+    idempotencyKey: `create-email-${messageId || Date.now()}`,
+  }).catch(() => {});
+
+  if (messageId) {
+    await EmailEventRecord.findOneAndUpdate(
+      { userId: req.user._id, messageId },
+      { matchedApplicationId: app._id, actionTaken: "APPLICATION_CREATED_FROM_EMAIL" }
+    ).catch(() => {});
+  }
+
+  return res.status(201).json({
+    message: "Application successfully created from email discovery.",
+    application: app,
+    isDuplicate: false,
+  });
 });
 
 /**

@@ -21,17 +21,28 @@ const STAGE_RANK = {
   stale: 1,
 };
 
-export function canTransitionStatus(currentStatus, targetStatus, source = "email") {
+export function canTransitionStatus(currentStatus, targetStatus, source = "email", eventTimestamp = null, statusHistory = []) {
   if (!currentStatus || !targetStatus) return false;
   if (currentStatus === targetStatus) return false;
 
   const currentRank = STAGE_RANK[currentStatus] || 1;
   const targetRank = STAGE_RANK[targetStatus] || 1;
 
+  // Timestamp-Aware Check: If an event occurred prior to the latest status change, reject backward/out-of-order event updates
+  if (eventTimestamp && Array.isArray(statusHistory) && statusHistory.length > 0) {
+    const latestHistory = statusHistory[statusHistory.length - 1];
+    const latestTime = latestHistory.timestamp ? new Date(latestHistory.timestamp).getTime() : 0;
+    const eventTime = new Date(eventTimestamp).getTime();
+
+    if (eventTime < latestTime && targetRank < currentRank) {
+      return false;
+    }
+  }
+
   // Rejection & Withdrawn can happen from active stages
   if (targetStatus === "rejected" || targetStatus === "withdrawn") {
-    // If application is already in offer state, rejection requires explicit manual confirmation
-    if (currentStatus === "offer" && source === "email") {
+    // If application is already in offer state, rejection via email requires explicit manual confirmation
+    if (currentStatus === "offer" && (source === "email" || source === "system")) {
       return false;
     }
     return true;
@@ -42,15 +53,19 @@ export function canTransitionStatus(currentStatus, targetStatus, source = "email
     return false;
   }
 
-  if (currentStatus === "interview" && (targetStatus === "applied" || targetStatus === "oa" || targetStatus === "saved" || targetStatus === "screening")) {
+  if (currentStatus === "interview" && (targetStatus === "applied" || targetStatus === "oa" || targetStatus === "saved" || targetStatus === "screening" || targetStatus === "shortlisted")) {
     return false;
   }
 
-  if (currentStatus === "oa" && (targetStatus === "applied" || targetStatus === "saved")) {
+  if (currentStatus === "oa" && (targetStatus === "applied" || targetStatus === "saved" || targetStatus === "screening")) {
     return false;
   }
 
-  if (currentStatus === "rejected" && source !== "manual" && source !== "user_manual_update") {
+  if (currentStatus === "screening" && (targetStatus === "applied" || targetStatus === "saved")) {
+    return false;
+  }
+
+  if (currentStatus === "rejected" && source !== "manual" && source !== "user_manual_update" && source !== "user_confirmation") {
     return false;
   }
 
@@ -58,10 +73,10 @@ export function canTransitionStatus(currentStatus, targetStatus, source = "email
   return targetRank >= currentRank;
 }
 
-export function validateAndApplyTransition(application, { targetStatus, source = "email", confidence = "high", evidence = "", note = "" }) {
+export function validateAndApplyTransition(application, { targetStatus, source = "email", confidence = "high", evidence = "", note = "", eventTimestamp = null }) {
   const currentStatus = application.status;
 
-  const isValid = canTransitionStatus(currentStatus, targetStatus, source);
+  const isValid = canTransitionStatus(currentStatus, targetStatus, source, eventTimestamp, application.statusHistory);
 
   if (!isValid) {
     return {
@@ -79,19 +94,19 @@ export function validateAndApplyTransition(application, { targetStatus, source =
     source,
     confidence,
     evidence: evidence || "",
-    note: note || `Email event detected: ${targetStatus}`,
-    timestamp: new Date(),
+    note: note || `Lifecycle event transition: ${targetStatus}`,
+    timestamp: eventTimestamp ? new Date(eventTimestamp) : new Date(),
   });
 
   application.status = targetStatus;
   application.lastActivityAt = new Date();
 
   if (targetStatus === "applied" && !application.dateApplied) {
-    application.dateApplied = new Date();
+    application.dateApplied = eventTimestamp ? new Date(eventTimestamp) : new Date();
   }
 
   if (targetStatus === "interview" && !application.interviewDate) {
-    application.interviewDate = new Date();
+    application.interviewDate = eventTimestamp ? new Date(eventTimestamp) : new Date();
   }
 
   return {
@@ -101,3 +116,4 @@ export function validateAndApplyTransition(application, { targetStatus, source =
     application,
   };
 }
+

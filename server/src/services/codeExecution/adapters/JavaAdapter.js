@@ -48,8 +48,9 @@ public class SolutionRunner {
 
     // FUNCTION Mode Harness
     const paramCount = executionContract?.parameters?.length || 1;
+    const typeHint = executionContract?.parameters?.[0]?.type || executionContract?.returnType || "AUTO";
     const args = unpackTestCaseArguments(inputVal, paramCount);
-    const argsCode = args.map(v => serializeValue(v, "java")).join(", ");
+    const argsCode = args.map(v => serializeValue(v, "java", typeHint)).join(", ");
 
     const runnerCode = `
 import java.util.*;
@@ -82,14 +83,25 @@ public class SolutionRunner {
 
             Object result = targetMethod.invoke(sol, ${argsCode});
             
+            String outputState = "ACTUAL_OUTPUT";
             String jsonOutput;
             if (result == null) {
+                outputState = "NULL_RETURN";
                 jsonOutput = "null";
             } else if (result instanceof int[]) {
                 jsonOutput = Arrays.toString((int[]) result);
             } else if (result instanceof String[]) {
                 StringBuilder sb = new StringBuilder("[");
                 String[] arr = (String[]) result;
+                for (int i = 0; i < arr.length; i++) {
+                    sb.append("\\"").append(arr[i]).append("\\"");
+                    if (i < arr.length - 1) sb.append(",");
+                }
+                sb.append("]");
+                jsonOutput = sb.toString();
+            } else if (result instanceof char[]) {
+                StringBuilder sb = new StringBuilder("[");
+                char[] arr = (char[]) result;
                 for (int i = 0; i < arr.length; i++) {
                     sb.append("\\"").append(arr[i]).append("\\"");
                     if (i < arr.length - 1) sb.append(",");
@@ -104,7 +116,8 @@ public class SolutionRunner {
                 jsonOutput = String.valueOf(result);
             }
 
-            System.out.println("__CP_OUTPUT_START__" + jsonOutput + "__CP_OUTPUT_END__");
+            String payload = "{\\"outputState\\":\\"" + outputState + "\\",\\"value\\":" + jsonOutput + "}";
+            System.out.println("__CP_OUTPUT_START__" + payload + "__CP_OUTPUT_END__");
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             System.err.println(cause.getClass().getName() + ": " + cause.getMessage());
@@ -154,6 +167,6 @@ public class SolutionRunner {
     if (match2 && match2[1] && !["main", "Solution", "if", "for", "while"].includes(match2[1])) {
       return match2[1];
     }
-    return "search";
+    return "solution";
   }
 }

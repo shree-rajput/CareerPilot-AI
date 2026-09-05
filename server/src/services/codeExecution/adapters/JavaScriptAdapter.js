@@ -48,6 +48,10 @@ if (typeof ${fnName} === "function") {
   targetFn = twoSum;
 } else if (typeof two_sum === "function") {
   targetFn = two_sum;
+} else if (typeof reverseString === "function") {
+  targetFn = reverseString;
+} else if (typeof reverse_string === "function") {
+  targetFn = reverse_string;
 } else {
   const reserved = new Set(["console", "require", "exports", "module", "process", "Buffer", "setTimeout", "clearTimeout", "setInterval", "clearInterval"]);
   for (const key of Object.keys(globalThis)) {
@@ -65,7 +69,20 @@ if (!targetFn) {
 
 try {
   const result = targetFn(${argsCode});
-  console.log("__CP_OUTPUT_START__" + JSON.stringify(result !== undefined ? result : null) + "__CP_OUTPUT_END__");
+  
+  let outputState = "ACTUAL_OUTPUT";
+  let payloadValue = result;
+
+  if (result === undefined) {
+    outputState = "UNDEFINED_RETURN";
+    payloadValue = null;
+  } else if (result === null) {
+    outputState = "NULL_RETURN";
+    payloadValue = null;
+  }
+
+  const payload = JSON.stringify({ outputState, value: payloadValue });
+  console.log("__CP_OUTPUT_START__" + payload + "__CP_OUTPUT_END__");
 } catch (err) {
   console.error(err && err.stack ? err.stack : String(err));
   process.exit(1);
@@ -91,6 +108,6 @@ try {
     if (match && match[1]) return match[1];
     const matchConst = code.match(/(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:function|\()/);
     if (matchConst && matchConst[1]) return matchConst[1];
-    return "search";
+    return "solution";
   }
 }

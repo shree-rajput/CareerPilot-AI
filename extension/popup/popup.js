@@ -210,11 +210,58 @@ async function renderGmailState(tab, initialResult = null) {
         .join("");
       processBtn.disabled = false;
       processBtn.innerText = "Confirm Update for Selected App";
-    } else if (data.status === "NO_MATCHING_APPLICATION") {
-      matchText.innerHTML = `ℹ️ No existing workspace application matched. Click below to create application.`;
+      processBtn.onclick = async () => {
+        const selectedAppId = select.value;
+        if (!selectedAppId) return;
+        processBtn.disabled = true;
+        processBtn.innerText = "Updating...";
+        const res = await chrome.runtime.sendMessage({
+          type: "UPDATE_APPLICATION_STATUS",
+          payload: {
+            applicationId: selectedAppId,
+            targetStatus: classified.detectedStatus || "applied",
+            source: "user_confirmation",
+            evidence: classified.evidenceSnippet || "",
+          },
+        });
+        if (res?.success) {
+          matchText.innerHTML = `✓ <strong>Status Updated</strong> to ${targetStatus}`;
+          processBtn.innerText = "✓ Updated";
+        } else {
+          alert(`Update failed: ${res?.error}`);
+          processBtn.disabled = false;
+          processBtn.innerText = "Confirm Update for Selected App";
+        }
+      };
+    } else if (data.status === "NO_MATCHING_APPLICATION" || data.status === "UNTRACKED_APPLICATION") {
+      matchText.innerHTML = `ℹ️ No existing workspace application matched. Click below to add this application to CareerPilot.`;
       ambSelector.classList.add("hidden");
       processBtn.disabled = false;
       processBtn.innerText = "Create New Application from Email";
+      processBtn.onclick = async () => {
+        processBtn.disabled = true;
+        processBtn.innerText = "Creating Application...";
+        const createRes = await chrome.runtime.sendMessage({
+          type: "CREATE_APPLICATION_FROM_EMAIL",
+          payload: {
+            messageId: emailData.messageId,
+            company,
+            role,
+            detectedStatus: classified.detectedStatus || "applied",
+            eventType: classified.eventType || "APPLICATION_RECEIVED",
+            evidence: classified.evidenceSnippet || "",
+            source: "email_auto_discovered",
+          },
+        });
+        if (createRes?.success) {
+          matchText.innerHTML = `✓ <strong>Application Created</strong> for ${company} — ${role} (${targetStatus})`;
+          processBtn.innerText = "✓ Application Added";
+        } else {
+          alert(`Creation failed: ${createRes?.error}`);
+          processBtn.disabled = false;
+          processBtn.innerText = "Create New Application from Email";
+        }
+      };
     } else {
       matchText.innerHTML = `Event detected: <strong>${eventType}</strong>`;
       ambSelector.classList.add("hidden");
@@ -376,11 +423,46 @@ async function handleSaveJob() {
   }
 }
 
+async function handleMarkApplied(appId, buttonEl, statusPillEl = null) {
+  if (!appId) return;
+  buttonEl.disabled = true;
+  buttonEl.innerText = "Updating...";
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "UPDATE_APPLICATION_STATUS",
+      payload: {
+        applicationId: appId,
+        targetStatus: "applied",
+        source: "extension_manual_action",
+        evidence: "User clicked Mark as Applied in extension popup",
+      },
+    });
+
+    if (response?.success) {
+      buttonEl.innerText = "✓ Applied";
+      if (statusPillEl) statusPillEl.innerText = "APPLIED";
+    } else {
+      alert(`Status update failed: ${response?.error || "Unknown error"}`);
+      buttonEl.disabled = false;
+      buttonEl.innerText = "Mark as Applied";
+    }
+  } catch (err) {
+    alert(`Connection error: ${err.message}`);
+    buttonEl.disabled = false;
+    buttonEl.innerText = "Mark as Applied";
+  }
+}
+
 function renderDuplicateState(data) {
   const stateDuplicate = document.getElementById("stateDuplicate");
+  const appId = data.application?._id;
+  const currentStatus = (data.application?.status || "saved").toLowerCase();
+
   document.getElementById("dupTitle").innerText = data.job?.title || extractedPayload.title;
   document.getElementById("dupCompany").innerText = data.job?.company || extractedPayload.company;
-  document.getElementById("dupStatus").innerText = (data.application?.status || "saved").toUpperCase();
+  const dupStatusEl = document.getElementById("dupStatus");
+  dupStatusEl.innerText = currentStatus.toUpperCase();
 
   const score = data.matchResult?.overallScore;
   if (typeof score === "number" && score > 0) {
@@ -389,8 +471,17 @@ function renderDuplicateState(data) {
     document.getElementById("dupMatchContainer").classList.add("hidden");
   }
 
+  const markAppliedBtn = document.getElementById("dupMarkAppliedBtn");
+  if (currentStatus === "applied") {
+    markAppliedBtn.disabled = true;
+    markAppliedBtn.innerText = "✓ Applied";
+  } else {
+    markAppliedBtn.disabled = false;
+    markAppliedBtn.innerText = "Mark as Applied";
+    markAppliedBtn.onclick = () => handleMarkApplied(appId, markAppliedBtn, dupStatusEl);
+  }
+
   document.getElementById("openAppBtn").onclick = () => {
-    const appId = data.application?._id;
     const url = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;
     chrome.tabs.create({ url });
   };
@@ -400,6 +491,8 @@ function renderDuplicateState(data) {
 
 function renderSuccessState(data) {
   const stateSuccess = document.getElementById("stateSuccess");
+  const appId = data.application?._id;
+  const currentStatus = (data.application?.status || "saved").toLowerCase();
 
   const score = data.matchScore || data.matchResult?.overallScore;
   if (typeof score === "number" && score > 0) {
@@ -410,11 +503,21 @@ function renderSuccessState(data) {
 
   document.getElementById("resResumeVersion").innerText = data.recommendedResume?.name || "Primary Resume";
 
+  const markAppliedBtn = document.getElementById("successMarkAppliedBtn");
+  if (currentStatus === "applied") {
+    markAppliedBtn.disabled = true;
+    markAppliedBtn.innerText = "✓ Applied";
+  } else {
+    markAppliedBtn.disabled = false;
+    markAppliedBtn.innerText = "Mark as Applied";
+    markAppliedBtn.onclick = () => handleMarkApplied(appId, markAppliedBtn);
+  }
+
   document.getElementById("viewAppWorkspaceBtn").onclick = () => {
-    const appId = data.application?._id;
     const targetUrl = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;
     chrome.tabs.create({ url: targetUrl });
   };
 
   showState(stateSuccess);
 }
+

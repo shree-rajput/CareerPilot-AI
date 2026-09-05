@@ -161,7 +161,7 @@ export function InterviewReplayPage() {
                     {!isCoding && turn.evaluation && (
                       <div className="flex items-center gap-2 pt-0.5">
                         <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${getAccuracyBadge(turn.evaluation.technicalAccuracy)}`}>
-                          Score: {turn.evaluation.technicalAccuracy}%
+                          Score: {turn.evaluation.technicalAccuracy !== null ? `${turn.evaluation.technicalAccuracy}%` : "N/A"}
                         </span>
                       </div>
                     )}
@@ -258,17 +258,17 @@ export function InterviewReplayPage() {
                         <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
                           <span className="text-[10px] font-bold text-text-muted uppercase block">Technical Accuracy</span>
                           <span className={`text-base font-extrabold px-2 py-0.5 rounded border inline-block mt-1 ${getAccuracyBadge(currentTurn.evaluation.technicalAccuracy)}`}>
-                            {currentTurn.evaluation.technicalAccuracy}%
+                            {currentTurn.evaluation.technicalAccuracy !== null ? `${currentTurn.evaluation.technicalAccuracy}%` : "N/A"}
                           </span>
                         </div>
                         <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
                           <span className="text-[10px] font-bold text-text-muted uppercase block">Communication</span>
                           <span className="text-base font-extrabold text-text inline-block mt-1">
-                            {currentTurn.evaluation.communication}%
+                            {currentTurn.evaluation.communication !== null ? `${currentTurn.evaluation.communication}%` : "N/A"}
                           </span>
                         </div>
                         <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center col-span-2 sm:col-span-1">
-                          <span className="text-[10px] font-bold text-text-muted uppercase block">Correctness Level</span>
+                          <span className="text-[10px] font-bold text-text-muted uppercase block">Performance Band</span>
                           <span className="text-xs font-bold text-accent-cyan inline-block mt-1 uppercase">
                             {currentTurn.evaluation.correctness}
                           </span>

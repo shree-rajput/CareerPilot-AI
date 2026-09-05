@@ -40,7 +40,14 @@ import {
 } from "lucide-react";
 import { useSocket } from "../hooks/useSocket.js";
 import { YjsSocketProvider } from "../services/yjsProvider.js";
-import { getLiveKitToken, endTechDiscussionSession, getNextQuestion, executeTechDiscussionCode } from "../api/techDiscussion";
+import {
+  getLiveKitToken,
+  getTechDiscussionSession,
+  saveTechDiscussionDraft,
+  endTechDiscussionSession,
+  getNextQuestion,
+  executeTechDiscussionCode
+} from "../api/techDiscussion";
 
 class LiveKitErrorBoundary extends React.Component {
   constructor(props) {
@@ -160,47 +167,75 @@ export default function TechDiscussionRoomPage() {
       setYjsProvider(null);
     };
   }, [roomId, socket, socketConnected]);
-  // Fetch LiveKit Token & Room Data
+  // Fetch Session State & LiveKit Token with Refresh Recovery
   useEffect(() => {
     if (!hasJoinedLobby || !roomId) return;
 
     let isMounted = true;
     setLoading(true);
 
-    getLiveKitToken(roomId)
-      .then((data) => {
+    async function loadSessionAndMedia() {
+      try {
+        // 1. Fetch canonical database session state
+        const sessionRes = await getTechDiscussionSession(roomId);
+        const sessionData = sessionRes?.data || sessionRes;
+
         if (!isMounted) return;
-        setRoomData(data);
-        if (data.problem) {
-          setProblem(data.problem);
-          setCurrentLanguage(data.problem.defaultLanguage || "javascript");
-          if (data.category === "architecture") {
+
+        if (sessionData?.problem) {
+          setProblem(sessionData.problem);
+          setCurrentLanguage(sessionData.language || sessionData.problem.defaultLanguage || "javascript");
+          if (sessionData.activeWorkspace) {
+            setActiveWorkspace(sessionData.activeWorkspace);
+          } else if (sessionData.category === "architecture" || sessionData.problem.questionType === "system_design") {
             setActiveWorkspace("canvas");
           }
         }
-        if (data.codeState?.code) {
-          setCurrentCode(data.codeState.code);
-        }
-        if (data.participants) {
-          setParticipants(data.participants);
+
+        if (sessionData?.codeState?.code) {
+          setCurrentCode(sessionData.codeState.code);
+        } else if (sessionData?.draftCode && sessionData?.language && sessionData.draftCode[sessionData.language]) {
+          setCurrentCode(sessionData.draftCode[sessionData.language]);
         }
 
-        if (data.expiresAt) {
-          const expires = new Date(data.expiresAt).getTime();
-          const now = Date.now();
-          const remaining = Math.max(Math.floor((expires - now) / 1000), 0);
-          setTimeRemainingSeconds(remaining);
+        if (sessionData?.participants) {
+          setParticipants(sessionData.participants);
         }
-      })
-      .catch((err) => {
+
+        if (sessionData?.timeRemainingSeconds !== undefined) {
+          setTimeRemainingSeconds(sessionData.timeRemainingSeconds);
+        }
+
+        // 2. Fetch WebRTC LiveKit Token seamlessly
+        const lkData = await getLiveKitToken(roomId).catch((lkErr) => {
+          console.warn("LiveKit media token warning (continuing workspace practice):", lkErr.message);
+          return null;
+        });
+
+        if (!isMounted) return;
+
+        if (lkData) {
+          setRoomData(lkData);
+        } else {
+          // Soft fallback so room page remains active even if LiveKit server is offline
+          setRoomData({
+            token: "",
+            roomName: `tech-discussion-${roomId}`,
+            problem: sessionData.problem,
+            participants: sessionData.participants
+          });
+        }
+      } catch (err) {
         if (isMounted) {
-          console.error("Join Tech Discussion error:", err);
-          setError(err.message || "Failed to join Tech Discussion Room.");
+          console.error("Session restoration error:", err);
+          setError(err.response?.data?.message || err.message || "Failed to restore practice room session.");
         }
-      })
-      .finally(() => {
+      } finally {
         if (isMounted) setLoading(false);
-      });
+      }
+    }
+
+    loadSessionAndMedia();
 
     return () => {
       isMounted = false;
@@ -222,6 +257,20 @@ export default function TechDiscussionRoomPage() {
     socket.on("question:change", handleQuestionChange);
     return () => socket.off("question:change", handleQuestionChange);
   }, [socket]);
+
+  // Debounced auto-save code draft to backend
+  useEffect(() => {
+    if (!roomId || !currentCode) return;
+    const saveTimer = setTimeout(() => {
+      saveTechDiscussionDraft(roomId, {
+        code: currentCode,
+        language: currentLanguage,
+        activeWorkspace
+      }).catch(() => {});
+    }, 2000);
+
+    return () => clearTimeout(saveTimer);
+  }, [roomId, currentCode, currentLanguage, activeWorkspace]);
 
   // Server-authoritative timer countdown
   useEffect(() => {
@@ -359,8 +408,20 @@ export default function TechDiscussionRoomPage() {
     if (loadingNext) return;
     try {
       setLoadingNext(true);
+      toast.info("Generating your next interview question with AI...");
       const res = await getNextQuestion(roomId);
       const payload = res?.data || res;
+
+      if (payload?.code === "NO_ELIGIBLE_QUESTION") {
+        toast.info(payload.message || "All eligible practice questions for this configuration have been completed in this session.");
+        return;
+      }
+
+      if (payload?.code === "QUESTION_GENERATION_FAILED") {
+        toast.error(payload.message || "AI question generation quality gate failed. Please try again.");
+        return;
+      }
+
       const problemData = payload?.problem;
       if (problemData) {
         setProblem(problemData);
@@ -396,10 +457,10 @@ export default function TechDiscussionRoomPage() {
       setLoading(true);
       await endTechDiscussionSession(roomId).catch(() => {});
       toast.success("Practice session ended.");
-      navigate("/tech-discussion");
+      navigate("/tech-discussion/history");
     } catch (err) {
       console.error("Failed to end session:", err);
-      navigate("/tech-discussion");
+      navigate("/tech-discussion/history");
     }
   };
 
@@ -514,8 +575,8 @@ export default function TechDiscussionRoomPage() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-xs transition-all shadow-sm disabled:opacity-50"
             title="Advance to next question in this practice mode"
           >
-            {loadingNext ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            Next Question
+            {loadingNext ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {loadingNext ? "Generating with AI..." : "Next Question"}
           </button>
 
           <button

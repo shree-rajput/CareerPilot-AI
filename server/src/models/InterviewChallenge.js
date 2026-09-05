@@ -18,6 +18,10 @@ const starterCodeSchema = new mongoose.Schema(
 
 const testCaseSchema = new mongoose.Schema(
   {
+    id: {
+      type: String,
+      default: "",
+    },
     input: {
       type: mongoose.Schema.Types.Mixed,
       required: true,
@@ -76,14 +80,26 @@ const interviewChallengeSchema = new mongoose.Schema(
       type: starterCodeSchema,
       default: () => ({})
     },
+    functionName: {
+      type: String,
+      default: "solution"
+    },
+    parameters: [{
+      name: { type: String },
+      type: { type: String }
+    }],
+    returnType: {
+      type: String,
+      default: "integer"
+    },
     execution: {
       mode: { type: String, enum: ["FUNCTION", "STDIN"], default: "FUNCTION" },
-      functionName: { type: String, default: "search" },
+      functionName: { type: String, default: "solution" },
       parameters: [{
         name: { type: String },
         type: { type: String }
       }],
-      returnType: { type: String, default: "AUTO" }
+      returnType: { type: String, default: "integer" }
     },
     testCases: {
       type: [testCaseSchema],

@@ -77,4 +77,20 @@ export async function getProgrammingLanguages() {
   return response.data;
 }
 
+export async function getTechDiscussionSession(roomId) {
+  const response = await http.get(`/tech-discussion/${roomId}/session`);
+  return response.data;
+}
+
+export async function getTechDiscussionHistory(page = 1, limit = 20) {
+  const response = await http.get(`/tech-discussion/history?page=${page}&limit=${limit}`);
+  return response.data;
+}
+
+export async function saveTechDiscussionDraft(roomId, { code, language, activeWorkspace }) {
+  const response = await http.post(`/tech-discussion/${roomId}/draft`, { code, language, activeWorkspace });
+  return response.data;
+}
+
+
 

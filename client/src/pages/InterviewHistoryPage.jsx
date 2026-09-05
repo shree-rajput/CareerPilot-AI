@@ -359,19 +359,19 @@ export function InterviewHistoryPage() {
                       <div className="text-center">
                         <span className="text-[10px] font-bold text-text-muted uppercase block">Overall</span>
                         <span className={`text-sm font-extrabold px-2.5 py-1 rounded border inline-block mt-0.5 ${getScoreBadgeColor(sess.overallScore)}`}>
-                          {sess.overallScore || 0}%
+                          {sess.overallScore !== null && sess.overallScore !== undefined ? `${sess.overallScore}%` : "N/A"}
                         </span>
                       </div>
                       <div className="text-center">
                         <span className="text-[10px] font-bold text-text-muted uppercase block">Technical</span>
                         <span className="text-xs font-semibold text-text mt-0.5 inline-block">
-                          {scores.technical || 0}%
+                          {scores.technical !== null && scores.technical !== undefined ? `${scores.technical}%` : "N/A"}
                         </span>
                       </div>
                       <div className="text-center">
                         <span className="text-[10px] font-bold text-text-muted uppercase block">Comm</span>
                         <span className="text-xs font-semibold text-text mt-0.5 inline-block">
-                          {scores.communication || 0}%
+                          {scores.communication !== null && scores.communication !== undefined ? `${scores.communication}%` : "N/A"}
                         </span>
                       </div>
                     </div>

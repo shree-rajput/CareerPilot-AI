@@ -5,14 +5,20 @@
  */
 
 /**
- * Maps abstract types to language-specific type strings.
+ * Maps canonical abstract types to language-specific type strings.
+ * Throws INVALID_CODING_CONTRACT error if abstractType cannot be resolved.
  */
-function getLanguageType(abstractType, lang) {
-  const normType = (abstractType || "any").trim().toLowerCase();
+export function getLanguageType(abstractType, lang) {
+  if (!abstractType || typeof abstractType !== "string") {
+    throw new Error("INVALID_CODING_CONTRACT: Parameter or return type metadata is missing.");
+  }
 
-  const isArray = normType.includes("[]") || normType.includes("array") || normType.includes("vector") || normType.includes("list");
+  const normType = abstractType.trim().toLowerCase();
+
   const is2DArray = normType.includes("[][]") || normType.includes("2d");
-  const isString = normType.includes("string") || normType.includes("str") || normType.includes("char");
+  const isArray = !is2DArray && (normType.includes("[]") || normType.includes("array") || normType.includes("vector") || normType.includes("list"));
+  const isObject = normType.includes("object") || normType.includes("map") || normType.includes("dict") || normType.includes("record") || normType.includes("{");
+  const isString = !isObject && (normType.includes("string") || normType.includes("str") || normType.includes("char"));
   const isBool = normType.includes("bool");
   const isFloat = normType.includes("float") || normType.includes("double");
   const isInt = normType.includes("int") || normType.includes("number") || normType.includes("integer");
@@ -20,43 +26,53 @@ function getLanguageType(abstractType, lang) {
   switch (lang) {
     case "typescript":
     case "ts":
-      if (is2DArray) return "number[][]";
+      if (is2DArray) return isString ? "string[][]" : "number[][]";
       if (isArray) return isString ? "string[]" : isBool ? "boolean[]" : "number[]";
+      if (isObject) return "Record<string, any>";
       if (isString) return "string";
       if (isBool) return "boolean";
       if (isInt || isFloat) return "number";
-      return "any";
+      throw new Error(`INVALID_CODING_CONTRACT: Unsupported TypeScript type '${abstractType}'`);
 
     case "python":
     case "py":
-      if (is2DArray) return "List[List[int]]";
-      if (isArray) return isString ? "List[str]" : isBool ? "List[bool]" : "List[int]";
+      if (is2DArray) return isString ? "List[List[str]]" : "List[List[int]]";
+      if (isArray) return isString ? "List[str]" : isBool ? "List[bool]" : isFloat ? "List[float]" : "List[int]";
+      if (isObject) return "dict";
       if (isString) return "str";
       if (isBool) return "bool";
       if (isFloat) return "float";
       if (isInt) return "int";
-      return "Any";
+      throw new Error(`INVALID_CODING_CONTRACT: Unsupported Python type '${abstractType}'`);
 
     case "java":
-      if (is2DArray) return "int[][]";
-      if (isArray) return isString ? "String[]" : isBool ? "boolean[]" : "int[]";
+      if (is2DArray) return isString ? "String[][]" : "int[][]";
+      if (isArray) return isString ? "String[]" : isBool ? "boolean[]" : isFloat ? "double[]" : "int[]";
+      if (isObject) return "Map<String, Object>";
       if (isString) return "String";
       if (isBool) return "boolean";
       if (isFloat) return "double";
       if (isInt) return "int";
-      return "Object";
+      throw new Error(`INVALID_CODING_CONTRACT: Unsupported Java type '${abstractType}'`);
 
     case "cpp":
     case "c++":
-      if (is2DArray) return "vector<vector<int>>";
-      if (isArray) return isString ? "vector<string>" : isBool ? "vector<bool>" : "vector<int>";
+      if (is2DArray) return isString ? "vector<vector<string>>" : "vector<vector<int>>";
+      if (isArray) return isString ? "vector<string>" : isBool ? "vector<bool>" : isFloat ? "vector<double>" : "vector<int>";
+      if (isObject) return "auto";
       if (isString) return "string";
       if (isBool) return "bool";
       if (isFloat) return "double";
       if (isInt) return "int";
-      return "auto";
+      throw new Error(`INVALID_CODING_CONTRACT: Unsupported C++ type '${abstractType}'`);
 
     default: // javascript
+      if (is2DArray) return "number[][]";
+      if (isArray) return isString ? "string[]" : isBool ? "boolean[]" : "number[]";
+      if (isObject) return "object";
+      if (isString) return "string";
+      if (isBool) return "boolean";
+      if (isInt || isFloat) return "number";
       return "any";
   }
 }
@@ -65,20 +81,22 @@ function getLanguageType(abstractType, lang) {
  * Default return statements per language and type.
  */
 function getDefaultReturnStatement(returnType, lang) {
-  const normType = (returnType || "AUTO").trim().toLowerCase();
+  const normType = (returnType || "").trim().toLowerCase();
   if (normType === "void") return "";
 
-  const isArray = normType.includes("[]") || normType.includes("array") || normType.includes("vector") || normType.includes("list");
   const is2DArray = normType.includes("[][]") || normType.includes("2d");
+  const isArray = !is2DArray && (normType.includes("[]") || normType.includes("array") || normType.includes("vector") || normType.includes("list"));
   const isString = normType.includes("string") || normType.includes("str");
   const isBool = normType.includes("bool");
+  const isFloat = normType.includes("float") || normType.includes("double");
 
   switch (lang) {
     case "java":
-      if (is2DArray) return "return new int[][]{};";
-      if (isArray) return isString ? "return new String[]{};" : "return new int[]{};";
+      if (is2DArray) return isString ? "return new String[][]{};" : "return new int[][]{};";
+      if (isArray) return isString ? "return new String[]{};" : isBool ? "return new boolean[]{};" : isFloat ? "return new double[]{};" : "return new int[]{};";
       if (isString) return 'return "";';
       if (isBool) return "return false;";
+      if (isFloat) return "return 0.0;";
       return "return 0;";
 
     case "cpp":
@@ -86,6 +104,7 @@ function getDefaultReturnStatement(returnType, lang) {
       if (is2DArray || isArray) return "return {};";
       if (isString) return 'return "";';
       if (isBool) return "return false;";
+      if (isFloat) return "return 0.0;";
       return "return 0;";
 
     case "python":
@@ -123,7 +142,7 @@ function sanitizeParamName(name, index) {
 export function generateJavaScriptStarter({ functionName, parameters }) {
   const fn = sanitizeFunctionName(functionName);
   const params = (parameters || []).map((p, i) => sanitizeParamName(p.name, i));
-  const paramList = params.length > 0 ? params.join(", ") : "input";
+  const paramList = params.join(", ");
 
   return `function ${fn}(${paramList}) {\n  // Write your solution here\n}`;
 }
@@ -138,7 +157,7 @@ export function generateTypeScriptStarter({ functionName, parameters, returnType
     const pType = getLanguageType(p.type, "typescript");
     return `${pName}: ${pType}`;
   });
-  const paramList = params.length > 0 ? params.join(", ") : "input: any";
+  const paramList = params.join(", ");
   const retType = getLanguageType(returnType, "typescript");
 
   return `function ${fn}(${paramList}): ${retType} {\n  // Write your solution here\n}`;
@@ -150,7 +169,7 @@ export function generateTypeScriptStarter({ functionName, parameters, returnType
 export function generatePythonStarter({ functionName, parameters }) {
   const fn = sanitizeFunctionName(functionName);
   const params = (parameters || []).map((p, i) => sanitizeParamName(p.name, i));
-  const paramList = params.length > 0 ? params.join(", ") : "input";
+  const paramList = params.join(", ");
 
   return `def ${fn}(${paramList}):\n    # Write your solution here\n    pass`;
 }
@@ -160,18 +179,21 @@ export function generatePythonStarter({ functionName, parameters }) {
  */
 export function generateJavaStarter({ functionName, parameters, returnType }) {
   const fn = sanitizeFunctionName(functionName);
+  let hasMap = false;
   const params = (parameters || []).map((p, i) => {
     const pName = sanitizeParamName(p.name, i);
     const pType = getLanguageType(p.type, "java");
+    if (pType.includes("Map")) hasMap = true;
     return `${pType} ${pName}`;
   });
-  const paramList = params.length > 0 ? params.join(", ") : "Object input";
+  const paramList = params.join(", ");
   const retType = getLanguageType(returnType, "java");
   const defaultReturn = getDefaultReturnStatement(returnType, "java");
 
   const body = defaultReturn ? `  // Write your solution here\n        ${defaultReturn}` : `  // Write your solution here`;
+  const imports = hasMap ? `import java.util.*;\n\n` : "";
 
-  return `class Solution {\n    public ${retType} ${fn}(${paramList}) {\n      ${body}\n    }\n}`;
+  return `${imports}class Solution {\n    public ${retType} ${fn}(${paramList}) {\n      ${body}\n    }\n}`;
 }
 
 /**
@@ -183,9 +205,9 @@ export function generateCppStarter({ functionName, parameters, returnType }) {
     const pName = sanitizeParamName(p.name, i);
     const pType = getLanguageType(p.type, "cpp");
     const isComplex = pType.includes("vector") || pType.includes("string");
-    return isComplex ? `vector<int>& ${pName}` : `${pType} ${pName}`;
+    return isComplex ? `const ${pType}& ${pName}` : `${pType} ${pName}`;
   });
-  const paramList = params.length > 0 ? params.join(", ") : "auto input";
+  const paramList = params.join(", ");
   const retType = getLanguageType(returnType, "cpp");
   const defaultReturn = getDefaultReturnStatement(returnType, "cpp");
 
@@ -201,7 +223,7 @@ export function generateAllStarterCodes(questionMetadata = {}) {
   const config = {
     functionName: questionMetadata.functionName || questionMetadata.execution?.functionName || "solution",
     parameters: questionMetadata.parameters || questionMetadata.execution?.parameters || [],
-    returnType: questionMetadata.returnType || questionMetadata.execution?.returnType || "AUTO",
+    returnType: questionMetadata.returnType || questionMetadata.execution?.returnType || "integer",
   };
 
   return {
@@ -212,3 +234,4 @@ export function generateAllStarterCodes(questionMetadata = {}) {
     cpp: generateCppStarter(config),
   };
 }
+

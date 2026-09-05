@@ -5,37 +5,62 @@ import { getPreparationDashboard } from "./preparationService.js";
 import { VERIFIED_QUESTION_BANK, getVerifiedQuestions } from "./questionBank.service.js";
 import { executeAiTask } from "../ai/orchestrator.js";
 
-/**
- * Server-side anti-repetition helper.
- * Detects exact ID matches, title matches, and near-duplicate title strings.
- */
-const COMMON_STOP_WORDS = new Set([
-  "find", "the", "and", "for", "with", "that", "this", "from", "have", "your",
-  "write", "check", "using", "given", "return", "code", "solution", "test",
-  "implement", "problem", "function", "create", "build", "simple", "basic", "in", "an", "a"
+const STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "in", "of", "to", "for", "with", "using", "on", "is", "by", "from",
+  "at", "as", "into", "like", "through", "after", "over", "between", "out", "against", "during", "without",
+  "before", "under", "around", "among"
 ]);
 
-function getTitleKeywords(titleStr) {
-  if (!titleStr) return new Set();
-  const words = String(titleStr)
+export function getTitleKeywords(title) {
+  if (!title || typeof title !== "string") return new Set();
+  const words = title
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length >= 3 && !COMMON_STOP_WORDS.has(w));
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
   return new Set(words);
+}
+
+export function normalizeQuestionFingerprint(question) {
+  if (!question) return "";
+  const rawId = String(question.id || question._id || question.scenarioId || "").trim();
+  const rawTitle = String(question.title || question.scenarioTitle || "").trim();
+  const keywords = Array.from(getTitleKeywords(rawTitle)).sort().join("-");
+  return keywords ? `fp:${keywords}` : (rawId ? `id:${rawId}` : "");
+}
+
+export function extractConceptFingerprints(question) {
+  if (!question) return new Set();
+  const concepts = [
+    ...(question.concepts || []),
+    ...(question.expectedSkills || []),
+    ...(question.topics || []),
+    ...(question.topic ? [question.topic] : [])
+  ];
+  const set = new Set();
+  concepts.forEach(c => {
+    if (typeof c === "string" && c.trim()) {
+      set.add(c.toLowerCase().trim().replace(/[^a-z0-9]/g, ""));
+    }
+  });
+  return set;
 }
 
 /**
  * Server-side anti-repetition helper.
- * Detects exact ID matches, exact title matches, near-duplicate title strings,
+ * Detects exact ID matches, exact title matches, fingerprint matches,
  * and multi-keyword token overlap to prevent paraphrased duplicate questions.
  */
-export function isDuplicateQuestion(candidate, practicedIds = new Set(), practicedTitles = new Set()) {
+export function isDuplicateQuestion(candidate, practicedIds = new Set(), practicedTitles = new Set(), practicedFingerprints = new Set()) {
   if (!candidate) return true;
 
   // 1. Exact ID check
   const qId = String(candidate.id || candidate._id || candidate.scenarioId || "");
   if (qId && practicedIds.has(qId)) return true;
+
+  // 2. Semantic Fingerprint check
+  const candidateFp = normalizeQuestionFingerprint(candidate);
+  if (candidateFp && practicedFingerprints.has(candidateFp)) return true;
 
   const rawTitle = candidate.title || candidate.scenarioTitle || "";
   if (!rawTitle) return false;
@@ -43,7 +68,7 @@ export function isDuplicateQuestion(candidate, practicedIds = new Set(), practic
   const normTitle = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (normTitle && practicedTitles.has(normTitle)) return true;
 
-  // 2. Keyword & Token overlap check against all practiced titles
+  // 3. Keyword & Token overlap check against all practiced titles
   const candidateKeywords = getTitleKeywords(rawTitle);
 
   for (const practicedTitleStr of practicedTitles) {
@@ -191,7 +216,8 @@ export async function getDeterministicScenarioRecommendation(userId, {
   difficulty = null,
   experienceLevel = null,
   excludeIds = [],
-  excludeTitles = []
+  excludeTitles = [],
+  allowAiGeneration = false
 } = {}) {
   let targetRole = "Software Engineer";
   let skillGaps = [];
@@ -244,16 +270,31 @@ export async function getDeterministicScenarioRecommendation(userId, {
     }
   }
 
-  // 1. Anti-Repetition: Collect complete DB history of past questions across PeerInterviewRoom and CodingSubmission
-  let practicedQuestionIds = new Set((excludeIds || []).map(String));
-  let practicedTitles = new Set();
+  // 1. Anti-Repetition: Collect Session-specific & Global DB history
+  const sessionAskedIds = new Set((excludeIds || []).map(String));
+  const sessionAskedTitles = new Set();
+  const sessionAskedFingerprints = new Set();
 
   (excludeTitles || []).forEach(t => {
     if (t) {
-      practicedTitles.add(String(t));
-      practicedTitles.add(String(t).toLowerCase().replace(/[^a-z0-9]/g, ""));
+      const str = String(t);
+      sessionAskedTitles.add(str);
+      sessionAskedTitles.add(str.toLowerCase().replace(/[^a-z0-9]/g, ""));
+      const fp = normalizeQuestionFingerprint({ title: str });
+      if (fp) sessionAskedFingerprints.add(fp);
     }
   });
+
+  (excludeIds || []).forEach(id => {
+    if (id) {
+      const fp = normalizeQuestionFingerprint({ id });
+      if (fp) sessionAskedFingerprints.add(fp);
+    }
+  });
+
+  const globalAskedIds = new Set();
+  const globalAskedTitles = new Set();
+  const globalAskedFingerprints = new Set();
 
   try {
     if (userId) {
@@ -266,7 +307,7 @@ export async function getDeterministicScenarioRecommendation(userId, {
           ]
         })
           .sort({ createdAt: -1 })
-          .select("problem currentQuestionId previousQuestionIds previousQuestionTitles")
+          .select("problem currentQuestionId previousQuestionIds previousQuestionTitles askedQuestionIds askedQuestionFingerprints")
           .lean(),
         CodingSubmission.find({ candidateId: userId })
           .select("questionId")
@@ -274,27 +315,35 @@ export async function getDeterministicScenarioRecommendation(userId, {
       ]);
 
       recentRooms.forEach(room => {
-        if (room.currentQuestionId) practicedQuestionIds.add(String(room.currentQuestionId));
+        if (room.currentQuestionId) globalAskedIds.add(String(room.currentQuestionId));
         if (Array.isArray(room.previousQuestionIds)) {
-          room.previousQuestionIds.forEach(id => practicedQuestionIds.add(String(id)));
+          room.previousQuestionIds.forEach(id => globalAskedIds.add(String(id)));
+        }
+        if (Array.isArray(room.askedQuestionIds)) {
+          room.askedQuestionIds.forEach(id => globalAskedIds.add(String(id)));
+        }
+        if (Array.isArray(room.askedQuestionFingerprints)) {
+          room.askedQuestionFingerprints.forEach(fp => globalAskedFingerprints.add(String(fp)));
         }
         if (Array.isArray(room.previousQuestionTitles)) {
           room.previousQuestionTitles.forEach(t => {
             if (t) {
-              practicedTitles.add(String(t));
-              practicedTitles.add(String(t).toLowerCase().replace(/[^a-z0-9]/g, ""));
+              globalAskedTitles.add(String(t));
+              globalAskedTitles.add(String(t).toLowerCase().replace(/[^a-z0-9]/g, ""));
             }
           });
         }
-        if (room.problem?.id) practicedQuestionIds.add(String(room.problem.id));
+        if (room.problem?.id) globalAskedIds.add(String(room.problem.id));
         if (room.problem?.title) {
-          practicedTitles.add(String(room.problem.title));
-          practicedTitles.add(room.problem.title.toLowerCase().replace(/[^a-z0-9]/g, ""));
+          globalAskedTitles.add(String(room.problem.title));
+          globalAskedTitles.add(room.problem.title.toLowerCase().replace(/[^a-z0-9]/g, ""));
+          const fp = normalizeQuestionFingerprint(room.problem);
+          if (fp) globalAskedFingerprints.add(fp);
         }
       });
 
       pastSubmissions.forEach(sub => {
-        if (sub.questionId) practicedQuestionIds.add(String(sub.questionId));
+        if (sub.questionId) globalAskedIds.add(String(sub.questionId));
       });
     }
   } catch (err) {
@@ -324,8 +373,12 @@ export async function getDeterministicScenarioRecommendation(userId, {
     if (diffPool.length > 0) pool = diffPool;
   }
 
-  // 4. Apply Anti-Repetition Filter
-  let unpracticedCandidates = pool.filter(q => !isDuplicateQuestion(q, practicedQuestionIds, practicedTitles));
+  const initialCandidatePoolSize = pool.length;
+
+  // 4. Apply Session Anti-Repetition Exclusion (STRICT BLOCKING for current session)
+  let sessionUnaskedCandidates = pool.filter(q => !isDuplicateQuestion(q, sessionAskedIds, sessionAskedTitles, sessionAskedFingerprints));
+
+  const historyExcludedCount = pool.length - sessionUnaskedCandidates.length;
 
   let bestScenario = null;
   let matchedSkillName = "";
@@ -335,15 +388,19 @@ export async function getDeterministicScenarioRecommendation(userId, {
     : (typeof targetRole === "string" ? targetRole : "Software Engineer");
   const targetRoleNorm = targetRoleStr.toLowerCase();
 
-  // 5. Rank remaining candidate questions strictly against user skills & target role
-  if (unpracticedCandidates.length > 0) {
+  // 5. Rank remaining candidate questions strictly against user skills, target role & global history deprioritization
+  if (sessionUnaskedCandidates.length > 0) {
+    // Deprioritize globally practiced questions in favor of never-practiced questions
+    const neverPracticedGlobally = sessionUnaskedCandidates.filter(q => !isDuplicateQuestion(q, globalAskedIds, globalAskedTitles, globalAskedFingerprints));
+    const candidateSet = neverPracticedGlobally.length > 0 ? neverPracticedGlobally : sessionUnaskedCandidates;
+
     const userSkillNames = candidateSkills.map(s => String(s).toLowerCase());
     const gapNames = skillGaps.map(g => (g.skill || g.canonicalName || "").toLowerCase());
     const targetSkillKeywords = Array.from(new Set([...userSkillNames, ...gapNames, targetRoleNorm]));
 
     let skillMatchedCandidates = [];
     if (targetSkillKeywords.length > 0) {
-      skillMatchedCandidates = unpracticedCandidates.filter(item => {
+      skillMatchedCandidates = candidateSet.filter(item => {
         const itemConcepts = (item.concepts || item.expectedSkills || [])
           .concat(item.topic || [])
           .concat(item.title || "")
@@ -355,14 +412,13 @@ export async function getDeterministicScenarioRecommendation(userId, {
       });
     }
 
-    const candidatePool = skillMatchedCandidates.length > 0 ? skillMatchedCandidates : unpracticedCandidates;
+    const candidatePool = skillMatchedCandidates.length > 0 ? skillMatchedCandidates : candidateSet;
     bestScenario = candidatePool[Math.floor(Math.random() * candidatePool.length)];
     if (skillMatchedCandidates.length > 0) {
       matchedSkillName = candidateSkills[0] || targetRoleStr;
     }
-  } else {
-    // Verified static bank exhausted or all candidates practiced -> dynamically generate skill-matched AI challenge
-    console.log("[DeterministicSelection] Static pool exhausted or duplicate. Generating skill-matched AI question...");
+  } else if (allowAiGeneration) {
+    // Session pool exhausted in static bank -> attempt dynamic AI challenge if allowed and non-duplicate
     const dynamicAiQ = await generateDynamicAIQuestion({
       category: normCategory,
       difficulty: effectiveDifficulty,
@@ -370,27 +426,56 @@ export async function getDeterministicScenarioRecommendation(userId, {
       topic: normCategory,
       targetRole: targetRoleStr,
       candidateSkills,
-      practicedTitles
+      practicedTitles: sessionAskedTitles
     });
 
-    if (dynamicAiQ && !isDuplicateQuestion(dynamicAiQ, practicedQuestionIds, practicedTitles)) {
+    if (dynamicAiQ && !isDuplicateQuestion(dynamicAiQ, sessionAskedIds, sessionAskedTitles, sessionAskedFingerprints)) {
       bestScenario = dynamicAiQ;
-    } else {
-      // Safe fallback: pick base problem matching requested category
-      const categoryBaseBank = VERIFIED_QUESTION_BANK.filter(q => (q.category || "").toLowerCase() === normCategory);
-      const baseProblem = (categoryBaseBank.length > 0 ? categoryBaseBank : pool)[0] || VERIFIED_QUESTION_BANK[0];
-      const uniqueSuffix = `(Skill Practice Variant ${Date.now().toString().slice(-4)})`;
-      bestScenario = {
-        ...baseProblem,
-        id: `var-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        title: `${baseProblem.title} ${uniqueSuffix}`,
-        category: normCategory,
-        questionType: normCategory,
-        source: "AI_GENERATED",
-        verified: true
-      };
     }
   }
+
+  // 6. Explicit Pool Exhaustion Handling
+  if (!bestScenario) {
+    console.log("[Interview Question Selection Trace - EXHAUSTED]", {
+      userId,
+      mode: normCategory,
+      role: targetRoleStr,
+      experience: effectiveExperienceLevel,
+      topic: normCategory,
+      requestedDifficulty: effectiveDifficulty,
+      candidatePoolSize: initialCandidatePoolSize,
+      historyExcludedCount,
+      selectedQuestionId: null,
+      status: "NO_ELIGIBLE_QUESTION"
+    });
+
+    return {
+      scenario: null,
+      code: "NO_ELIGIBLE_QUESTION",
+      message: `All eligible practice questions for '${normCategory}' (${effectiveExperienceLevel}) have been completed in this session.`,
+      targetRole,
+      experienceLevel: effectiveExperienceLevel,
+      difficulty: effectiveDifficulty
+    };
+  }
+
+  const selectedFp = normalizeQuestionFingerprint(bestScenario);
+
+  // Debug Trace Log
+  console.log("[Interview Question Selection Trace]", {
+    userId: userId || "session",
+    mode: normCategory,
+    role: targetRoleStr,
+    experience: effectiveExperienceLevel,
+    topic: normCategory,
+    requestedDifficulty: effectiveDifficulty,
+    candidatePoolSize: initialCandidatePoolSize,
+    historyExcludedCount,
+    semanticDuplicateCount: historyExcludedCount,
+    selectedQuestionId: bestScenario.id || bestScenario.scenarioId,
+    selectedQuestionFingerprint: selectedFp,
+    selectedTitle: bestScenario.title
+  });
 
   // Format as standardized scenario problem object
   const scenarioObj = {
@@ -408,14 +493,15 @@ export async function getDeterministicScenarioRecommendation(userId, {
     source: bestScenario.source || "CURATED",
     sourceUrl: bestScenario.sourceUrl || "",
     verified: bestScenario.verified ?? true,
-    testCases: bestScenario.testCases || []
+    testCases: bestScenario.testCases || [],
+    fingerprint: selectedFp
   };
 
-  // 6. Generate transparent explainable rationale card
+  // Generate transparent explainable rationale card
   let rationale = "";
   const displayLevel = effectiveExperienceLevel.toUpperCase();
   if (matchedSkillName) {
-    rationale = `Tailored for ${displayLevel} (${targetRole}). Identifies an active gap in '${matchedSkillName}'. Practicing '${bestScenario.title}' directly addresses this gap.`;
+    rationale = `Tailored for ${displayLevel} (${targetRoleStr}). Identifies an active gap in '${matchedSkillName}'. Practicing '${bestScenario.title}' directly addresses this gap.`;
   } else {
     rationale = `Verified ${bestScenario.source || "Curated"} question recommended for ${displayLevel} candidate in ${category.toUpperCase()}. Focuses on foundational problem solving and interview readiness.`;
   }
@@ -423,11 +509,12 @@ export async function getDeterministicScenarioRecommendation(userId, {
   return {
     scenario: scenarioObj,
     rationale,
-    targetRole,
+    targetRole: targetRoleStr,
     experienceLevel: effectiveExperienceLevel,
     difficulty: effectiveDifficulty,
     readinessScore,
     matchedSkill: matchedSkillName || null
   };
 }
+
 

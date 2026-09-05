@@ -45,23 +45,128 @@ const normalizeLanguage = (language) => {
   return aliases[language.toLowerCase()] || language.toLowerCase();
 };
 
-const DEFAULT_STARTER_CODES = {
-  javascript: `function solution(arr) {\n  // Write your JavaScript code here\n}`,
-  typescript: `function solution(arr: any): any {\n  // Write your TypeScript code here\n}`,
-  python: `def solution(arr):\n    # Write your Python code here\n    pass\n`,
-  java: `class Solution {\n    public Object solution(Object arr) {\n        // Write your Java code here\n        return null;\n    }\n}`,
-  cpp: `class Solution {\npublic:\n    auto solution(auto arr) {\n        // Write your C++ code here\n    }\n};`
+const getFrontendLanguageType = (abstractType, lang) => {
+  const normType = (abstractType || "integer[]").trim().toLowerCase();
+  const is2DArray = normType.includes("[][]") || normType.includes("2d");
+  const isArray = !is2DArray && (normType.includes("[]") || normType.includes("array") || normType.includes("vector") || normType.includes("list"));
+  const isObject = normType.includes("object") || normType.includes("map") || normType.includes("dict") || normType.includes("record") || normType.includes("{");
+  const isString = !isObject && (normType.includes("string") || normType.includes("str") || normType.includes("char"));
+  const isBool = normType.includes("bool");
+  const isFloat = normType.includes("float") || normType.includes("double");
+  const isInt = normType.includes("int") || normType.includes("number") || normType.includes("integer");
+
+  switch (lang) {
+    case "typescript":
+    case "ts":
+      if (is2DArray) return isString ? "string[][]" : "number[][]";
+      if (isArray) return isString ? "string[]" : isBool ? "boolean[]" : "number[]";
+      if (isObject) return "Record<string, any>";
+      if (isString) return "string";
+      if (isBool) return "boolean";
+      if (isInt || isFloat) return "number";
+      return "number[]";
+
+    case "python":
+    case "py":
+      if (is2DArray) return isString ? "List[List[str]]" : "List[List[int]]";
+      if (isArray) return isString ? "List[str]" : isBool ? "List[bool]" : isFloat ? "List[float]" : "List[int]";
+      if (isObject) return "dict";
+      if (isString) return "str";
+      if (isBool) return "bool";
+      if (isFloat) return "float";
+      if (isInt) return "int";
+      return "int[]";
+
+    case "java":
+      if (is2DArray) return isString ? "String[][]" : "int[][]";
+      if (isArray) return isString ? "String[]" : isBool ? "boolean[]" : isFloat ? "double[]" : "int[]";
+      if (isObject) return "Map<String, Object>";
+      if (isString) return "String";
+      if (isBool) return "boolean";
+      if (isFloat) return "double";
+      if (isInt) return "int";
+      return "int";
+
+    case "cpp":
+    case "c++":
+      if (is2DArray) return isString ? "vector<vector<string>>" : "vector<vector<int>>";
+      if (isArray) return isString ? "vector<string>" : isBool ? "vector<bool>" : isFloat ? "vector<double>" : "vector<int>";
+      if (isObject) return "auto";
+      if (isString) return "string";
+      if (isBool) return "bool";
+      if (isFloat) return "double";
+      if (isInt) return "int";
+      return "int";
+
+    default: // javascript
+      return "";
+  }
+};
+
+const generateFrontendStarterCode = (question, language) => {
+  const norm = normalizeLanguage(language);
+  const fn = question?.functionName || question?.execution?.functionName || "solution";
+  const params = (question?.parameters || question?.execution?.parameters || [{ name: "arr", type: "integer[]" }]);
+  const returnType = question?.returnType || question?.execution?.returnType || "integer";
+
+  if (norm === "java") {
+    let hasMap = false;
+    const javaParams = params.map((p, i) => {
+      const pName = p.name || `arg${i + 1}`;
+      const pType = getFrontendLanguageType(p.type, "java");
+      if (pType.includes("Map")) hasMap = true;
+      return `${pType} ${pName}`;
+    }).join(", ");
+    const javaRet = getFrontendLanguageType(returnType, "java");
+    const retStmt = javaRet === "int" ? "return 0;" : javaRet.includes("[]") ? "return new " + javaRet + "{};" : javaRet === "boolean" ? "return false;" : javaRet === "String" ? 'return "";' : "return 0;";
+    const imports = hasMap ? "import java.util.*;\n\n" : "";
+    return `${imports}class Solution {\n    public ${javaRet} ${fn}(${javaParams}) {\n        // Write your solution here\n        ${retStmt}\n    }\n}`;
+  }
+
+  if (norm === "cpp") {
+    const cppParams = params.map((p, i) => {
+      const pName = p.name || `arg${i + 1}`;
+      const pType = getFrontendLanguageType(p.type, "cpp");
+      const isComplex = pType.includes("vector") || pType.includes("string");
+      return isComplex ? `const ${pType}& ${pName}` : `${pType} ${pName}`;
+    }).join(", ");
+    const cppRet = getFrontendLanguageType(returnType, "cpp");
+    const retStmt = cppRet.includes("vector") ? "return {};" : cppRet === "bool" ? "return false;" : cppRet === "string" ? 'return "";' : "return 0;";
+    return `class Solution {\npublic:\n    ${cppRet} ${fn}(${cppParams}) {\n        // Write your solution here\n        ${retStmt}\n    }\n};`;
+  }
+
+  if (norm === "python") {
+    const pyParams = params.map((p, i) => p.name || `arg${i + 1}`).join(", ");
+    return `def ${fn}(${pyParams}):\n    # Write your solution here\n    pass\n`;
+  }
+
+  if (norm === "typescript") {
+    const tsParams = params.map((p, i) => {
+      const pName = p.name || `arg${i + 1}`;
+      const pType = getFrontendLanguageType(p.type, "typescript");
+      return `${pName}: ${pType}`;
+    }).join(", ");
+    const tsRet = getFrontendLanguageType(returnType, "typescript");
+    return `function ${fn}(${tsParams}): ${tsRet} {\n  // Write your solution here\n}`;
+  }
+
+  // javascript
+  const jsParams = params.map((p, i) => p.name || `arg${i + 1}`).join(", ");
+  return `function ${fn}(${jsParams}) {\n  // Write your solution here\n}`;
 };
 
 const getStarterCode = (question, language) => {
   const norm = normalizeLanguage(language);
   if (question?.starterCode && typeof question.starterCode === "object" && question.starterCode[norm]) {
-    return question.starterCode[norm];
+    const starter = question.starterCode[norm];
+    if (typeof starter === "string" && !starter.includes("public Object solution")) {
+      return starter;
+    }
   }
-  if (typeof question?.starterCode === "string" && question.starterCode.trim() !== "") {
+  if (typeof question?.starterCode === "string" && question.starterCode.trim() !== "" && !question.starterCode.includes("public Object solution")) {
     return question.starterCode;
   }
-  return DEFAULT_STARTER_CODES[norm] || DEFAULT_STARTER_CODES.javascript;
+  return generateFrontendStarterCode(question, norm);
 };
 
 export default function CodeEditor({

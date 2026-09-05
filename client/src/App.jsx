@@ -23,6 +23,7 @@ import PeerInterviewReportPage from "./pages/PeerInterviewReportPage";
 import TechDiscussionSetupPage from "./pages/TechDiscussionSetupPage";
 import TechDiscussionRoomPage from "./pages/TechDiscussionRoomPage";
 import TechDiscussionReportPage from "./pages/TechDiscussionReportPage";
+import TechDiscussionHistoryPage from "./pages/TechDiscussionHistoryPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { JobBoardPage } from "./pages/JobBoardPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
@@ -97,18 +98,22 @@ export function App() {
               element={<TechDiscussionSetupPage />}
             />
             <Route
+              path="/tech-discussion/history"
+              element={<TechDiscussionHistoryPage />}
+            />
+            <Route
               path="/tech-discussion/:roomId"
               element={<TechDiscussionRoomPage />}
             />
             <Route
               path="/tech-discussion/:roomId/report"
-              element={<TechDiscussionReportPage />}
+              element={<Navigate to="/tech-discussion/history" replace />}
             />
 
             {/* Redirects for legacy peer interview links */}
             <Route
               path="/peer-interview/:roomId/report"
-              element={<TechDiscussionReportPage />}
+              element={<Navigate to="/tech-discussion/history" replace />}
             />
             <Route
               path="/peer-interview/:roomId"

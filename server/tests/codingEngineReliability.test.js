@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { generateAllStarterCodes } from "../src/services/codeExecution/starterCodeGenerator.js";
+import { generateAllStarterCodes, getLanguageType } from "../src/services/codeExecution/starterCodeGenerator.js";
 import { normalizeCodingQuestion } from "../src/services/codeExecution/questionNormalizationService.js";
 import { unpackTestCaseArguments, serializeValue } from "../src/services/codeExecution/serializers.js";
 import { executeCode } from "../src/services/codeExecution/executionService.js";
@@ -24,7 +24,7 @@ describe("AI Interview Coding Engine — Production Reliability Suite", () => {
       assert.ok(starters.typescript.includes("function twoSum(nums: number[], target: number): number[]"), `TS starter should include signature: ${starters.typescript}`);
       assert.ok(starters.python.includes("def twoSum(nums, target):"), `Python starter should include signature: ${starters.python}`);
       assert.ok(starters.java.includes("public int[] twoSum(int[] nums, int target)"), `Java starter should include signature: ${starters.java}`);
-      assert.ok(starters.cpp.includes("vector<int> twoSum(vector<int>& nums, int target)"), `C++ starter should include signature: ${starters.cpp}`);
+      assert.ok(starters.cpp.includes("vector<int> twoSum(const vector<int>& nums, int target)"), `C++ starter should include signature: ${starters.cpp}`);
     });
 
     it("should generate appropriate 1-parameter array starter code for max element problem", () => {
@@ -39,7 +39,7 @@ describe("AI Interview Coding Engine — Production Reliability Suite", () => {
       assert.ok(starters.javascript.includes("function findMax(arr)"), `JS: ${starters.javascript}`);
       assert.ok(starters.python.includes("def findMax(arr):"), `Python: ${starters.python}`);
       assert.ok(starters.java.includes("public int findMax(int[] arr)"), `Java: ${starters.java}`);
-      assert.ok(starters.cpp.includes("int findMax(vector<int>& arr)"), `C++: ${starters.cpp}`);
+      assert.ok(starters.cpp.includes("int findMax(const vector<int>& arr)"), `C++: ${starters.cpp}`);
     });
   });
 
@@ -267,6 +267,270 @@ function twoSum(nums, target) {
 
       assert.equal(res.allPassed, true, `Auto-derived executionContract should execute twoSum: ${res.results?.[0]?.error}`);
       assert.deepEqual(res.results[0].actualOutput, [0, 1]);
+    });
+  });
+
+  describe("7. Golden Cross-Language & Contract Validation Tests", () => {
+    it("should throw INVALID_CODING_CONTRACT when type metadata is null or invalid", () => {
+      assert.throws(
+        () => getLanguageType(null, "java"),
+        /INVALID_CODING_CONTRACT/
+      );
+      assert.throws(
+        () => getLanguageType("unknown_custom_type_xyz", "java"),
+        /INVALID_CODING_CONTRACT/
+      );
+    });
+
+    it("should execute Array Length challenge in Java and C++ with exact type signatures", async () => {
+      const javaCode = `
+class Solution {
+    public int solution(int[] arr) {
+        return arr.length;
+    }
+}
+`;
+      const executionContract = {
+        mode: "FUNCTION",
+        functionName: "solution",
+        parameters: [{ name: "arr", type: "integer[]" }],
+        returnType: "integer"
+      };
+
+      const testCases = [
+        { input: [1, 2, 3], expectedOutput: 3 },
+        { input: [], expectedOutput: 0 }
+      ];
+
+      const javaRes = await executeCode({
+        language: "java",
+        code: javaCode,
+        testCases,
+        executionContract
+      });
+
+      assert.equal(javaRes.allPassed, true, `Java array length execution failed: ${javaRes.results?.[0]?.error || javaRes.stderr}`);
+      assert.equal(javaRes.results[0].actualOutput, 3);
+      assert.equal(javaRes.results[1].actualOutput, 0);
+
+      const cppCode = `
+class Solution {
+public:
+    int solution(vector<int>& arr) {
+        return arr.size();
+    }
+};
+`;
+
+      const cppRes = await executeCode({
+        language: "cpp",
+        code: cppCode,
+        testCases,
+        executionContract
+      });
+
+      assert.equal(cppRes.allPassed, true, `C++ array length execution failed: ${cppRes.results?.[0]?.error || cppRes.stderr}`);
+      assert.equal(cppRes.results[0].actualOutput, 3);
+      assert.equal(cppRes.results[1].actualOutput, 0);
+    });
+
+    it("should execute Two Integer Sum challenge in Java, Python, and JS with exact type signatures", async () => {
+      const executionContract = {
+        mode: "FUNCTION",
+        functionName: "add",
+        parameters: [
+          { name: "a", type: "integer" },
+          { name: "b", type: "integer" }
+        ],
+        returnType: "integer"
+      };
+
+      const testCases = [
+        { input: [2, 3], expectedOutput: 5 },
+        { input: [-1, 10], expectedOutput: 9 }
+      ];
+
+      const javaCode = `
+class Solution {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+`;
+      const javaRes = await executeCode({
+        language: "java",
+        code: javaCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(javaRes.allPassed, true, `Java integer add failed: ${javaRes.results?.[0]?.error}`);
+      assert.equal(javaRes.results[0].actualOutput, 5);
+
+      const pyCode = `
+def add(a, b):
+    return a + b
+`;
+      const pyRes = await executeCode({
+        language: "python",
+        code: pyCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(pyRes.allPassed, true, `Python integer add failed: ${pyRes.results?.[0]?.error}`);
+      assert.equal(pyRes.results[0].actualOutput, 5);
+    });
+
+    it("should execute String Length challenge in Java, Python, and C++ with string type signatures", async () => {
+      const executionContract = {
+        mode: "FUNCTION",
+        functionName: "stringLength",
+        parameters: [{ name: "s", type: "string" }],
+        returnType: "integer"
+      };
+
+      const testCases = [
+        { input: "hello", expectedOutput: 5 },
+        { input: "", expectedOutput: 0 }
+      ];
+
+      const javaCode = `
+class Solution {
+    public int stringLength(String s) {
+        return s.length();
+    }
+}
+`;
+      const javaRes = await executeCode({
+        language: "java",
+        code: javaCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(javaRes.allPassed, true, `Java string length failed: ${javaRes.results?.[0]?.error}`);
+      assert.equal(javaRes.results[0].actualOutput, 5);
+
+      const cppCode = `
+class Solution {
+public:
+    int stringLength(const string& s) {
+        return s.length();
+    }
+};
+`;
+      const cppRes = await executeCode({
+        language: "cpp",
+        code: cppCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(cppRes.allPassed, true, `C++ string length failed: ${cppRes.results?.[0]?.error}`);
+      assert.equal(cppRes.results[0].actualOutput, 5);
+    });
+
+    it("should execute Object Input challenge in JS, Python, and Java with exact type signatures and input unpacking", async () => {
+      const executionContract = {
+        mode: "FUNCTION",
+        functionName: "solution",
+        parameters: [{ name: "input", type: "object" }],
+        returnType: "integer"
+      };
+
+      const testCases = [
+        { input: { nums: [1, 2, 1, 1, 1], k: 3 }, expectedOutput: 3 }
+      ];
+
+      // JavaScript
+      const jsCode = `
+function solution(input) {
+  const nums = input.nums;
+  const k = input.k;
+  let maxLen = 0, currentSum = 0, left = 0;
+  for (let right = 0; right < nums.length; right++) {
+    currentSum += nums[right];
+    while (currentSum > k && left <= right) {
+      currentSum -= nums[left];
+      left++;
+    }
+    maxLen = Math.max(maxLen, right - left + 1);
+  }
+  return maxLen;
+}
+`;
+      const jsRes = await executeCode({
+        language: "javascript",
+        code: jsCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(jsRes.allPassed, true, `JS Object input execution failed: ${jsRes.results?.[0]?.error}`);
+      assert.equal(jsRes.results[0].actualOutput, 3);
+
+      // Python
+      const pyCode = `
+def solution(input):
+    nums = input['nums']
+    k = input['k']
+    max_len, current_sum, left = 0, 0, 0
+    for right in range(len(nums)):
+        current_sum += nums[right]
+        while current_sum > k and left <= right:
+            current_sum -= nums[left]
+            left += 1
+        max_len = max(max_len, right - left + 1)
+    return max_len
+`;
+      const pyRes = await executeCode({
+        language: "python",
+        code: pyCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(pyRes.allPassed, true, `Python Object input execution failed: ${pyRes.results?.[0]?.error}`);
+      assert.equal(pyRes.results[0].actualOutput, 3);
+
+      // Java
+      const javaCode = `
+import java.util.*;
+
+class Solution {
+    public int solution(Map<String, Object> input) {
+        int[] nums = (int[]) input.get("nums");
+        int k = (int) input.get("k");
+        int maxLen = 0, currentSum = 0, left = 0;
+        for (int right = 0; right < nums.length; right++) {
+            currentSum += nums[right];
+            while (currentSum > k && left <= right) {
+                currentSum -= nums[left];
+                left++;
+            }
+            maxLen = Math.max(maxLen, right - left + 1);
+        }
+        return maxLen;
+    }
+}
+`;
+      const javaRes = await executeCode({
+        language: "java",
+        code: javaCode,
+        testCases,
+        executionContract
+      });
+      assert.equal(javaRes.allPassed, true, `Java Object input execution failed: ${javaRes.results?.[0]?.error || javaRes.stderr}`);
+      assert.equal(javaRes.results[0].actualOutput, 3);
+    });
+
+    it("should NEVER generate 'search()' as default function name for object or array questions", () => {
+      const starters = generateAllStarterCodes({
+        functionName: "solution",
+        parameters: [{ name: "input", type: "object" }],
+        returnType: "integer"
+      });
+
+      assert.equal(starters.java.includes("search()"), false);
+      assert.equal(starters.cpp.includes("search()"), false);
+      assert.equal(starters.python.includes("search()"), false);
+      assert.equal(starters.javascript.includes("search()"), false);
+      assert.ok(starters.java.includes("public int solution(Map<String, Object> input)"));
     });
   });
 });

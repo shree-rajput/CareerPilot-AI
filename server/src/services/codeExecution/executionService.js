@@ -90,6 +90,7 @@ export const executeCode = async ({
     let actualOutput = null;
     let userStdout = "";
     let parseError = null;
+    let outputState = "ACTUAL_OUTPUT";
 
     const rawStdout = execRes.stdout || "";
     const rawStderr = execRes.stderr || "";
@@ -101,7 +102,13 @@ export const executeCode = async ({
       userStdout = rawStdout.slice(0, startIdx).trim();
       const jsonStr = rawStdout.slice(startIdx + "__CP_OUTPUT_START__".length, endIdx).trim();
       try {
-        actualOutput = JSON.parse(jsonStr);
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && typeof parsed === "object" && "outputState" in parsed) {
+          outputState = parsed.outputState;
+          actualOutput = parsed.value;
+        } else {
+          actualOutput = parsed;
+        }
       } catch (e) {
         actualOutput = jsonStr;
         parseError = e.message;
@@ -109,9 +116,18 @@ export const executeCode = async ({
     } else {
       userStdout = rawStdout.trim();
       actualOutput = userStdout;
+      if (!userStdout && !rawStderr) {
+        outputState = "NO_OUTPUT";
+      }
     }
 
-    const comparison = compareOutputs(actualOutput, testCase.expectedOutput);
+    if (execRes.timedOut) {
+      outputState = "TIMEOUT";
+    } else if (execRes.exitCode !== 0 && rawStderr) {
+      outputState = execRes.isCompileStage ? "COMPILATION_ERROR" : "RUNTIME_ERROR";
+    }
+
+    const comparison = compareOutputs(actualOutput, testCase.expectedOutput, outputState);
     const resultStatus = classifyResultStatus({
       exitCode: execRes.exitCode,
       stderr: rawStderr,
@@ -128,6 +144,7 @@ export const executeCode = async ({
       passed: comparison.passed,
       actualOutput: comparison.actualNormalized,
       expectedOutput: comparison.expectedNormalized,
+      outputState: comparison.outputState || outputState,
       executionTimeMs,
       stdout: userStdout,
       stderr: rawStderr,

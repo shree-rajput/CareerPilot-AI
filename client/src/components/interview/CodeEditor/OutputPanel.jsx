@@ -1,8 +1,21 @@
 import React from "react";
 
-function formatVal(val) {
-  if (val === undefined || val === null) return "";
-  if (typeof val === "string") return val;
+function formatVal(val, outputState) {
+  if (outputState === "UNDEFINED_RETURN" || val === "undefined") {
+    return "undefined";
+  }
+  if (outputState === "NULL_RETURN" || (val === null && outputState)) {
+    return "null";
+  }
+  if (val === undefined) {
+    return "undefined";
+  }
+  if (val === null) {
+    return "null";
+  }
+  if (typeof val === "string") {
+    return val === "" ? '""' : val;
+  }
   try {
     return JSON.stringify(val, null, 2);
   } catch {
@@ -13,7 +26,8 @@ function formatVal(val) {
 export default function OutputPanel({ result, isRunning, isSubmitting }) {
   const isLoading = isRunning || isSubmitting;
 
-  const status = result?.status || (result?.passedTests === result?.totalTests && result?.totalTests > 0 ? "completed" : result ? "failed" : null);
+  const status = result?.executionStatus || result?.status;
+  const verdict = result?.verdict;
 
   return (
     <div className="min-h-[140px] bg-[#0B0F19] border-t border-[#2A3143]">
@@ -22,7 +36,7 @@ export default function OutputPanel({ result, isRunning, isSubmitting }) {
           Execution Results & Output
         </span>
 
-        {status && <StatusBadge status={status} />}
+        {result && <StatusBadge status={status} verdict={verdict} />}
       </div>
 
       <div className="max-h-[260px] overflow-auto p-4 custom-scrollbar">
@@ -140,13 +154,13 @@ function ExecutionResult({ result }) {
                   <div>
                     <span className="text-gray-500 uppercase text-[9px]">Expected:</span>
                     <pre className="bg-black/40 p-1.5 rounded mt-0.5 overflow-x-auto text-gray-300">
-                      {formatVal(item.expectedOutput)}
+                      {formatVal(item.expectedOutput, item.outputState)}
                     </pre>
                   </div>
                   <div>
                     <span className="text-gray-500 uppercase text-[9px]">Actual Output:</span>
                     <pre className={`p-1.5 rounded mt-0.5 overflow-x-auto ${item.passed ? "bg-black/40 text-emerald-300" : "bg-black/40 text-rose-300"}`}>
-                      {formatVal(item.actualOutput)}
+                      {formatVal(item.actualOutput, item.outputState)}
                     </pre>
                   </div>
                 </div>
@@ -171,28 +185,26 @@ function Metric({ label, value, highlight }) {
   );
 }
 
-function StatusBadge({ status }) {
-  const normalized = String(status).toLowerCase();
+function StatusBadge({ status, verdict }) {
+  const isAccepted = verdict === "Accepted" || verdict === "ACCEPTED";
+  const isCompileErr = status === "COMPILE_ERROR" || verdict === "Compilation Error";
+  const isTimeout = status === "TIMEOUT" || verdict === "Time Limit Exceeded";
 
-  const styles = {
-    completed: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
-    passed: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
-    success: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
-    accepted: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
-    failed: "bg-red-500/10 text-red-400 border border-red-500/30",
-    compile_error: "bg-amber-500/10 text-amber-400 border border-amber-500/30",
-    runtime_error: "bg-red-500/10 text-red-400 border border-red-500/30",
-    timeout: "bg-purple-500/10 text-purple-400 border border-purple-500/30",
-    execution_error: "bg-red-500/10 text-red-400 border border-red-500/30",
-    error: "bg-red-500/10 text-red-400 border border-red-500/30",
-    running: "bg-blue-500/10 text-blue-400 border border-blue-500/30",
-  };
+  const badgeStyle = isAccepted
+    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+    : isCompileErr
+    ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+    : isTimeout
+    ? "bg-purple-500/10 text-purple-400 border border-purple-500/30"
+    : "bg-rose-500/10 text-rose-400 border border-rose-500/30";
+
+  const label = verdict || status || "Executed";
 
   return (
     <span
-      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase ${styles[normalized] || "bg-gray-800 text-gray-300"}`}
+      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase ${badgeStyle}`}
     >
-      {status}
+      {label}
     </span>
   );
 }

@@ -45,43 +45,67 @@ export function buildFallbackInterviewEvaluation(params = {}, reason = "AI servi
   const words = transcript ? transcript.split(/\s+/).length : 0;
   const expectedConcepts = params.expectedConcepts || [];
   const lowerTranscript = transcript.toLowerCase();
-  const conceptHits = expectedConcepts.filter((concept) =>
+
+  const demonstratedConcepts = expectedConcepts.filter((concept) =>
     lowerTranscript.includes(String(concept).toLowerCase())
-  ).length;
-  const conceptScore = expectedConcepts.length
-    ? (conceptHits / expectedConcepts.length) * 100
-    : Math.min(80, words * 2);
-  const relevance = words > 12 ? Math.max(45, conceptScore) : 25;
-  const completeness = Math.min(85, Math.max(20, words * 1.5 + conceptHits * 12));
-  const clarityPenalty = (params.metrics?.fillerWords || 0) * 4 + (params.metrics?.longPauses || 0) * 5;
-  const clarity = clampScore(Math.min(82, 45 + Math.min(words, 60) * 0.5) - clarityPenalty);
-  const structure = clampScore(transcript.match(/\b(first|second|because|for example|finally|result)\b/i) ? clarity + 8 : clarity - 8);
-  const communication = clampScore(75 - clarityPenalty);
+  );
+  const missingConcepts = expectedConcepts.filter((concept) =>
+    !lowerTranscript.includes(String(concept).toLowerCase())
+  );
+
+  const isNoAnswer = /don't know|no idea|not sure|blank|don't have/i.test(transcript) || words < 3;
+
+  const answerStatus = isNoAnswer
+    ? "NO_ANSWER"
+    : (demonstratedConcepts.length === expectedConcepts.length && expectedConcepts.length > 0)
+    ? "CORRECT_ANSWER"
+    : (demonstratedConcepts.length > 0)
+    ? "PARTIAL_ANSWER"
+    : "INCORRECT_ANSWER";
+
+  const conceptHits = demonstratedConcepts.length;
 
   return {
     relevance: words > 12 ? "Medium" : "Low",
-    correctness: conceptScore > 50 ? "Medium" : "Low",
+    correctness: conceptHits > 0 ? "Medium" : "Low",
     depth: words > 30 ? "Medium" : "Low",
     specificity: conceptHits > 0 ? "Medium" : "Low",
-    structure: structure > 50 ? "Medium" : "Low",
+    structure: words > 15 ? "Medium" : "Low",
+    answerStatus,
+    evaluationStatus: "partial",
+    evidence: {
+      demonstratedConcepts,
+      missingConcepts,
+      incorrectClaims: [],
+      reasoningSignals: [],
+      practicalSignals: [],
+      communicationSignals: {
+        clarity: words > 10 ? "Understandable structure" : "Brevity noted",
+        structure: words > 15 ? "Followed sequence" : "Direct response",
+        relevance: words > 5 ? "On topic" : "Brief",
+        conciseness: "Direct answer provided",
+        explanationQuality: "Deterministic review based on transcript"
+      },
+      uncertaintyExpressed: isNoAnswer,
+      isCorruptedTranscription: false
+    },
     evidenceCollected: [
-      `Candidate spoke ${words} words.`,
-      `Candidate hit ${conceptHits} out of ${expectedConcepts.length} expected concepts.`
+      `Candidate response contained ${words} words.`,
+      `Demonstrated concepts: ${demonstratedConcepts.join(", ") || "None"}.`
     ],
-    strengths: words > 20
-      ? ["You provided enough content for a basic evaluation."]
-      : ["You attempted the question and created a starting point for improvement."],
-    weaknesses: [
-      "AI evaluation was unavailable, so this is a conservative rules-based review.",
-      expectedConcepts.length && conceptHits < expectedConcepts.length
-        ? `Your answer did not clearly mention: ${expectedConcepts.filter((concept) => !lowerTranscript.includes(String(concept).toLowerCase())).slice(0, 4).join(", ")}.`
-        : "Add more concrete implementation details and examples."
-    ].filter(Boolean),
-    missingConcepts: expectedConcepts.filter((concept) => !lowerTranscript.includes(String(concept).toLowerCase())),
-    confidence: "LOW",
+    strengths: demonstratedConcepts.length > 0
+      ? demonstratedConcepts.map(c => `Correctly identified concept: ${c}`)
+      : (words > 10 ? ["Response was direct and on topic"] : []),
+    weaknesses: missingConcepts.length > 0
+      ? missingConcepts.map(m => `Missed expected concept: ${m}`)
+      : (isNoAnswer ? ["Candidate gave no-answer response"] : []),
+    missingConcepts,
+    confidence: "MEDIUM",
     idealAnswer: {
-      text: `A stronger answer should directly define the concept, explain how it works, give a concrete example from your actual experience, discuss trade-offs, and close with the result or learning.`,
-      explanation: "This structure is useful because it stays specific, evidence-based, and easy for an interviewer to follow."
+      text: expectedConcepts.length > 0
+        ? `A complete answer should address: ${expectedConcepts.join(", ")}.`
+        : "Explain the core mechanics and trade-offs clearly.",
+      explanation: "Basis: Deterministic rubric evaluation from transcript. Deep AI evaluation was unavailable."
     },
     analysisSource: "deterministic_fallback",
     fallbackReason: reason
@@ -175,7 +199,8 @@ export async function evaluateCodingChallenge(params) {
 /**
  * Generates a personalized opening greeting string using authenticated user profile.
  */
-export function generatePersonalizedGreeting(user = {}, targetRole = "Software Engineer") {
+export function generatePersonalizedGreeting(user = {}, targetRole = null) {
+  const resolvedRole = targetRole || user?.targetRoles?.find(r => r.isPrimary)?.title || user?.targetRoles?.[0]?.title || "Software Engineer";
   let name = "";
   if (typeof user?.firstName === "string" && user.firstName.trim()) {
     name = user.firstName.trim();
@@ -187,10 +212,10 @@ export function generatePersonalizedGreeting(user = {}, targetRole = "Software E
   }
 
   if (name && name !== "undefined" && name !== "null" && name !== "[object Object]") {
-    return `Hello ${name}! 👋 Welcome to your technical interview. I'll be asking you a few questions based on your profile and experience as a ${targetRole}. Take your time, think aloud when useful, and feel free to explain your approach. Ready to begin?`;
+    return `Hello ${name}! 👋 Welcome to your technical interview. I'll be asking you a few questions based on your profile and experience as a ${resolvedRole}. Take your time, think aloud when useful, and feel free to explain your approach. Ready to begin?`;
   }
 
-  return `Hello! Welcome to your technical interview. I'll be asking you a few questions based on your profile and experience as a ${targetRole}. Take your time, think aloud when useful, and feel free to explain your approach. Ready to begin?`;
+  return `Hello! Welcome to your technical interview. I'll be asking you a few questions based on your profile and experience as a ${resolvedRole}. Take your time, think aloud when useful, and feel free to explain your approach. Ready to begin?`;
 }
 
 /**

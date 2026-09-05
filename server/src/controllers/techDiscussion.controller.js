@@ -7,7 +7,9 @@ import {
   executeContextAction,
   endTechDiscussionSession,
   getIndividualTechDiscussionReport,
-  getNextTechDiscussionQuestion
+  getNextTechDiscussionQuestion,
+  restoreTechDiscussionSession,
+  getUserTechDiscussionHistory
 } from "../services/career/techDiscussion.service.js";
 import { getSupportedLanguages } from "../config/programmingLanguages.js";
 
@@ -212,4 +214,76 @@ export async function getNextQuestionController(req, res) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to advance to next question" });
   }
 }
+
+export async function getRoomSessionController(req, res) {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+
+    const { roomId } = req.params;
+    const result = await restoreTechDiscussionSession({ roomId, userId });
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error("getRoomSessionController error:", error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code || "SESSION_RESTORE_FAILED",
+      message: error.message || "Failed to restore discussion room session"
+    });
+  }
+}
+
+export async function getHistoryController(req, res) {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+
+    const { page, limit } = req.query;
+    const result = await getUserTechDiscussionHistory({ userId, page, limit });
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error("getHistoryController error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch tech discussion history" });
+  }
+}
+
+export async function saveDraftController(req, res) {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+
+    const { roomId } = req.params;
+    const { code, language, activeWorkspace } = req.body || {};
+
+    const { PeerInterviewRoom } = await import("../models/PeerInterviewRoom.js");
+    const updateObj = {
+      "codeState.code": code || "",
+      "codeState.language": language || "javascript",
+      "codeState.updatedAt": new Date()
+    };
+
+    if (language) {
+      updateObj[`draftCode.${language}`] = code;
+    }
+    if (activeWorkspace) {
+      updateObj.activeWorkspace = activeWorkspace;
+    }
+
+    await PeerInterviewRoom.updateOne({ roomId }, { $set: updateObj });
+
+    return res.status(200).json({ success: true, message: "Draft saved successfully" });
+  } catch (error) {
+    console.error("saveDraftController error:", error);
+    return res.status(500).json({ success: false, message: "Failed to save code draft" });
+  }
+}
+
 

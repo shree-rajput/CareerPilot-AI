@@ -160,10 +160,10 @@ export function extractCompanyAndRoleFromEmail({
 
   const fullText = `${subject} \n ${bodyText}`;
 
-  // 1. Search Body text for "applying for the <Role> position at <Company>" pattern
+  // 1. Search Body text for "for your <Role> application/position at <Company>" or "applying for <Role> position at <Company>"
   if (!company || !role) {
     const bodyMatch1 = fullText.match(
-      /(?:applying|applied|application)\s+for\s+(?:the\s+)?(.+?)\s+(?:position|role)\s+at\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\s+if|\n|$)/i
+      /(?:applying|applied|application|assessment)\s+for\s+(?:the\s+|your\s+)?(.+?)\s+(?:position|role|application)\s+at\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\s+if|\n|$)/i
     );
     if (bodyMatch1) {
       if (!role) role = cleanString(bodyMatch1[1]);
@@ -174,7 +174,7 @@ export function extractCompanyAndRoleFromEmail({
   // 2. Search Body text for "for the <Role> position at <Company>" or "<Role> at <Company>"
   if (!company || !role) {
     const bodyMatch2 = fullText.match(
-      /(?:for\s+the|for\s+a)\s+([A-Z][A-Za-z0-9\s\-]+?)\s+position\s+at\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\n|$)/i
+      /(?:for\s+the|for\s+a|for\s+your)\s+([A-Z][A-Za-z0-9\s\-]+?)\s+(?:position|role|application)\s+at\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\n|$)/i
     );
     if (bodyMatch2) {
       if (!role) role = cleanString(bodyMatch2[1]);
@@ -198,16 +198,22 @@ export function extractCompanyAndRoleFromEmail({
   }
 
   // 4. Search Subject pattern: "<Role> - <Company>" or "<Company> - <Role>"
+  const KNOWN_TOOLS = new Set(["hackerrank", "codesignal", "testgorilla", "karat", "greenhouse", "lever", "workday"]);
   if ((!company || !role) && subject.includes(" - ")) {
     const parts = subject.split(" - ");
     if (parts.length >= 2) {
-      if (!role) role = cleanString(parts[0]);
-      if (!company) company = cleanString(parts[1]);
+      const p2 = cleanString(parts[1]);
+      if (!KNOWN_TOOLS.has(p2.toLowerCase())) {
+        if (!role) role = cleanString(parts[0]);
+        if (!company) company = p2;
+      } else {
+        if (!role) role = cleanString(parts[0]).replace(/coding assessment invitation|interview invitation|assessment/gi, "").trim();
+      }
     }
   }
 
   // 5. Sender Domain Fallback for Company
-  if (!company && senderDomain && !ATS_DOMAINS.has(senderDomain.toLowerCase())) {
+  if ((!company || KNOWN_TOOLS.has(company.toLowerCase())) && senderDomain && !ATS_DOMAINS.has(senderDomain.toLowerCase())) {
     const domainName = senderDomain.split(".")[0];
     if (domainName && domainName.length > 2 && !["gmail", "yahoo", "hotmail", "outlook"].includes(domainName)) {
       company = domainName.charAt(0).toUpperCase() + domainName.slice(1);
@@ -215,7 +221,7 @@ export function extractCompanyAndRoleFromEmail({
   }
 
   // 6. Sender Name Fallback
-  if (!company && senderName && !senderName.toLowerCase().includes("no-reply")) {
+  if ((!company || KNOWN_TOOLS.has(company.toLowerCase())) && senderName && !senderName.toLowerCase().includes("no-reply")) {
     const cleanSender = senderName.replace(/careers|recruiting|team|jobs|hr|notifications/gi, "").trim();
     if (cleanSender.length > 2) {
       company = cleanSender;

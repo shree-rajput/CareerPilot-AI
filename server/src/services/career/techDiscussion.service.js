@@ -8,6 +8,7 @@ import { updateUserReadinessScore } from "./readinessService.js";
 import { updateSkillStatus } from "./preparationService.js";
 import { executeAiTask } from "../ai/orchestrator.js";
 import { getDeterministicScenarioRecommendation } from "./deterministicSelectionService.js";
+import { generateDynamicInterviewQuestion } from "./dynamicQuestionEngine.js";
 
 /**
  * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
@@ -15,12 +16,72 @@ import { getDeterministicScenarioRecommendation } from "./deterministicSelection
 import { normalizeCategory, validateCategoryIntegrity } from "../../config/techDiscussionTaxonomy.js";
 
 /**
- * Deterministic AI-recommended scenario selector based on candidate intelligence & skill gaps.
+ * AI-First Question Selector: Dynamically generates fresh, role-aware, skill-aware,
+ * execution-validated questions via GROQ AI with deterministic fallback.
  */
 export async function getAIProblemRecommendation(userId, { topic = "coding", category = "coding", difficulty = null, experienceLevel = null, excludeIds = [], excludeTitles = [] } = {}) {
   const cat = normalizeCategory(category || topic);
+
+  // 1. PRIMARY PATH: Dynamic AI Question Generation Engine
+  try {
+    const dynResult = await generateDynamicInterviewQuestion(userId, {
+      mode: cat,
+      topic: topic || cat,
+      difficulty,
+      experienceLevel,
+      askedQuestionTitles: excludeTitles,
+      askedConcepts: []
+    });
+
+    if (dynResult.success && dynResult.question) {
+      const q = dynResult.question;
+      return {
+        question: {
+          id: q.id || q.questionId,
+          title: q.title,
+          description: q.openingPrompt || q.description,
+          category: cat,
+          questionType: q.questionType || cat,
+          difficulty: q.difficulty || difficulty || "medium",
+          experienceLevel: q.experienceLevel || experienceLevel || "fresher",
+          topics: q.concepts?.length ? q.concepts : [topic],
+          supportedLanguages: q.supportedLanguages || ["javascript", "python", "java", "cpp"],
+          defaultLanguage: q.defaultLanguage || "javascript",
+          starterCode: q.starterCode || {},
+          starterCanvasElements: [],
+          constraints: q.constraints || [],
+          hints: q.guidedFollowUps || [],
+          testCases: q.testCases || [],
+          source: "AI_GENERATED",
+          sourceUrl: "",
+          verified: true,
+          expectedComplexity: "AI-Generated & Execution-Validated"
+        },
+        rationale: `Dynamically tailored challenge by GROQ AI for candidate's target role & verified skills.`,
+        targetRole: q.targetRole || "Software Engineer",
+        experienceLevel: q.experienceLevel || experienceLevel || "fresher",
+        matchedSkill: topic
+      };
+    } else if (dynResult.code === "QUESTION_GENERATION_FAILED") {
+      console.warn(`[getAIProblemRecommendation] Dynamic AI generation returned QUESTION_GENERATION_FAILED. Triggering fallback bank...`);
+    }
+  } catch (err) {
+    console.warn(`[getAIProblemRecommendation] Dynamic AI generation error: ${err.message}. Falling back to verified bank...`);
+  }
+
+  // 2. SECONDARY FALLBACK PATH: Deterministic Question Bank
   const result = await getDeterministicScenarioRecommendation(userId, { category: cat, difficulty, experienceLevel, excludeIds, excludeTitles });
   
+  if (result.code === "NO_ELIGIBLE_QUESTION" || !result.scenario) {
+    return {
+      code: "NO_ELIGIBLE_QUESTION",
+      message: result.message || `No eligible questions remaining for '${cat}'`,
+      question: null,
+      targetRole: result.targetRole,
+      experienceLevel: result.experienceLevel
+    };
+  }
+
   // HARD VALIDATION Check
   if (!validateCategoryIntegrity(cat, result.scenario.category || cat)) {
     console.error(`[QUESTION_CATEGORY_MISMATCH] Selected category "${cat}" mismatch with scenario category "${result.scenario.category}". Logging error.`);
@@ -76,10 +137,21 @@ export async function createTechDiscussionRoom({
     throw new Error("User ID is required");
   }
 
-  const normCategory = normalizeCategory(category);
   const user = await User.findById(userId).lean();
   const userName = user?.name || "Participant 1";
   const roomId = crypto.randomBytes(8).toString("hex");
+
+  const validDifficulties = ["easy", "medium", "hard"];
+  const userTargetRole = user?.targetRoles?.find(r => r.isPrimary)?.title || user?.targetRoles?.[0]?.title;
+  
+  // Resolve true defaults based on User Profile if default arguments were sent
+  const resolvedCategory = category === "coding" ? (user?.interviewPreferences?.preferredQuestionCategories?.[0] || "coding") : category;
+  const resolvedTopic = topic === "Coding" ? (userTargetRole || "Software Engineering") : topic;
+  const resolvedDifficulty = validDifficulties.includes(String(difficulty).toLowerCase()) && difficulty !== "medium" ? String(difficulty).toLowerCase() : (user?.interviewPreferences?.defaultDifficulty || "medium");
+  const resolvedExperience = ["fresher", "junior", "mid", "senior"].includes(String(experienceLevel).toLowerCase()) && experienceLevel !== "fresher" ? String(experienceLevel).toLowerCase() : (user?.experienceLevel || "fresher");
+  const resolvedLanguage = language === "javascript" ? (user?.primaryTechStack?.[0] || user?.technicalSkills?.[0] || "javascript") : language;
+
+  const normCategory = normalizeCategory(resolvedCategory);
 
   let problemData = null;
   let aiReason = "";
@@ -91,10 +163,10 @@ export async function createTechDiscussionRoom({
       description: selectedProblem.description || "",
       category: normCategory,
       questionType: normCategory,
-      difficulty: selectedProblem.difficulty || difficulty,
-      topics: selectedProblem.topics || [topic],
+      difficulty: selectedProblem.difficulty || resolvedDifficulty,
+      topics: selectedProblem.topics || [resolvedTopic],
       supportedLanguages: selectedProblem.supportedLanguages || ["javascript", "python", "java", "cpp"],
-      defaultLanguage: selectedProblem.defaultLanguage || language,
+      defaultLanguage: selectedProblem.defaultLanguage || resolvedLanguage,
       starterCode: selectedProblem.starterCode || {},
       testCases: selectedProblem.testCases || [],
       constraints: selectedProblem.constraints || [],
@@ -111,10 +183,10 @@ export async function createTechDiscussionRoom({
         description: verifiedMatch.description,
         category: normCategory,
         questionType: normCategory,
-        difficulty: verifiedMatch.difficulty || difficulty,
+        difficulty: verifiedMatch.difficulty || resolvedDifficulty,
         topics: [verifiedMatch.topic],
         supportedLanguages: verifiedMatch.supportedLanguages || ["javascript", "python", "java", "cpp"],
-        defaultLanguage: language,
+        defaultLanguage: resolvedLanguage,
         starterCode: verifiedMatch.starterCode || {},
         testCases: verifiedMatch.testCases || [],
         constraints: verifiedMatch.constraints || [],
@@ -131,10 +203,10 @@ export async function createTechDiscussionRoom({
             description: q.description,
             category: normCategory,
             questionType: normCategory,
-            difficulty: q.difficulty || difficulty,
+            difficulty: q.difficulty || resolvedDifficulty,
             topics: q.topics || [],
             supportedLanguages: q.supportedLanguages || ["javascript", "python", "java", "cpp"],
-            defaultLanguage: q.defaultLanguage || language,
+            defaultLanguage: q.defaultLanguage || resolvedLanguage,
             starterCode: q.starterCode || {},
             testCases: q.testCases || [],
             constraints: q.constraints || [],
@@ -153,10 +225,10 @@ export async function createTechDiscussionRoom({
       description: customProblem.description || "Custom technical practice topic.",
       category: normCategory,
       questionType: normCategory,
-      difficulty: customProblem.difficulty || difficulty,
-      topics: customProblem.topics || [topic],
+      difficulty: customProblem.difficulty || resolvedDifficulty,
+      topics: customProblem.topics || [resolvedTopic],
       supportedLanguages: ["javascript", "python", "java", "cpp"],
-      defaultLanguage: language,
+      defaultLanguage: resolvedLanguage,
       starterCode: customProblem.starterCode || {},
       testCases: customProblem.testCases || [],
       constraints: customProblem.constraints || [],
@@ -167,26 +239,22 @@ export async function createTechDiscussionRoom({
 
   // Fallback to Deterministic Recommendation
   if (!problemData) {
-    const rec = await getAIProblemRecommendation(userId, { topic, category: normCategory, difficulty, experienceLevel });
+    const rec = await getAIProblemRecommendation(userId, { topic: resolvedTopic, category: normCategory, difficulty: resolvedDifficulty, experienceLevel: resolvedExperience });
     problemData = rec.question;
     aiReason = rec.rationale;
   }
 
   // Initial code state
   let initialCode = "";
-  if (typeof problemData.starterCode === "object" && problemData.starterCode[language]) {
-    initialCode = problemData.starterCode[language];
+  if (typeof problemData.starterCode === "object" && problemData.starterCode[resolvedLanguage]) {
+    initialCode = problemData.starterCode[resolvedLanguage];
   } else if (typeof problemData.starterCode === "string") {
     initialCode = problemData.starterCode;
   }
 
-  const validDifficulties = ["easy", "medium", "hard"];
-  const cleanDifficulty = validDifficulties.includes(String(difficulty).toLowerCase()) ? String(difficulty).toLowerCase() : "medium";
-  const cleanExperience = ["fresher", "junior", "mid", "senior"].includes(String(experienceLevel).toLowerCase()) ? String(experienceLevel).toLowerCase() : "fresher";
-
   if (problemData) {
     if (!validDifficulties.includes(String(problemData.difficulty).toLowerCase())) {
-      problemData.difficulty = cleanDifficulty;
+      problemData.difficulty = resolvedDifficulty;
     }
   }
 
@@ -195,10 +263,10 @@ export async function createTechDiscussionRoom({
     createdBy: userId,
     status: "waiting",
     category: normCategory,
-    topic,
-    difficulty: cleanDifficulty,
-    experienceLevel: cleanExperience,
-    language,
+    topic: resolvedTopic,
+    difficulty: resolvedDifficulty,
+    experienceLevel: resolvedExperience,
+    language: resolvedLanguage,
     durationMinutes,
     problem: problemData,
     currentQuestionId: problemData.id || `q-${Date.now()}`,
@@ -567,15 +635,18 @@ export async function getNextTechDiscussionQuestion({ roomId, userId }) {
   }
 
   const cat = room.category || "coding";
-  const excludeIds = [...(room.previousQuestionIds || [])];
-  if (room.currentQuestionId) {
-    excludeIds.push(room.currentQuestionId);
-  }
 
-  const excludeTitles = [...(room.previousQuestionTitles || [])];
-  if (room.problem?.title) {
-    excludeTitles.push(room.problem.title);
-  }
+  // 1. Gather all session-asked IDs, fingerprints, and titles
+  const excludeIds = Array.from(new Set([
+    ...(room.previousQuestionIds || []),
+    ...(room.askedQuestionIds || []),
+    ...(room.currentQuestionId ? [room.currentQuestionId] : [])
+  ]));
+
+  const excludeTitles = Array.from(new Set([
+    ...(room.previousQuestionTitles || []),
+    ...(room.problem?.title ? [room.problem.title] : [])
+  ]));
 
   const rec = await getAIProblemRecommendation(userId, {
     topic: room.topic || cat,
@@ -586,22 +657,47 @@ export async function getNextTechDiscussionQuestion({ roomId, userId }) {
     excludeTitles
   });
 
+  if (rec.code === "NO_ELIGIBLE_QUESTION" || !rec.question) {
+    return {
+      code: "NO_ELIGIBLE_QUESTION",
+      message: `Question pool completed for '${cat}' (${room.experienceLevel || "fresher"}).`,
+      questionSequence: room.questionSequence,
+      problem: room.problem
+    };
+  }
+
   const newQuestion = rec.question;
 
   if (!validateCategoryIntegrity(cat, newQuestion.category)) {
     console.error(`[QUESTION_CATEGORY_MISMATCH] Next question category "${newQuestion.category}" does not match room category "${cat}".`);
   }
 
-  if (room.currentQuestionId) {
+  if (!room.previousQuestionIds) room.previousQuestionIds = [];
+  if (!room.askedQuestionIds) room.askedQuestionIds = [];
+  if (!room.askedQuestionFingerprints) room.askedQuestionFingerprints = [];
+  if (!room.previousQuestionTitles) room.previousQuestionTitles = [];
+
+  if (room.currentQuestionId && !room.previousQuestionIds.includes(room.currentQuestionId)) {
     room.previousQuestionIds.push(room.currentQuestionId);
+    room.askedQuestionIds.push(room.currentQuestionId);
   }
 
-  if (room.problem?.title) {
-    if (!room.previousQuestionTitles) room.previousQuestionTitles = [];
+  if (room.problem?.title && !room.previousQuestionTitles.includes(room.problem.title)) {
     room.previousQuestionTitles.push(room.problem.title);
   }
 
-  room.currentQuestionId = newQuestion.id || `q-${Date.now()}`;
+  const newQId = newQuestion.id || `q-${Date.now()}`;
+  if (!room.askedQuestionIds.includes(newQId)) {
+    room.askedQuestionIds.push(newQId);
+  }
+
+  const { normalizeQuestionFingerprint } = await import("./deterministicSelectionService.js");
+  const newFp = newQuestion.fingerprint || normalizeQuestionFingerprint(newQuestion);
+  if (newFp && !room.askedQuestionFingerprints.includes(newFp)) {
+    room.askedQuestionFingerprints.push(newFp);
+  }
+
+  room.currentQuestionId = newQId;
   room.questionSequence = (room.questionSequence || 1) + 1;
   room.questionState = "QUESTION_PRESENTED";
   room.nextQuestionAvailable = false;
@@ -631,4 +727,152 @@ export async function getNextTechDiscussionQuestion({ roomId, userId }) {
     codeState: room.codeState
   };
 }
+
+/**
+ * Restores active session state for a user upon page refresh or reconnection.
+ */
+export async function restoreTechDiscussionSession({ roomId, userId }) {
+  if (!roomId || !userId) {
+    const err = new Error("Room ID and User ID are required for session restoration");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const room = await PeerInterviewRoom.findOne({ roomId }).populate("participants.userId", "name targetRoles");
+  if (!room) {
+    const err = new Error("Tech Discussion Room not found");
+    err.statusCode = 404;
+    err.code = "ROOM_NOT_FOUND";
+    throw err;
+  }
+
+  const userIdStr = userId.toString();
+  let participantObj = room.participants.find(
+    (p) => p.userId?._id?.toString() === userIdStr || p.userId?.toString() === userIdStr
+  );
+
+  if (!participantObj && room.createdBy.toString() !== userIdStr) {
+    // Attempt auto-join if room not full
+    if (room.participants.length < 2 && room.status !== "completed") {
+      await joinTechDiscussionRoom({ roomId, userId });
+      return restoreTechDiscussionSession({ roomId, userId });
+    }
+
+    const err = new Error("You are not authorized to view or restore this discussion session.");
+    err.statusCode = 403;
+    err.code = "ROOM_ACCESS_DENIED";
+    throw err;
+  }
+
+  // Hydrate nameSnapshot if missing
+  const currentUser = await User.findById(userId).lean();
+  if (participantObj) {
+    participantObj.lastSeenAt = new Date();
+    if (!participantObj.nameSnapshot && currentUser?.name) {
+      participantObj.nameSnapshot = currentUser.name;
+    }
+    await room.save().catch(() => {});
+  }
+
+  const formattedParticipants = room.participants.map(p => ({
+    userId: p.userId?._id?.toString() || p.userId?.toString(),
+    name: p.nameSnapshot || p.name || p.userId?.name || "Peer Participant",
+    role: p.role || "participant",
+    joinedAt: p.joinedAt,
+    lastSeenAt: p.lastSeenAt
+  }));
+
+  const now = Date.now();
+  const expiresAtMs = room.expiresAt ? new Date(room.expiresAt).getTime() : 0;
+  const timeRemainingSeconds = expiresAtMs > now ? Math.floor((expiresAtMs - now) / 1000) : 0;
+
+  return {
+    roomId: room.roomId,
+    status: room.status,
+    topic: room.topic,
+    category: room.category,
+    difficulty: room.difficulty,
+    experienceLevel: room.experienceLevel,
+    language: room.language,
+    problem: room.problem,
+    currentQuestionId: room.currentQuestionId,
+    questionSequence: room.questionSequence || 1,
+    questionState: room.questionState || "QUESTION_PRESENTED",
+    nextQuestionAvailable: room.nextQuestionAvailable || false,
+    aiRecommendationReason: room.aiRecommendationReason || "",
+    participants: formattedParticipants,
+    codeState: room.codeState,
+    draftCode: room.draftCode || {},
+    activeWorkspace: room.activeWorkspace || "code",
+    startedAt: room.startedAt,
+    expiresAt: room.expiresAt,
+    durationMinutes: room.durationMinutes,
+    timeRemainingSeconds
+  };
+}
+
+/**
+ * Returns historical Tech Discussion sessions for the authenticated user.
+ */
+export async function getUserTechDiscussionHistory({ userId, limit = 20, page = 1 }) {
+  if (!userId) {
+    const err = new Error("User ID is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const query = { "participants.userId": userId };
+  const skip = (Math.max(1, page) - 1) * limit;
+
+  const [rooms, total] = await Promise.all([
+    PeerInterviewRoom.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("participants.userId", "name")
+      .lean(),
+    PeerInterviewRoom.countDocuments(query)
+  ]);
+
+  const history = rooms.map(room => {
+    const userSubmissions = (room.submissions || []).filter(
+      s => s.userId?.toString() === userId.toString()
+    );
+
+    const completedQuestions = (room.submissions || []).filter(s => s.status === "completed").length;
+
+    const formattedParticipants = (room.participants || []).map(p => ({
+      userId: p.userId?._id?.toString() || p.userId?.toString(),
+      name: p.nameSnapshot || p.name || p.userId?.name || "Participant",
+      role: p.role || "participant"
+    }));
+
+    return {
+      roomId: room.roomId,
+      title: room.problem?.title ? `${room.problem.title}` : `${room.topic} Discussion`,
+      category: room.category || "coding",
+      topic: room.topic || "Technical Practice",
+      difficulty: room.difficulty || "medium",
+      experienceLevel: room.experienceLevel || "fresher",
+      status: room.status,
+      startedAt: room.startedAt || room.createdAt,
+      endedAt: room.endedAt,
+      durationMinutes: room.durationMinutes,
+      durationSeconds: room.durationSeconds || 0,
+      participants: formattedParticipants,
+      questionSequence: room.questionSequence || 1,
+      completedQuestions,
+      submissionsCount: userSubmissions.length,
+      report: room.reports?.find(r => r.userId === userId.toString()) || null
+    };
+  });
+
+  return {
+    history,
+    total,
+    page: Number(page),
+    totalPages: Math.ceil(total / limit)
+  };
+}
+
 

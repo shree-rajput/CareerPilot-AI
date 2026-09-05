@@ -13,7 +13,8 @@ import {
   ArrowRight,
   Check,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  History
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -174,6 +175,15 @@ export default function TechDiscussionSetupPage() {
             Select a practice mode to start live collaborative coding, architecture design, and peer feedback.
           </p>
         </div>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate("/tech-discussion/history")}
+          className="flex items-center gap-1.5 shrink-0"
+        >
+          <History className="w-4 h-4 text-primary" /> Practice History
+        </Button>
       </div>
 
       <Card>

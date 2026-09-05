@@ -199,22 +199,22 @@ export const executeRoomCodeController = async (req, res) => {
     const executionTimeMs = executionResult.results?.reduce((acc, r) => acc + (r.executionTimeMs || 0), 0) || 0;
 
     // Standardize status and verdict breakdown
-    let status = "SUCCESS";
+    let executionStatus = "EXECUTED";
     let verdict = executionResult.allPassed ? "Accepted" : "Wrong Answer";
     let compileError = null;
     let runtimeError = null;
 
     const lowerErr = stderr.toLowerCase();
     if (lowerErr.includes("syntaxerror") || lowerErr.includes("indentationerror") || lowerErr.includes("compilation error") || lowerErr.includes("syntax error")) {
-      status = "COMPILE_ERROR";
+      executionStatus = "COMPILE_ERROR";
       verdict = "Compilation Error";
       compileError = stderr;
     } else if (lowerErr.includes("time limit exceeded") || lowerErr.includes("timeout")) {
-      status = "TIMEOUT";
+      executionStatus = "TIMEOUT";
       verdict = "Time Limit Exceeded";
       runtimeError = "Execution timed out.";
     } else if (stderr.trim().length > 0 && !executionResult.allPassed) {
-      status = "RUNTIME_ERROR";
+      executionStatus = "RUNTIME_ERROR";
       verdict = "Runtime Error";
       runtimeError = stderr;
     }
@@ -232,7 +232,7 @@ export const executeRoomCodeController = async (req, res) => {
         questionId: questionId || roomProblem?.id || "custom-scenario",
         language,
         code,
-        status: status === "SUCCESS" && executionResult.allPassed ? "completed" : "failed",
+        status: executionResult.allPassed ? "completed" : "failed",
         passedTests,
         totalTests,
         testResults: executionResult.results,
@@ -247,7 +247,7 @@ export const executeRoomCodeController = async (req, res) => {
               userId: targetUserId,
               code,
               language,
-              status: status === "SUCCESS" && executionResult.allPassed ? "completed" : "failed",
+              status: executionResult.allPassed ? "completed" : "failed",
               passedTests,
               totalTests,
               submittedAt: new Date(),
@@ -261,7 +261,8 @@ export const executeRoomCodeController = async (req, res) => {
 
     const responsePayload = {
       submissionId: submission?._id || null,
-      status,
+      status: executionStatus,
+      executionStatus,
       verdict,
       passedTests,
       totalTests,
@@ -286,7 +287,7 @@ export const executeRoomCodeController = async (req, res) => {
       result: {
         stdout,
         stderr,
-        exitCode: status === "SUCCESS" && executionResult.allPassed ? 0 : 1,
+        exitCode: executionResult.allPassed ? 0 : 1,
         executionTimeMs,
       },
       data: responsePayload

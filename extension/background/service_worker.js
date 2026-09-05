@@ -1,5 +1,7 @@
 /**
  * CareerPilot AI Extension Service Worker (Manifest V3)
+ * Provides event-driven background orchestration, state persistence,
+ * offline action outbox retry queue, and secure API client calls.
  */
 
 const DEFAULT_API_URL = "http://localhost:5000/api";
@@ -15,10 +17,89 @@ async function getApiConfig() {
   };
 }
 
-// Handle messages from Popup, Content Script, or Web Page
+// -----------------------------------------------------------------------------
+// Offline Outbox Queue & Retry Engine
+// -----------------------------------------------------------------------------
+async function enqueueOutboxAction(actionType, payload) {
+  const { outbox = [] } = await chrome.storage.local.get("outbox");
+  const item = {
+    id: `action-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    type: actionType,
+    payload,
+    attempts: 0,
+    createdAt: new Date().toISOString(),
+  };
+  outbox.push(item);
+  await chrome.storage.local.set({ outbox });
+  return item;
+}
+
+async function processOutboxQueue() {
+  const { outbox = [] } = await chrome.storage.local.get("outbox");
+  if (!outbox || outbox.length === 0) return;
+
+  const remaining = [];
+  for (const item of outbox) {
+    if (item.attempts >= 3) {
+      console.warn("[CareerPilot Outbox] Dropping item after 3 failed attempts:", item);
+      continue;
+    }
+
+    try {
+      if (item.type === "UPDATE_APPLICATION_STATUS") {
+        await handleStatusUpdate(item.payload);
+      } else if (item.type === "INGEST_JOB") {
+        await handleJobIngestion(item.payload);
+      } else if (item.type === "CREATE_APPLICATION_FROM_EMAIL") {
+        await handleCreateFromEmail(item.payload);
+      }
+    } catch (err) {
+      if (err.message?.includes("AUTH_REQUIRED") || err.message?.includes("SESSION_EXPIRED")) {
+        // Stop processing on auth failures until re-authenticated
+        remaining.push(item);
+        break;
+      }
+      item.attempts += 1;
+      remaining.push(item);
+    }
+  }
+
+  await chrome.storage.local.set({ outbox: remaining });
+}
+
+// Check outbox periodically or on startup
+chrome.runtime.onStartup?.addListener(() => processOutboxQueue());
+
+// -----------------------------------------------------------------------------
+// Main Runtime Message Listener
+// -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "INGEST_JOB") {
     handleJobIngestion(request.payload)
+      .then((res) => sendResponse({ success: true, data: res }))
+      .catch((err) => {
+        if (err.message?.includes("NetworkError") || err.message?.includes("Failed to fetch")) {
+          enqueueOutboxAction("INGEST_JOB", request.payload);
+        }
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
+  }
+
+  if (request.type === "UPDATE_APPLICATION_STATUS") {
+    handleStatusUpdate(request.payload)
+      .then((res) => sendResponse({ success: true, data: res }))
+      .catch((err) => {
+        if (err.message?.includes("NetworkError") || err.message?.includes("Failed to fetch")) {
+          enqueueOutboxAction("UPDATE_APPLICATION_STATUS", request.payload);
+        }
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
+  }
+
+  if (request.type === "CREATE_APPLICATION_FROM_EMAIL") {
+    handleCreateFromEmail(request.payload)
       .then((res) => sendResponse({ success: true, data: res }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
@@ -46,7 +127,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "DISCONNECT") {
-    chrome.storage.local.remove(["token", "user"], () => {
+    chrome.storage.local.remove(["token", "user", "outbox"], () => {
       sendResponse({ success: true });
     });
     return true;
@@ -57,12 +138,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.runtime.onMessageExternal?.addListener((request, sender, sendResponse) => {
   if (request.type === "SET_AUTH_CODE") {
     exchangeAuthCode(request.code)
-      .then((res) => sendResponse({ success: true, data: res }))
+      .then((res) => {
+        processOutboxQueue();
+        sendResponse({ success: true, data: res });
+      })
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 });
 
+// -----------------------------------------------------------------------------
+// API Worker Callers
+// -----------------------------------------------------------------------------
 async function checkAuthStatus() {
   const { apiUrl, token, user } = await getApiConfig();
   if (!token) {
@@ -78,12 +165,10 @@ async function checkAuthStatus() {
       await chrome.storage.local.set({ user: data.user });
       return { isAuthenticated: true, user: data.user };
     } else {
-      // Token expired or invalid
       await chrome.storage.local.remove(["token", "user"]);
       return { isAuthenticated: false, error: "SESSION_EXPIRED" };
     }
   } catch (err) {
-    // Network offline or server unavailable - fallback to cached token check
     return { isAuthenticated: Boolean(token), user, offline: true };
   }
 }
@@ -139,6 +224,75 @@ async function handleJobIngestion(jobPayload) {
   return resData;
 }
 
+async function handleStatusUpdate(payload) {
+  const { apiUrl, token } = await getApiConfig();
+  const { applicationId, targetStatus, source = "extension_manual_action", evidence = "", note = "" } = payload || {};
+
+  if (!token) {
+    throw new Error("AUTH_REQUIRED: Connect CareerPilot to update application status.");
+  }
+
+  if (!applicationId) {
+    throw new Error("applicationId is required to update status.");
+  }
+
+  const response = await fetch(`${apiUrl}/applications/${applicationId}/status`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      targetStatus,
+      source,
+      evidence,
+      note,
+      idempotencyKey: `status-${applicationId}-${targetStatus}-${Date.now()}`,
+    }),
+  });
+
+  const resData = await response.json();
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await chrome.storage.local.remove(["token", "user"]);
+      throw new Error("SESSION_EXPIRED: Your CareerPilot session expired.");
+    }
+    throw new Error(resData.message || `Status update failed (${response.status})`);
+  }
+
+  return resData;
+}
+
+async function handleCreateFromEmail(payload) {
+  const { apiUrl, token } = await getApiConfig();
+
+  if (!token) {
+    throw new Error("AUTH_REQUIRED: Connect CareerPilot to add applications.");
+  }
+
+  const response = await fetch(`${apiUrl}/applications/create-from-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const resData = await response.json();
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await chrome.storage.local.remove(["token", "user"]);
+      throw new Error("SESSION_EXPIRED: Your CareerPilot session expired.");
+    }
+    throw new Error(resData.message || `Failed to create application (${response.status})`);
+  }
+
+  return resData;
+}
+
 async function handleEmailEventProcessing(emailPayload) {
   const { apiUrl, token } = await getApiConfig();
 
@@ -167,4 +321,3 @@ async function handleEmailEventProcessing(emailPayload) {
 
   return resData;
 }
-

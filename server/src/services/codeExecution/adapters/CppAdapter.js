@@ -39,6 +39,7 @@ ${code}
 
     // FUNCTION Mode Harness
     const paramCount = executionContract?.parameters?.length || 1;
+    const typeHint = executionContract?.parameters?.[0]?.type || executionContract?.returnType || "AUTO";
     const argValues = unpackTestCaseArguments(testCase.input, paramCount);
     let argDecls = [];
     let argNames = [];
@@ -46,7 +47,7 @@ ${code}
     argValues.forEach((val, index) => {
       const varName = `arg${index}`;
       argNames.push(varName);
-      argDecls.push(`auto ${varName} = ${serializeValue(val, "cpp")};`);
+      argDecls.push(`auto ${varName} = ${serializeValue(val, "cpp", typeHint)};`);
     });
 
     const declsCode = argDecls.join("\n        ");
@@ -73,6 +74,10 @@ void printCppResult(const string& val) {
     cout << "\\"" << val << "\\"";
 }
 
+void printCppResult(char val) {
+    cout << "\\"" << val << "\\"";
+}
+
 void printCppResult(bool val) {
     cout << (val ? "true" : "false");
 }
@@ -92,9 +97,9 @@ int main() {
         ${declsCode}
         ${hasSolutionClass ? "Solution sol;" : ""}
         auto result = ${hasSolutionClass ? `sol.${fnName}` : fnName}(${callArgs});
-        cout << "__CP_OUTPUT_START__";
+        cout << "__CP_OUTPUT_START__{\\"outputState\\":\\"ACTUAL_OUTPUT\\",\\"value\\":";
         printCppResult(result);
-        cout << "__CP_OUTPUT_END__" << endl;
+        cout << "}__CP_OUTPUT_END__" << endl;
     } catch (const exception& e) {
         cerr << "RUNTIME_ERROR: " << e.what() << endl;
         return 1;
@@ -133,6 +138,6 @@ int main() {
   discoverFunctionName(code) {
     const match = code.match(/(?:int|double|bool|string|vector<[^>]+>|void)\s+([A-Za-z0-9_]+)\s*\(/);
     if (match && match[1] && match[1] !== "main") return match[1];
-    return "search";
+    return "solution";
   }
 }

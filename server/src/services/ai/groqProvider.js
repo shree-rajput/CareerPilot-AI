@@ -116,9 +116,13 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
       temperature
     };
 
-    if (jsonMode) {
-      request.response_format = { type: "json_object" };
+  if (jsonMode) {
+    request.response_format = { type: "json_object" };
+    const sysMsg = sanitizedMessages.find((m) => m.role === "system");
+    if (sysMsg && !/json/i.test(sysMsg.content)) {
+      sysMsg.content += "\nReturn your response strictly as a valid JSON object.";
     }
+  }
 
     const completion = await client.chat.completions.create(request, {
       timeout: env.aiRequestTimeoutMs
@@ -156,11 +160,10 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
 
         if (retryError.status === 429) {
           const fallbackModels = [
-            "llama-3.2-3b-preview",
-            "llama-3.2-1b-preview",
-            "llama-3.2-11b-vision-preview",
-            "llama-3.2-90b-vision-preview",
-            "deepseek-r1-distill-qwen-32b"
+            "openai/gpt-oss-20b",
+            "llama3-70b-8192",
+            "llama3-8b-8192",
+            "qwen-2.5-coder-32b"
           ].filter(m => m !== model);
 
           for (const fallbackModel of fallbackModels) {

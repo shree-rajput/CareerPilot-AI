@@ -57,7 +57,13 @@ if not target_fn:
 
 try:
     result = target_fn(${argsCode})
-    print("__CP_OUTPUT_START__" + json.dumps(result) + "__CP_OUTPUT_END__")
+    output_state = "ACTUAL_OUTPUT"
+    payload_val = result
+    if result is None:
+        output_state = "NULL_RETURN"
+        payload_val = None
+    payload = json.dumps({"outputState": output_state, "value": payload_val})
+    print("__CP_OUTPUT_START__" + payload + "__CP_OUTPUT_END__")
 except Exception as e:
     traceback.print_exc(file=sys.stderr)
     sys.exit(1)
@@ -82,6 +88,6 @@ except Exception as e:
   discoverFunctionName(code) {
     const match = code.match(/def\s+([A-Za-z0-9_]+)\s*\(/);
     if (match && match[1]) return match[1];
-    return "search";
+    return "solution";
   }
 }

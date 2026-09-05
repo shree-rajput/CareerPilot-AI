@@ -98,7 +98,7 @@ export const VERIFIED_QUESTION_BANK = [
     prerequisites: ["Strings", "Character Frequency"],
     expectedSkills: ["Frequency Counter", "O(N) Complexity"],
     source: "CURATED",
-    sourceUrl: "https://careerpilot.ai/curated/valid-anagram",
+    sourceUrl: "https://takeuforward.org/data-structure/check-if-two-strings-are-anagrams-of-each-other/",
     verified: true,
     fresherAppropriate: true,
     questionType: "coding",
@@ -106,13 +106,73 @@ export const VERIFIED_QUESTION_BANK = [
     supportedLanguages: ["javascript", "python", "java", "cpp"],
     starterCode: {
       javascript: `function isAnagram(s, t) {\n  // Write your solution here\n  return false;\n}`,
-      python: `def isAnagram(s: str, t: str) -> bool:\n    # Write your solution here\n    return False`,
+      python: `def isAnagram(s, t):\n    # Write your solution here\n    return False`,
       java: `public class Solution {\n    public boolean isAnagram(String s, String t) {\n        // Write your solution here\n        return false;\n    }\n}`,
       cpp: `#include <string>\nusing namespace std;\n\nbool isAnagram(string s, string t) {\n    // Write your solution here\n    return false;\n}`
     },
     testCases: [
       { input: { s: "anagram", t: "nagaram" }, expectedOutput: true },
       { input: { s: "rat", t: "car" }, expectedOutput: false }
+    ]
+  },
+  {
+    id: "coding-reverse-string",
+    title: "Reverse a String In-Place",
+    category: "coding",
+    topic: "Strings & Two Pointers",
+    difficulty: "easy",
+    prerequisites: ["Strings", "Loops"],
+    expectedSkills: ["Two Pointers", "In-Place Mutation"],
+    source: "CURATED",
+    sourceUrl: "https://takeuforward.org/data-structure/reverse-a-string/",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "coding",
+    execution: {
+      mode: "FUNCTION",
+      functionName: "reverseString",
+      parameters: [{ name: "s", type: "char[]" }],
+      returnType: "char[]"
+    },
+    functionName: "reverseString",
+    parameters: [{ name: "s", type: "char[]" }],
+    returnType: "char[]",
+    description: "Write a function `reverseString(s)` that takes an array of characters `s` and reverses it in-place. Return the reversed array `s`.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function reverseString(s) {\n  // Write your solution here\n  return s;\n}`,
+      python: `def reverseString(s):\n    # Write your solution here\n    return s`,
+      java: `public class Solution {\n    public char[] reverseString(char[] s) {\n        // Write your solution here\n        return s;\n    }\n}`,
+      cpp: `#include <vector>\nusing namespace std;\n\nvector<char> reverseString(vector<char>& s) {\n    // Write your solution here\n    return s;\n}`
+    },
+    testCases: [
+      { input: { s: ["h","e","l","l","o"] }, expectedOutput: ["o","l","l","e","h"] }
+    ]
+  },
+  {
+    id: "coding-palindrome-check",
+    title: "Check If String Is Palindrome",
+    category: "coding",
+    topic: "Strings & Two Pointers",
+    difficulty: "easy",
+    prerequisites: ["Strings", "Two Pointers"],
+    expectedSkills: ["String Traversal", "Character Comparison"],
+    source: "CURATED",
+    sourceUrl: "https://takeuforward.org/data-structure/check-if-the-given-string-is-palindrome-or-not/",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "coding",
+    description: "A phrase is a palindrome if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function isPalindrome(s) {\n  // Write your solution here\n  return false;\n}`,
+      python: `def isPalindrome(s):\n    # Write your solution here\n    return False`,
+      java: `public class Solution {\n    public boolean isPalindrome(String s) {\n        // Write your solution here\n        return false;\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\n\nbool isPalindrome(string s) {\n    // Write your solution here\n    return false;\n}`
+    },
+    testCases: [
+      { input: { s: "A man, a plan, a canal: Panama" }, expectedOutput: true },
+      { input: { s: "race a car" }, expectedOutput: false }
     ]
   },
 
@@ -281,6 +341,186 @@ export const VERIFIED_QUESTION_BANK = [
     testCases: [
       { input: { user: { profile: { address: { city: "Boston" } } } }, expectedOutput: "Boston" },
       { input: { user: null }, expectedOutput: "Unknown" }
+    ]
+  },
+  {
+    id: "interview-java-collections-equals",
+    title: "Java Collections: Equals and HashCode Contract",
+    category: "interview",
+    topic: "Java & OOP Fundamentals",
+    difficulty: "easy",
+    prerequisites: ["Java OOP", "HashMap"],
+    expectedSkills: ["HashMap Bucket Placement", "HashCode Equality", "Object Identity"],
+    source: "OFFICIAL",
+    sourceUrl: "https://careerpilot.ai/curated/java-equals-hashcode",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain why overriding `equals()` in Java requires overriding `hashCode()`. Implement a student lookup key generator `generateKey(id, department)` returning a normalized uppercase hash string.",
+    supportedLanguages: ["java", "javascript", "python", "cpp"],
+    starterCode: {
+      java: `public class Solution {\n    public String generateKey(int id, String department) {\n        // Write your solution here\n        return "";\n    }\n}`,
+      javascript: `function generateKey(id, department) {\n  return "";\n}`,
+      python: `def generateKey(id: int, department: str) -> str:\n    return ""`,
+      cpp: `#include <string>\nusing namespace std;\nstring generateKey(int id, string department) {\n    return "";\n}`
+    },
+    testCases: [
+      { input: { id: 101, department: "cs" }, expectedOutput: "CS-101" }
+    ]
+  },
+  {
+    id: "interview-java-concurrency-volatile",
+    title: "Java Thread Safety: Volatile vs Synchronized",
+    category: "interview",
+    topic: "Concurrency & Multithreading",
+    difficulty: "medium",
+    prerequisites: ["Java Threads", "Memory Visibility"],
+    expectedSkills: ["Memory Barrier", "Atomic Operations", "Race Conditions"],
+    source: "OFFICIAL",
+    sourceUrl: "https://careerpilot.ai/curated/java-volatile-vs-synchronized",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain the difference between `volatile` visibility and `synchronized` mutual exclusion in Java. Implement a thread-safe counter check `isCounterSafe(threads, isVolatileOnly)`.",
+    supportedLanguages: ["java", "python", "javascript", "cpp"],
+    starterCode: {
+      java: `public class Solution {\n    public boolean isCounterSafe(int threads, boolean isVolatileOnly) {\n        return !isVolatileOnly;\n    }\n}`,
+      javascript: `function isCounterSafe(threads, isVolatileOnly) {\n  return !isVolatileOnly;\n}`,
+      python: `def isCounterSafe(threads: int, isVolatileOnly: bool) -> bool:\n    return not isVolatileOnly`,
+      cpp: `bool isCounterSafe(int threads, bool isVolatileOnly) {\n    return !isVolatileOnly;\n}`
+    },
+    testCases: [
+      { input: { threads: 4, isVolatileOnly: true }, expectedOutput: false },
+      { input: { threads: 4, isVolatileOnly: false }, expectedOutput: true }
+    ]
+  },
+  {
+    id: "interview-python-gil-multiprocessing",
+    title: "Python GIL & Concurrency vs Multiprocessing",
+    category: "interview",
+    topic: "Python & Backend Systems",
+    difficulty: "easy",
+    prerequisites: ["Python Basics", "CPU-bound tasks"],
+    expectedSkills: ["Global Interpreter Lock", "I/O bound vs CPU bound", "Multiprocessing"],
+    source: "CURATED",
+    sourceUrl: "https://careerpilot.ai/curated/python-gil",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain how the Python Global Interpreter Lock (GIL) impacts multithreaded CPU-bound tasks. Implement a task classifier `recommendParallelStrategy(taskType)` returning 'multiprocessing' for CPU-bound or 'asyncio' for I/O-bound.",
+    supportedLanguages: ["python", "javascript", "java", "cpp"],
+    starterCode: {
+      python: `def recommendParallelStrategy(taskType: str) -> str:\n    # Write your solution here\n    return "asyncio"`,
+      javascript: `function recommendParallelStrategy(taskType) {\n  return taskType === "cpu" ? "multiprocessing" : "asyncio";\n}`,
+      java: `public class Solution {\n    public String recommendParallelStrategy(String taskType) {\n        return "asyncio";\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\nstring recommendParallelStrategy(string taskType) {\n    return "asyncio";\n}`
+    },
+    testCases: [
+      { input: { taskType: "cpu" }, expectedOutput: "multiprocessing" },
+      { input: { taskType: "io" }, expectedOutput: "asyncio" }
+    ]
+  },
+  {
+    id: "interview-sql-indexing-b-tree",
+    title: "SQL Performance: Indexing Strategies & B-Tree Lookups",
+    category: "interview",
+    topic: "Databases & SQL",
+    difficulty: "medium",
+    prerequisites: ["SQL Queries", "Database Indexes"],
+    expectedSkills: ["Index Selectivity", "Composite Index Order", "Full Table Scans"],
+    source: "CURATED",
+    sourceUrl: "https://careerpilot.ai/curated/sql-indexing-btree",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain how database indexes improve SELECT query performance. Implement a index efficiency estimator `estimateScanType(hasIndex, columnSelectivity)` returning 'INDEX_SCAN' or 'TABLE_SCAN'.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function estimateScanType(hasIndex, columnSelectivity) {\n  return (hasIndex && columnSelectivity > 0.1) ? "INDEX_SCAN" : "TABLE_SCAN";\n}`,
+      python: `def estimateScanType(hasIndex: bool, columnSelectivity: float) -> str:\n    return "INDEX_SCAN" if (hasIndex and columnSelectivity > 0.1) else "TABLE_SCAN"`,
+      java: `public class Solution {\n    public String estimateScanType(boolean hasIndex, double columnSelectivity) {\n        return (hasIndex && columnSelectivity > 0.1) ? "INDEX_SCAN" : "TABLE_SCAN";\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\nstring estimateScanType(bool hasIndex, double columnSelectivity) {\n    return (hasIndex && columnSelectivity > 0.1) ? "INDEX_SCAN" : "TABLE_SCAN";\n}`
+    },
+    testCases: [
+      { input: { hasIndex: true, columnSelectivity: 0.8 }, expectedOutput: "INDEX_SCAN" },
+      { input: { hasIndex: false, columnSelectivity: 0.9 }, expectedOutput: "TABLE_SCAN" }
+    ]
+  },
+  {
+    id: "interview-cpp-memory-pointers-raii",
+    title: "C++ Memory Management: Smart Pointers & RAII",
+    category: "interview",
+    topic: "C++ & Systems Programming",
+    difficulty: "medium",
+    prerequisites: ["C++ Basics", "Pointers"],
+    expectedSkills: ["RAII Pattern", "std::unique_ptr vs std::shared_ptr", "Memory Leaks"],
+    source: "OFFICIAL",
+    sourceUrl: "https://careerpilot.ai/curated/cpp-smart-pointers",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain RAII (Resource Acquisition Is Initialization) in C++ and compare `unique_ptr` with `shared_ptr`. Implement a pointer ownership validator `validateSmartPointerType(isSharedOwnership)`.",
+    supportedLanguages: ["cpp", "java", "python", "javascript"],
+    starterCode: {
+      cpp: `#include <string>\nusing namespace std;\nstring validateSmartPointerType(bool isSharedOwnership) {\n    return isSharedOwnership ? "shared_ptr" : "unique_ptr";\n}`,
+      java: `public class Solution {\n    public String validateSmartPointerType(boolean isSharedOwnership) {\n        return isSharedOwnership ? "shared_ptr" : "unique_ptr";\n    }\n}`,
+      python: `def validateSmartPointerType(isSharedOwnership: bool) -> str:\n    return "shared_ptr" if isSharedOwnership else "unique_ptr"`,
+      javascript: `function validateSmartPointerType(isSharedOwnership) {\n  return isSharedOwnership ? "shared_ptr" : "unique_ptr";\n}`
+    },
+    testCases: [
+      { input: { isSharedOwnership: true }, expectedOutput: "shared_ptr" },
+      { input: { isSharedOwnership: false }, expectedOutput: "unique_ptr" }
+    ]
+  },
+  {
+    id: "interview-ml-feature-scaling",
+    title: "ML Engineering: Normalization vs Standardization",
+    category: "interview",
+    topic: "Machine Learning & Data Science",
+    difficulty: "easy",
+    prerequisites: ["ML Fundamentals", "Feature Engineering"],
+    expectedSkills: ["MinMax Scaling", "Z-Score Standardization", "Outlier Sensitivity"],
+    source: "CURATED",
+    sourceUrl: "https://careerpilot.ai/curated/ml-feature-scaling",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain when to use MinMax Normalization vs Z-Score Standardization in ML data pipelines. Implement a MinMax scaler `minMaxScale(val, minVal, maxVal)` returning scaled value between 0.0 and 1.0.",
+    supportedLanguages: ["python", "javascript", "java", "cpp"],
+    starterCode: {
+      python: `def minMaxScale(val: float, minVal: float, maxVal: float) -> float:\n    # Write your solution here\n    return 0.0`,
+      javascript: `function minMaxScale(val, minVal, maxVal) {\n  return (val - minVal) / (maxVal - minVal);\n}`,
+      java: `public class Solution {\n    public double minMaxScale(double val, double minVal, double maxVal) {\n        return (val - minVal) / (maxVal - minVal);\n    }\n}`,
+      cpp: `double minMaxScale(double val, double minVal, double maxVal) {\n    return (val - minVal) / (maxVal - minVal);\n}`
+    },
+    testCases: [
+      { input: { val: 15, minVal: 10, maxVal: 20 }, expectedOutput: 0.5 }
+    ]
+  },
+  {
+    id: "interview-rest-http-status-codes",
+    title: "REST API Design: HTTP Status Code Semantics",
+    category: "interview",
+    topic: "Web Engineering & REST APIs",
+    difficulty: "easy",
+    prerequisites: ["HTTP Protocols", "REST Principles"],
+    expectedSkills: ["Idempotency", "Status Codes 2xx/4xx/5xx", "API Standards"],
+    source: "CURATED",
+    sourceUrl: "https://careerpilot.ai/curated/http-status-codes",
+    verified: true,
+    fresherAppropriate: true,
+    questionType: "interview",
+    description: "Explain HTTP status code categories (200 OK, 201 Created, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 500 Internal Error). Implement `resolveStatusCode(action, success, exists)`.",
+    supportedLanguages: ["javascript", "python", "java", "cpp"],
+    starterCode: {
+      javascript: `function resolveStatusCode(action, success, exists) {\n  if (!exists) return 404;\n  if (!success) return 400;\n  return action === "CREATE" ? 201 : 200;\n}`,
+      python: `def resolveStatusCode(action: str, success: bool, exists: bool) -> int:\n    if not exists: return 404\n    if not success: return 400\n    return 201 if action == "CREATE" else 200`,
+      java: `public class Solution {\n    public int resolveStatusCode(String action, boolean success, boolean exists) {\n        if (!exists) return 404;\n        if (!success) return 400;\n        return "CREATE".equals(action) ? 201 : 200;\n    }\n}`,
+      cpp: `#include <string>\nusing namespace std;\nint resolveStatusCode(string action, bool success, bool exists) {\n    if (!exists) return 404;\n    if (!success) return 400;\n    return action == "CREATE" ? 201 : 200;\n}`
+    },
+    testCases: [
+      { input: { action: "CREATE", success: true, exists: true }, expectedOutput: 201 },
+      { input: { action: "GET", success: true, exists: false }, expectedOutput: 404 }
     ]
   }
 ];
