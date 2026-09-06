@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { Application } from "../models/Application.js";
+import { runNotificationEngine } from "./notification/notificationEngine.js";
 
 /**
  * Auto-Stale Scheduler
@@ -50,10 +51,18 @@ export async function runAutoStaleCheck() {
 }
 
 export function initStaleScheduler() {
-  // Schedule daily at 2:00 AM
+  // Schedule auto-stale daily at 2:00 AM
   cron.schedule("0 2 * * *", () => {
     console.log("[Auto-Stale Scheduler] Running scheduled daily check...");
     runAutoStaleCheck();
   });
   console.log("[Auto-Stale Scheduler] Cron job initialized (runs daily at 02:00 AM).");
+
+  // Schedule notification engine hourly to capture 1-hour and 24-hour windows reliably
+  cron.schedule("0 * * * *", async () => {
+    console.log("[Notification Engine] Running scheduled hourly check...");
+    const stats = await runNotificationEngine();
+    console.log("[Notification Engine] Generated:", stats);
+  });
+  console.log("[Notification Engine] Cron job initialized (runs hourly).");
 }

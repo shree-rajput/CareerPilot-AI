@@ -10,16 +10,28 @@ export async function createNotification({
   type,
   title,
   message,
-  entityType = "system",
-  entityId = "",
-  actionUrl = "",
+  priority = "MEDIUM",
+  source = {},
+  action = {},
+  metadata = {},
+  entityType = "system", // Legacy
+  entityId = "", // Legacy
+  actionUrl = "", // Legacy
   scheduledFor = null,
-  idempotencyKey = null
+  idempotencyKey = null,
+  dedupeKey = null
 }) {
   try {
+    const finalDedupeKey = dedupeKey || idempotencyKey;
+
     // Check idempotency if key provided
-    if (idempotencyKey) {
-      const existing = await Notification.findOne({ idempotencyKey });
+    if (finalDedupeKey) {
+      const existing = await Notification.findOne({
+        $or: [
+          { dedupeKey: finalDedupeKey },
+          { idempotencyKey: finalDedupeKey }
+        ]
+      });
       if (existing) {
         return existing;
       }
@@ -28,22 +40,31 @@ export async function createNotification({
     const notifData = {
       userId,
       type,
+      priority,
       title: title || "CareerPilot Update",
       message,
-      entityType,
-      entityId,
-      actionUrl,
-      scheduledFor: scheduledFor ? new Date(scheduledFor) : null
+      source: {
+        entityType: source.entityType || entityType,
+        entityId: source.entityId || entityId,
+        eventType: source.eventType || ""
+      },
+      action: {
+        route: action.route || actionUrl,
+        label: action.label || "View Details"
+      },
+      metadata,
+      entityType: source.entityType || entityType,
+      entityId: source.entityId || entityId,
+      actionUrl: action.route || actionUrl,
+      scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+      dedupeKey: finalDedupeKey,
+      idempotencyKey: finalDedupeKey
     };
-
-    if (idempotencyKey) {
-      notifData.idempotencyKey = idempotencyKey;
-    }
 
     const notification = new Notification(notifData);
     await notification.save();
 
-    // Trigger async email notification
+    // Trigger async email notification without blocking
     User.findById(userId)
       .lean()
       .then(async (user) => {
@@ -53,14 +74,18 @@ export async function createNotification({
             type,
             title: title || "CareerPilot Notification",
             message,
-            actionUrl,
-            entityType
+            actionUrl: notifData.action.route || actionUrl,
+            entityType: notifData.source.entityType || entityType
           });
 
           if (sent) {
             await Notification.findByIdAndUpdate(notification._id, {
               emailSent: true,
               emailSentAt: new Date()
+            });
+          } else {
+            await Notification.findByIdAndUpdate(notification._id, {
+              emailFailedAt: new Date()
             });
           }
         }
@@ -70,8 +95,14 @@ export async function createNotification({
     return notification;
   } catch (error) {
     // Handle duplicate key error gracefully if race condition occurs
-    if (error.code === 11000 && idempotencyKey) {
-      return await Notification.findOne({ idempotencyKey });
+    if (error.code === 11000 && (dedupeKey || idempotencyKey)) {
+      const existing = await Notification.findOne({
+        $or: [
+          { dedupeKey: dedupeKey || idempotencyKey },
+          { idempotencyKey: dedupeKey || idempotencyKey }
+        ]
+      });
+      if (existing) return existing;
     }
     console.error("[NotificationService] Error creating notification:", error);
     throw error;

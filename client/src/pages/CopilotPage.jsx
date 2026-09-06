@@ -5,48 +5,7 @@ import { Button } from '../components/ui/Button';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from "../context/ToastContext";
 
-const SimpleMarkdown = ({ content }) => {
-  if (!content) return null;
-  const blocks = content.split('\n\n');
-
-  return (
-    <div className="space-y-2 text-xs leading-relaxed">
-      {blocks.map((block, i) => {
-        if (block.startsWith('```')) {
-          const code = block.replace(/```[a-z]*\n?/g, '').replace(/```$/g, '');
-          return <pre key={i} className="bg-bg text-text p-2.5 rounded-lg overflow-x-auto text-[11px] font-mono border border-border">{code}</pre>;
-        }
-
-        if (block.match(/^[-*]\s/m)) {
-          const items = block.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* '));
-          return (
-            <ul key={i} className="list-disc pl-4 space-y-1">
-              {items.map((item, j) => {
-                const text = item.replace(/^[-*]\s/, '');
-                const bolded = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                return <li key={j} dangerouslySetInnerHTML={{ __html: bolded }} />;
-              })}
-            </ul>
-          );
-        }
-
-        if (block.startsWith('#')) {
-          const level = block.match(/^#+/)[0].length;
-          const text = block.replace(/^#+\s/, '');
-          const bolded = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-          const Tag = `h${Math.min(level + 3, 6)}`;
-          return <Tag key={i} className="font-bold text-text mt-3 mb-1 text-xs" dangerouslySetInnerHTML={{ __html: bolded }} />;
-        }
-
-        const formatted = block
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/`(.*?)`/g, '<code class="bg-bg-secondary px-1 py-0.5 rounded text-[11px] font-mono text-primary">$1</code>');
-
-        return <p key={i} className="m-0 leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatted }} />;
-      })}
-    </div>
-  );
-};
+import { CopilotMessageRenderer } from '../components/ui/ai/copilot/CopilotMessageRenderer';
 
 export function CopilotPage() {
   const { token } = useParams();
@@ -463,7 +422,7 @@ export function CopilotPage() {
                     {msg.role === 'user' ? (
                       <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
                     ) : (
-                      <SimpleMarkdown content={msg.content} />
+                      <CopilotMessageRenderer content={msg.content} sections={msg.sections} />
                     )}
                   </div>
 

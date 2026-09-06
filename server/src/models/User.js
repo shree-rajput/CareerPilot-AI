@@ -110,6 +110,12 @@ const preparationPreferencesSchema = new mongoose.Schema(
 
 const notificationPreferencesSchema = new mongoose.Schema(
   {
+    actionRequired: { type: Boolean, default: true },
+    opportunity: { type: Boolean, default: true },
+    interview: { type: Boolean, default: true },
+    learning: { type: Boolean, default: true },
+    progress: { type: Boolean, default: false },
+    // Legacy fallback fields maintained temporarily
     applicationReminders: { type: Boolean, default: true },
     interviewReminders: { type: Boolean, default: true },
     preparationReminders: { type: Boolean, default: true },

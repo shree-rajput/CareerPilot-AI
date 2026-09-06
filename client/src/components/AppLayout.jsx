@@ -6,7 +6,12 @@ import {
   Search,
   Bell,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  AlertCircle,
+  Briefcase,
+  Video,
+  BookOpen,
+  TrendingUp
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
@@ -93,6 +98,17 @@ export function AppLayout() {
       setUnreadCount(0);
     } catch (err) {
       console.error("Failed to mark all notifications read:", err);
+    }
+  };
+
+  const getNotificationIcon = (type) => {
+    switch(type) {
+      case "ACTION_REQUIRED": return <AlertCircle size={14} className="text-danger" />;
+      case "OPPORTUNITY": return <Briefcase size={14} className="text-[#10b981]" />; // emerald-500
+      case "INTERVIEW": return <Video size={14} className="text-primary" />;
+      case "LEARNING": return <BookOpen size={14} className="text-[#f59e0b]" />; // amber-500
+      case "PROGRESS": return <TrendingUp size={14} className="text-[#3b82f6]" />; // blue-500
+      default: return <Bell size={14} className="text-text-muted" />;
     }
   };
 
@@ -273,12 +289,15 @@ export function AppLayout() {
                             className={`p-3 transition-colors hover:bg-bg-secondary cursor-pointer ${n.read ? "opacity-60" : "bg-primary-bg/30"}`}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <strong className="text-xs font-semibold text-text">{n.title}</strong>
-                              <span className="text-[9px] text-text-muted font-mono">
+                              <div className="flex items-center gap-1.5">
+                                {getNotificationIcon(n.type)}
+                                <strong className="text-xs font-semibold text-text">{n.title}</strong>
+                              </div>
+                              <span className="text-[9px] text-text-muted font-mono whitespace-nowrap ml-2">
                                 {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Now"}
                               </span>
                             </div>
-                            <p className="text-[11px] text-text-secondary m-0 leading-normal font-medium">{n.message}</p>
+                            <p className="text-[11px] text-text-secondary m-0 leading-normal font-medium mt-1 ml-5">{n.message}</p>
                           </div>
                         ))
                       )}

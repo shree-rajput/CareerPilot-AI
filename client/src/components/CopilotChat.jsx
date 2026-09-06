@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, User, Loader2, ExternalLink } from 'lucide-react';
 import { copilotApi } from '../api/career';
 import { Button } from './ui/Button';
-import { MarkdownRenderer } from './ui/ai/MarkdownRenderer';
+import { CopilotMessageRenderer } from './ui/ai/copilot/CopilotMessageRenderer';
 
 export function CopilotChat() {
   const [isOpen, setIsOpen] = useState(false);
@@ -112,7 +112,7 @@ export function CopilotChat() {
                 {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
               </div>
               <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-sm whitespace-pre-wrap' : 'bg-bg-secondary text-text border border-border rounded-tl-sm'}`}>
-                {msg.role === 'user' ? msg.content : <MarkdownRenderer content={msg.content} />}
+                {msg.role === 'user' ? msg.content : <CopilotMessageRenderer content={msg.content} sections={msg.sections} />}
               </div>
             </div>
           ))}

@@ -59,6 +59,14 @@ export const projectKitSchema = z.object({
 export const prepPlanSchema = preparationPlanSchema;
 
 export const copilotChatSchema = z.object({
+  sections: z.array(z.object({
+    type: z.enum(["text", "code", "steps", "callout", "markdown"]),
+    title: z.string().optional(),
+    content: z.string().optional(),
+    language: z.string().optional(),
+    items: z.array(z.string()).optional(),
+    intent: z.enum(["info", "warning", "success", "error"]).optional(),
+  })).optional().default([]),
   reply: z.any().optional().transform((val) => {
     if (typeof val === "string") return val;
     if (val && typeof val === "object") {
@@ -102,4 +110,16 @@ export const recruiterMessageSchema = z.object({
   message: z.string(),
   type: z.string().optional(),
   subjectLine: z.string().optional()
+});
+
+export const copilotContextPlanSchema = z.object({
+  intent: z.string().describe("Detected intent of the user's question, e.g. 'resume', 'skills', 'application', 'general', 'coding'"),
+  entities: z.array(
+    z.object({
+      type: z.string(),
+      id: z.string().optional(),
+      description: z.string().optional()
+    })
+  ).describe("Entities extracted from the user's question, like 'that application' or 'my resume'"),
+  sources: z.array(z.string()).describe("List of data sources required to answer the question, e.g. 'resume', 'profile', 'application', 'projects'")
 });

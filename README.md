@@ -1,21 +1,41 @@
 # CareerPilot AI 🚀
 
-**An AI-powered career intelligence platform for job matching, resume optimization, application tracking, and interview preparation.**
+**An AI-powered career intelligence platform for job matching, resume optimization, application tracking, interview preparation, and community mentorship.**
 
-CareerPilot AI is built as a complete end-to-end SaaS application designed to help job seekers land roles. It solves the entire journey: from parsing resumes and extracting job requirements, to scoring semantic matches deterministically, tailoring resumes without hallucinating, tracking progress via Kanban, and finally practicing through an adaptive AI mock interviewer.
+CareerPilot AI is built as a complete end-to-end SaaS application designed to help job seekers land roles. It has evolved from a basic resume parser into a comprehensive "Career Operating System" with a unified intelligence graph, real-time collaboration, and an embedded AI Copilot.
 
 ---
 
-## ✨ Features
+## ✨ Features (Frontend Verified)
 
-- **Resume Intelligence**: Parses PDF files locally using `pdfjs-dist`, extracts structure using LLMs, and validates with `zod`. Keeps full version history with diffs.
-- **Job Description Parsing**: Converts raw job descriptions into structured requirements (Must haves, nice-to-haves, tools, etc.).
-- **Semantic Match Engine (Zero-Cost Local AI)**: Uses `@xenova/transformers` (all-MiniLM-L6-v2) directly on the Node backend to generate embeddings and calculate Cosine Similarity. The Match Score is calculated deterministically through weights, not hallucinated by an LLM.
-- **Resume Tailoring**: Context-aware AI suggestions that highlight relevant experience without inventing fake skills.
-- **Application Tracker**: Full Kanban board using `@dnd-kit` with optimistic UI updates and timeline tracking.
-- **Live Analytics**: Aggregation pipelines calculating response rates, interview conversion rates, and skill gaps (Recharts).
-- **AI Mock Interviewer**: Adaptive, real-time voice interviews. Utilizes browser `SpeechRecognition` to transcribe answers. The AI evaluates technical accuracy, structure (e.g. STAR method), and communication metrics (pace, filler words), and offers a "Better Answer" coach.
-- **Strict Free-Tier Architecture**: Built with a strict $0 budget constraint. Implements Groq API (free-tier), local NLP transformers, browser-side APIs (WebSpeech), and custom MongoDB limits to protect quotas.
+Based on the actual working client application, CareerPilot AI is structured into the following core modules:
+
+### 1. Command Center
+- **Dashboard:** Your central hub for tracking upcoming interviews, recent application updates, and quick actions to drive your job search forward.
+- **Global Command Palette:** Hit `Ctrl+K` from anywhere in the app to quickly jump between features or search for tools.
+- **Floating AI Copilot:** An always-available AI assistant (accessible via the floating chat widget or a dedicated page) to help you navigate the app, generate emails, or ask career questions.
+
+### 2. Career Management
+- **Job Inbox:** Connects and categorizes incoming emails regarding job applications, offers, and interview invites.
+- **Resume Intelligence & Studio:** A dedicated workspace to build, edit, and tailor your resume. Features live AI suggestions that highlight relevant experience for specific roles without hallucinating fake skills. Supports version control (Master vs. role-specific resumes).
+- **Job Board:** A built-in system to ingest and search for jobs, calculating deterministic semantic match scores (using local `Transformers.js`) to see how well you fit a role.
+- **Applications (CRM):** A full Kanban board (`@dnd-kit`) with optimistic UI updates and timeline tracking to manage your pipeline from "Saved" to "Offer."
+- **Projects:** Track your portfolio projects and easily map them to resume highlights.
+
+### 3. Preparation
+- **Preparation Plan:** Adaptive preparation schedules based on your upcoming interviews and identified skill gaps. (Note: Standalone coding pages have been unified into this central preparation flow).
+- **Tech Discussion Rooms:** Real-time collaborative rooms (replacing basic peer interviews) to debate technical architectures, practice system design, and communicate with peers.
+- **AI Interviewer:** Adaptive, real-time voice interviews. The AI dynamically generates questions based on your resume and target job, listens via your microphone, and evaluates technical accuracy, structure (e.g., STAR method), and communication metrics (pace, filler words).
+- **Interview History:** Review reports, replays, and transcripts from all your past AI and peer sessions.
+
+### 4. Growth & Network
+- **Mentor Connect:** A platform to find and connect with industry professionals.
+- **Mentor Dashboard:** Tools for mentors to manage incoming requests, schedule sessions, and host 1:1 real-time video/chat rooms (`MentorSessionRoomPage`).
+- **Analytics:** Visual aggregations calculating response rates, interview conversion rates, and pipeline health using Recharts.
+
+### 5. System Integrations
+- **Browser Extension:** Seamlessly authorize and connect a browser extension (`/extension/connect`) to bring CareerPilot intelligence (like auto-filling or matching) directly to external job boards and Gmail.
+- **Notification Center:** Real-time alerts for incoming emails, mentor requests, and approaching deadlines.
 
 ---
 
@@ -23,32 +43,34 @@ CareerPilot AI is built as a complete end-to-end SaaS application designed to he
 
 ### Tech Stack
 - **Frontend**: React 18, Vite, React Router, Recharts, Lucide Icons, Vanilla CSS
-- **Backend**: Node.js, Express.js, MongoDB + Mongoose
+- **Backend**: Node.js, Express.js, MongoDB + Mongoose, WebSockets (for live Tech Discussion & Mentor rooms)
 - **AI Models**: 
   - Text & Reasoning: **Groq API** (`llama-3.1-8b-instant`)
   - Embeddings: Local **Transformers.js** (`Xenova/all-MiniLM-L6-v2`)
   - Speech-to-Text: Browser native **Web Speech API**
+- **Package Manager**: pnpm (configured as a monorepo workspace)
 
 ### Core Engineering Principles
 1. **AI Safety Pipeline**: `LLM → JSON Extractor → Zod Validation → DB`. Never trust raw LLM outputs.
-2. **Deterministic Matching**: LLMs are great for reasoning but bad at objective scoring. We use LLMs to extract features, Transformers to calculate semantic similarity, and standard Math for the final score.
-3. **Usage Limits**: Real SaaS products rate-limit. We implement a custom MongoDB-backed `AIUsage` model that limits daily AI inferences to protect free-tier quotas.
-4. **Resilience**: The AI layer uses graceful degradation and automated retry loops.
+2. **Deterministic Matching**: We use local Transformers to calculate semantic similarity and standard Math for the final score, avoiding LLM hallucinations for objective metrics.
+3. **Real-time Collaboration**: Heavy use of WebSockets for Peer Interviews, Mentorship Rooms, and Tech Discussions.
+4. **Strict Free-Tier Architecture**: Built with a strict $0 budget constraint, relying on local NLP and free-tier APIs with database-level quota tracking.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js (v18+)
-- MongoDB Atlas Account (Free tier)
-- Groq API Key (Free tier)
+- Node.js (v20+)
+- pnpm (v9+)
+- MongoDB Atlas Account
+- Groq API Key
 
 ### 1. Clone & Install
 ```bash
 git clone https://github.com/yourusername/careerpilot-ai.git
 cd careerpilot-ai
-npm run install:all
+pnpm install
 ```
 
 ### 2. Environment Setup
@@ -63,30 +85,17 @@ Fill in `.env` with your keys:
 - `JWT_ACCESS_SECRET`: A long random string
 
 ### 3. Run Development Servers
-From the root directory:
+From the root directory, the monorepo is managed by pnpm:
 ```bash
-npm run dev
+pnpm run dev
 ```
 - Client runs on `http://localhost:5173`
 - Server runs on `http://localhost:5000`
 
 ---
 
-## 🧠 System Design Highlights (For Interviews)
-
-If you're reading this code to understand how it's built, here are key systems to look at:
-- **`server/src/services/ai/aiService.js`**: The central AI orchestration layer proving safe LLM execution patterns.
-- **`server/src/services/matching/matchEngine.js`**: Demonstrates applied ML in production by combining local NLP embeddings with backend business logic.
-- **`server/src/controllers/interviewController.js`**: The state machine driving the adaptive interview loop.
-- **`server/src/utils/aiUsage.js`**: How to implement production rate-limiting and quota tracking gracefully.
-
----
-
 ## 🔒 Security
 - Passwords hashed with `bcryptjs`.
 - Auth tokens managed securely via `jsonwebtoken`.
-- Headers secured with `helmet`.
-- Endpoint rate-limiting via `express-rate-limit`.
 - Payload sizes capped to prevent DoS via massive text dumps.
 - All AI responses validated dynamically to prevent NoSQL injection via LLM hallucinations.
-# CareerPilot-AI

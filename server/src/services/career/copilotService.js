@@ -1,14 +1,9 @@
 import mongoose from "mongoose";
 import { executeAiTask } from "../ai/orchestrator.js";
 import { CopilotConversation } from "../../models/CopilotConversation.js";
-import { getCandidateIntelligenceContext } from "./candidateIntelligenceService.js";
-import {
-  classifyIntent,
-  mapIntentToMode,
-  buildFilteredContext,
-  filterRelevantHistory,
-  validateResponseRelevance
-} from "./copilotIntentEngine.js";
+import { planContext } from "../copilot/contextPlanner.js";
+import { buildEvidence } from "../copilot/evidenceBuilder.js";
+import { validateResponseRelevance } from "./copilotIntentEngine.js";
 import { aiLogger } from "../ai/observability.js";
 import { AppError } from "../../utils/errors.js";
 import crypto from "crypto";
@@ -167,19 +162,15 @@ export async function sendMessage(userId, conversationId, query) {
   // 1. Add User Message
   conv.messages.push({ role: "user", content: query });
 
-  // 2. Classify Intent & Map Mode
-  const intent = classifyIntent(query, conv.messages);
-  const mode = mapIntentToMode(intent);
+  // 2. Context Planning
+  const plan = await planContext(query, conv.messages.slice(0, -1));
+  const { intent, mode } = plan;
 
-  // 3. Retrieve & Filter Context strictly based on intent
-  const rawContext = await getCandidateIntelligenceContext(userId, intent);
-  const filteredContext = buildFilteredContext(rawContext, intent);
-
-  // Filter conversation history to prevent topic contamination
-  const history = filterRelevantHistory(conv.messages.slice(0, -1), intent);
-
+  // 3. Build Evidence (Retrieve Relevant Data)
+  const rawContext = await buildEvidence(plan, userId);
+  
   // Clean null/empty keys
-  const cleanContext = JSON.parse(JSON.stringify(filteredContext, (key, value) => {
+  const cleanContext = JSON.parse(JSON.stringify(rawContext, (key, value) => {
     if (value === null || value === undefined || value === "") return undefined;
     if (Array.isArray(value) && value.length === 0) return undefined;
     return value;
@@ -192,6 +183,12 @@ export async function sendMessage(userId, conversationId, query) {
   let wasCorrected = false;
 
   try {
+    // We only pass recent history to avoid topic drift
+    const history = conv.messages.slice(0, -1).slice(-4).map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' && m.content.length > 150 ? m.content.substring(0, 150) + "..." : m.content
+    }));
+
     // 4. Primary AI Call
     let response = await executeAiTask("COPILOT_CHAT", {
       query,
@@ -204,7 +201,7 @@ export async function sendMessage(userId, conversationId, query) {
       aiResponseContent = response;
     } else {
       // 5. Response Relevance Check
-      let validation = validateResponseRelevance(response, query, intent, filteredContext);
+      let validation = validateResponseRelevance(response, query, intent, rawContext);
 
       if (!validation.isValid) {
         console.warn(`[CopilotService] Response failed relevance validation (${validation.reason}). Retrying with targeted correction...`);
@@ -228,10 +225,7 @@ export async function sendMessage(userId, conversationId, query) {
 
     try {
       const minimalContext = {
-        candidateProfile: {
-          name: rawContext?.careerProfile?.name || "Candidate",
-          targetRoles: rawContext?.careerProfile?.targetRoles || []
-        }
+        candidateProfile: rawContext.profile || { name: "Candidate" }
       };
 
       const fallbackResponse = await executeAiTask("COPILOT_CHAT", {

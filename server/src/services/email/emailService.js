@@ -5,7 +5,7 @@ async function getTransporter() {
   if (!transporter) {
     const host = process.env.SMTP_HOST;
     const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
+    const pass = process.env.SMTP_PASSWORD || process.env.SMTP_PASS; // Check both for robust backward compatibility
 
     if (host && user && pass) {
       try {
@@ -17,7 +17,7 @@ async function getTransporter() {
           auth: { user, pass }
         });
       } catch (err) {
-        console.warn("[EmailService] Nodemailer not available, using mock transport.");
+        console.warn("[EmailService] Nodemailer error, using mock transport.", err);
       }
     }
     
@@ -39,8 +39,15 @@ async function getTransporter() {
  */
 function renderEmailTemplate({ title, message, actionUrl, recipientName, entityType }) {
   const year = new Date().getFullYear();
-  const ctaButton = actionUrl
-    ? `<a href="${actionUrl}" style="background-color: #6366f1; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; margin-top: 16px;">View on CareerPilot</a>`
+  const baseUrl = process.env.CLIENT_URL || "https://careerpilot.ai";
+  
+  // Ensure the link is absolute
+  const absoluteActionUrl = actionUrl
+    ? (actionUrl.startsWith("http") ? actionUrl : `${baseUrl}${actionUrl.startsWith("/") ? "" : "/"}${actionUrl}`)
+    : "";
+
+  const ctaButton = absoluteActionUrl
+    ? `<a href="${absoluteActionUrl}" style="background-color: #6366f1; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; margin-top: 16px;">View Details on CareerPilot</a>`
     : "";
 
   return `
@@ -86,13 +93,21 @@ export async function sendEmailNotification({ user, type, title, message, action
     const prefs = user.notificationPreferences || {};
 
     if (prefs.emailEnabled === false) {
-      console.log(`[EmailService] User ${user.email} has disabled email notifications.`);
+      console.log(`[EmailService] User ${user.email} has disabled all email notifications.`);
       return false;
     }
 
-    if (type === "INTERVIEW_REMINDER" && prefs.interviewReminders === false) return false;
-    if (type === "APPLICATION_FOLLOWUP" && prefs.applicationReminders === false) return false;
-    if (type === "PREPARATION_REMINDER" && prefs.preparationReminders === false) return false;
+    // Strict 5 Categories mapping
+    if (type === "ACTION_REQUIRED" && prefs.actionRequired === false) return false;
+    if (type === "OPPORTUNITY" && prefs.opportunity === false) return false;
+    if (type === "INTERVIEW" && prefs.interview === false) return false;
+    if (type === "LEARNING" && prefs.learning === false) return false;
+    if (type === "PROGRESS" && prefs.progress === false) return false;
+
+    // Legacy fallback mapping
+    if (type === "INTERVIEW_REMINDER" && (prefs.interviewReminders === false || prefs.interview === false)) return false;
+    if (type === "APPLICATION_FOLLOWUP" && (prefs.applicationReminders === false || prefs.actionRequired === false)) return false;
+    if (type === "PREPARATION_REMINDER" && (prefs.preparationReminders === false || prefs.learning === false)) return false;
     if (type.startsWith("MENTOR_") && prefs.mentorUpdates === false) return false;
 
     const htmlContent = renderEmailTemplate({

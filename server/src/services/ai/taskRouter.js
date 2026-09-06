@@ -3,14 +3,14 @@ import { jdStructureSchema } from "./schemas/jdSchema.js";
 import { resumeStructureSchema, resumeAnalysisResultSchema, inlineSuggestionSchema, resumeSuggestionsSchema } from "./schemas/resumeSchema.js";
 import { tailoringSchema } from "./schemas/tailoringSchema.js";
 import { interviewQuestionSchema, evidenceEvaluationSchema, interviewPlanSchema, copilotSuggestionSchema, codeReviewSchema, candidateContextSchema, adaptiveActionSchema, coachingReportSchema, interviewChallengeSchema, interviewerReactionSchema, codingFollowUpSchema, techDiscussionEvaluationSchema, techDiscussionNudgeSchema, techDiscussionContextActionSchema } from "./schemas/interviewSchema.js";
-import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema, coverLetterSchema, recruiterMessageSchema } from "./schemas/careerSchema.js";
+import { projectKitSchema, prepPlanSchema, copilotChatSchema, mentorExplanationSchema, mentorSummarySchema, projectRealityCheckSchema, coverLetterSchema, recruiterMessageSchema, copilotContextPlanSchema } from "./schemas/careerSchema.js";
 import { dynamicQuestionSchema } from "./schemas/dynamicQuestionSchema.js";
 import { DYNAMIC_QUESTION_SYSTEM, buildDynamicQuestionPrompt } from "./prompts/dynamicQuestionPrompt.js";
 import { JD_EXTRACTION_SYSTEM, buildJdExtractionPrompt } from "./prompts/jdExtraction.js";
 import { RESUME_STRUCTURE_SYSTEM, buildResumeStructurePrompt } from "./prompts/resumeStructure.js";
 import { TAILORING_SYSTEM, buildTailoringPrompt, RESUME_SUGGESTIONS_SYSTEM, buildResumeSuggestionsPrompt } from "./prompts/resumeTailoring.js";
 import { generateQuestionPrompt, evaluateAnswerPrompt, generateInterviewPlanPrompt, generateCopilotPrompt, analyzeCodePrompt, extractCandidateContextPrompt, adaptiveActionPrompt, generateCoachingReportPrompt, generateInterviewChallengePrompt, interviewerReactionPrompt, codingFollowUpPrompt } from "./prompts/interviewPrompts.js";
-import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt, PROJECT_REALITY_CHECK_SYSTEM, buildRealityCheckPrompt, GENERATE_COVER_LETTER_SYSTEM, buildCoverLetterPrompt, GENERATE_RECRUITER_MESSAGE_SYSTEM, buildRecruiterMessagePrompt } from "./prompts/careerPrompts.js";
+import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_SYSTEM, buildPrepPlanPrompt, COPILOT_CHAT_SYSTEM, buildCopilotChatPrompt, PROJECT_REALITY_CHECK_SYSTEM, buildRealityCheckPrompt, GENERATE_COVER_LETTER_SYSTEM, buildCoverLetterPrompt, GENERATE_RECRUITER_MESSAGE_SYSTEM, buildRecruiterMessagePrompt, COPILOT_CONTEXT_PLANNER_SYSTEM, buildCopilotContextPlannerPrompt } from "./prompts/careerPrompts.js";
 import { buildMatchExplanationPrompt } from "./prompts/matchExplanation.js";
 import {
   buildInterviewEvaluationContext,
@@ -317,6 +317,15 @@ export const AI_TASKS = {
     systemPrompt: DYNAMIC_QUESTION_SYSTEM,
     buildPrompt: buildDynamicQuestionPrompt,
     schema: dynamicQuestionSchema,
+    buildContext: (params) => params,
+    jsonMode: true
+  },
+  COPILOT_CONTEXT_PLANNER: {
+    featureName: "copilot context planner",
+    modelRole: MODEL_ROLES.FAST_EXTRACTION,
+    systemPrompt: COPILOT_CONTEXT_PLANNER_SYSTEM,
+    buildPrompt: buildCopilotContextPlannerPrompt,
+    schema: copilotContextPlanSchema,
     buildContext: (params) => params,
     jsonMode: true
   }

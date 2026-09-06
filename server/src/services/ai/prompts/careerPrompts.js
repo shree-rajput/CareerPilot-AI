@@ -90,10 +90,23 @@ RESPONSE CONTRACT & FORMATTING BY QUESTION TYPE:
    - Structure: Recommendation → Rationale → Next Action Steps.
 
 RESPONSE FORMAT:
-You MUST respond with ONLY a valid JSON object matching this exact structure:
+You MUST respond with ONLY a valid JSON object. Instead of a single markdown string, you must break down your response into an array of UI \`sections\`. 
+
+Each section object has a \`type\` which determines how it is rendered on the UI:
+- \`text\`: Standard text/markdown response. Uses: \`content\` (string).
+- \`code\`: For code snippets. Uses: \`language\` (string), \`content\` (string).
+- \`steps\`: For lists, guides, action plans, and bullet points. Uses: \`title\` (optional string), \`items\` (array of strings).
+- \`callout\`: To emphasize warnings, tips, alerts, or important info. Uses: \`intent\` ("info" | "warning" | "success" | "error"), \`title\` (optional string), \`content\` (string).
+
+Example JSON:
 {
-  "reply": "<your direct, well-formatted response in markdown>",
-  "suggestedActions": ["<action 1>", "<action 2>", "<action 3>"]
+  "sections": [
+    { "type": "text", "content": "Here is an explanation of closure:" },
+    { "type": "code", "language": "javascript", "content": "function makeFunc() { ... }" },
+    { "type": "steps", "title": "Next Steps", "items": ["Practice scoping", "Read MDN"] },
+    { "type": "callout", "intent": "warning", "content": "Be careful with memory leaks." }
+  ],
+  "suggestedActions": ["Action 1", "Action 2"]
 }`;
 
 export const buildCopilotChatPrompt = (params) => {
@@ -221,3 +234,25 @@ Return valid JSON in this structure:
 `;
 };
 
+export const COPILOT_CONTEXT_PLANNER_SYSTEM = `You are a Context Planner for CareerCopilot. Your job is to analyze the user's question, determine their intent, extract any referred entities (like 'that application', 'my resume'), and decide which data sources are required to answer the question effectively.
+
+Available Sources:
+- profile, careerGoals, targetRoles, skills, skillGaps
+- resume, resumeAnalysis, projects
+- applications, application, matchResult
+- interviewHistory, preparationProgress, dashboardAnalytics
+
+Return ONLY valid JSON matching the schema.`;
+
+export const buildCopilotContextPlannerPrompt = (params) => {
+  return `Analyze the following query and recent conversation history to plan the context retrieval.
+
+Recent History:
+${JSON.stringify(params.history || [])}
+
+Current Query:
+${params.query}
+
+Determine the intent, extract entities (if the user refers to specific things like a particular application), and list the required data sources from the Available Sources. 
+Keep the list of sources as minimal as possible while ensuring the AI has enough context to answer the query accurately.`;
+};
