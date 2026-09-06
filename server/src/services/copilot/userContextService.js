@@ -7,6 +7,7 @@ import { InterviewQuestion } from "../../models/InterviewQuestion.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import { getCareerIntelligence } from "../career/careerIntelligenceService.js";
 import { getNextBestActions } from "../career/nextBestActionService.js";
+import { getCanonicalCareerState } from "../career/careerStateService.js";
 
 /**
  * UserContextService
@@ -100,16 +101,50 @@ export async function getResumeAnalysis(userId) {
 }
 
 export async function getProjects(userId) {
-  const resume = await Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }).select("structuredData.projects").lean();
-  if (!resume || !resume.structuredData || !resume.structuredData.projects) return [];
+  const { Project } = await import("../../models/Project.js");
+  const [resume, dbProjects] = await Promise.all([
+    Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }).select("structuredData.projects").lean(),
+    Project.find({ userId }).lean()
+  ]);
 
-  return resume.structuredData.projects.map(p => ({
-    name: p.name || "Project",
-    description: (p.description || "").substring(0, 150),
-    problemSolved: (p.problemSolved || "").substring(0, 100),
-    technologies: p.technologies || [],
-    role: p.role || ""
-  }));
+  const projectsMap = new Map();
+
+  if (resume?.structuredData?.projects) {
+    for (const p of resume.structuredData.projects) {
+      const name = p.name || "Project";
+      projectsMap.set(name.toLowerCase(), {
+        name,
+        role: p.role || "Developer",
+        description: (p.description || "").substring(0, 300),
+        problemSolved: (p.problemSolved || "").substring(0, 200),
+        technologies: p.technologies || [],
+        architecture: p.architecture || "Standard",
+        source: "Resume (Verified)"
+      });
+    }
+  }
+
+  if (dbProjects && dbProjects.length > 0) {
+    for (const p of dbProjects) {
+      const key = (p.title || p.name || "").toLowerCase();
+      const existing = projectsMap.get(key) || {};
+      projectsMap.set(key, {
+        name: p.title || p.name || existing.name || "Project",
+        role: p.role || existing.role || "Developer",
+        description: p.description || existing.description || "",
+        problemSolved: p.problemSolved || existing.problemSolved || "",
+        technologies: p.technologies || existing.technologies || [],
+        architecture: p.architecture || existing.architecture || "Standard",
+        codebaseEvidence: p.analysis ? {
+          complexity: p.analysis.complexity,
+          testCoverage: p.analysis.testCoverage
+        } : null,
+        source: "Project Studio / Codebase"
+      });
+    }
+  }
+
+  return Array.from(projectsMap.values());
 }
 
 export async function getApplications(userId, limit = 5) {
@@ -230,6 +265,10 @@ export async function getDashboardAnalytics(userId) {
   };
 }
 
+export async function getCanonicalState(userId) {
+  return await getCanonicalCareerState(userId).catch(() => null);
+}
+
 /**
  * Registry of available data sources mapping string keys to fetching functions
  */
@@ -247,5 +286,6 @@ export const ContextSources = {
   matchResult: getMatchResult, // requires entityId
   interviewHistory: getInterviewHistory,
   preparationProgress: getPreparationProgress,
-  dashboardAnalytics: getDashboardAnalytics
+  dashboardAnalytics: getDashboardAnalytics,
+  canonicalState: getCanonicalState
 };

@@ -87,6 +87,83 @@ class LiveKitErrorBoundary extends React.Component {
   }
 }
 
+function PeerStreamPanel({ peerPresence, participants, isVideoMinimized, onClose }) {
+  let tracks = [];
+  try {
+    tracks = useTracks(
+      [
+        { source: Track.Source.Camera, withPlaceholder: true },
+        { source: Track.Source.ScreenShare, withPlaceholder: false }
+      ],
+      { onlySubscribed: false }
+    );
+  } catch (err) {
+    console.warn("useTracks hook warning:", err?.message);
+  }
+
+  const hasActiveVideoTrack = Array.isArray(tracks) && tracks.some(t => t?.publication && !t.publication.isMuted && t.publication.track);
+
+  return (
+    <div className="absolute top-3 right-4 z-30 w-80 bg-surface/95 backdrop-blur border border-border rounded-2xl shadow-2xl p-2.5 space-y-2.5 fade-in">
+      <div className="flex items-center justify-between px-2 py-1 border-b border-border text-xs font-bold text-text-secondary">
+        <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> Peer Stream</span>
+        <button onClick={onClose} className="p-1 hover:bg-bg rounded text-text transition-colors">
+          <Minimize2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <div className="h-44 relative rounded-xl overflow-hidden bg-bg-secondary flex items-center justify-center">
+        <RoomAudioRenderer />
+        {hasActiveVideoTrack ? (
+          <GridLayout tracks={tracks} className="w-full h-full p-1 gap-1">
+            <ParticipantTile />
+          </GridLayout>
+        ) : (
+          <div className="w-full h-full p-2 grid grid-cols-2 gap-2 bg-bg-secondary/90">
+            {(peerPresence && peerPresence.length > 0
+              ? peerPresence
+              : (participants && participants.length > 0 ? participants : [{ userName: "You", name: "You" }])
+            ).map((p, idx) => {
+              const name = p.userName || p.name || p.nameSnapshot || `Candidate ${idx + 1}`;
+              const parts = name.trim().split(" ");
+              const initials = parts.length >= 2
+                ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                : name.slice(0, 2).toUpperCase();
+              const isCameraOn = Boolean(p.hasCamera);
+              const isMicOn = p.hasMic !== undefined ? Boolean(p.hasMic) : true;
+
+              return (
+                <div key={idx} className="flex flex-col items-center justify-center bg-surface border border-border/70 rounded-xl p-2 text-center relative shadow-xs">
+                  <div className="relative mb-1">
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary/20 via-surface to-primary/10 border-2 border-primary/30 flex items-center justify-center text-primary font-extrabold text-xs shadow-inner">
+                      {initials}
+                    </div>
+                    <div className="absolute -bottom-0.5 -right-0.5 p-0.5 rounded-full bg-surface border border-border">
+                      {isCameraOn ? <Video className="w-2.5 h-2.5 text-success" /> : <VideoOff className="w-2.5 h-2.5 text-text-secondary" />}
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] font-bold text-text truncate max-w-[100px]">{name}</span>
+                  <span className="text-[9px] font-semibold text-text-secondary flex items-center gap-1 mt-0.5">
+                    {isMicOn ? <Mic className="w-2.5 h-2.5 text-success" /> : <MicOff className="w-2.5 h-2.5 text-danger" />}
+                    {isCameraOn ? "Video On" : "Camera Off"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-around items-center pt-1 border-t border-border">
+        <TrackToggle source={Track.Source.Microphone} className="p-2 bg-bg hover:bg-border rounded-lg text-xs font-bold transition-colors" />
+        <TrackToggle source={Track.Source.Camera} className="p-2 bg-bg hover:bg-border rounded-lg text-xs font-bold transition-colors" />
+        <TrackToggle source={Track.Source.ScreenShare} className="p-2 bg-bg hover:bg-border rounded-lg text-xs font-bold transition-colors" />
+      </div>
+    </div>
+  );
+}
+
 export default function TechDiscussionRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
@@ -645,31 +722,19 @@ export default function TechDiscussionRoomPage() {
         connect={Boolean(roomData.token)}
         audio={mediaPermissions.hasMic}
         video={mediaPermissions.hasCamera}
+        onMediaDeviceFailure={(err) => console.warn("LiveKit Media Device Warning (avatar fallback active):", err?.message || err)}
         className="flex flex-1 overflow-hidden relative bg-bg"
       >
         <LiveKitErrorBoundary>
 
           {/* FLOATING MINIMIZABLE VIDEO PANEL */}
           {!isVideoMinimized && (
-            <div className="absolute top-3 right-4 z-30 w-72 bg-surface/95 backdrop-blur border border-border rounded-2xl shadow-2xl p-2 space-y-2 fade-in">
-              <div className="flex items-center justify-between px-2 py-1 border-b border-border text-xs font-bold text-text-secondary">
-                <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> Peer Stream</span>
-                <button onClick={() => setIsVideoMinimized(true)} className="p-1 hover:bg-bg rounded text-text">
-                  <Minimize2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="h-40 relative rounded-xl overflow-hidden bg-bg-secondary">
-                <RoomAudioRenderer />
-                <GridLayout tracks={useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false })} className="w-full h-full p-1 gap-1">
-                  <ParticipantTile />
-                </GridLayout>
-              </div>
-              <div className="flex justify-around items-center pt-1 border-t border-border">
-                <TrackToggle source={Track.Source.Microphone} className="p-2 bg-bg hover:bg-border rounded-lg text-xs font-bold" />
-                <TrackToggle source={Track.Source.Camera} className="p-2 bg-bg hover:bg-border rounded-lg text-xs font-bold" />
-                <TrackToggle source={Track.Source.ScreenShare} className="p-2 bg-bg hover:bg-border rounded-lg text-xs font-bold" />
-              </div>
-            </div>
+            <PeerStreamPanel
+              peerPresence={peerPresence}
+              participants={participants}
+              isVideoMinimized={isVideoMinimized}
+              onClose={() => setIsVideoMinimized(true)}
+            />
           )}
 
           {/* THREE-COLUMN RESIZABLE WORKSPACE */}

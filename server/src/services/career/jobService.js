@@ -80,7 +80,8 @@ export async function getJobs({ search, remoteStatus, employmentType, experience
   const query = { isActive: true };
 
   if (search) {
-    const searchRegex = new RegExp(search, "i");
+    const escapedSearch = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escapedSearch, "i");
     query.$or = [{ title: searchRegex }, { company: searchRegex }];
   }
   if (remoteStatus) query.remoteStatus = remoteStatus;

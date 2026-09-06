@@ -114,7 +114,7 @@ const techDiscussionRoomSchema = new mongoose.Schema(
 
     experienceLevel: {
       type: String,
-      enum: ["fresher", "junior", "mid", "senior"],
+      enum: ["student", "fresher", "intern", "junior", "mid", "senior"],
       default: "fresher",
     },
 

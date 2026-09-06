@@ -9,6 +9,10 @@ const messageSchema = new mongoose.Schema({
   content: { 
     type: String, 
     required: true 
+  },
+  sections: {
+    type: Array,
+    default: []
   }
 }, { _id: true, timestamps: { createdAt: 'timestamp', updatedAt: false } });
 

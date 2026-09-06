@@ -7,6 +7,8 @@ import { Application } from "../../models/Application.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import MentorshipSession from "../../models/MentorshipSession.js";
 import { NOT_ASSESSED, safeNumber, clampScore, safeAverage, assertFiniteScore, normalizeScore } from "../../utils/math.js";
+import { getCanonicalCareerState } from "./careerStateService.js";
+import { calculateReadinessDimensions } from "./readinessEngine.js";
 
 /**
  * Calculates and updates a user's career readiness score and breakdown.
@@ -20,6 +22,15 @@ export async function updateUserReadinessScore(userId, changeReason = "System Up
   const user = await User.findById(userId);
   if (!user) {
     throw new Error("User not found for readiness score calculation");
+  }
+
+  // Calculate deterministic readiness using Canonical Career State Engine
+  let engineResult = null;
+  try {
+    const careerState = await getCanonicalCareerState(userId);
+    engineResult = calculateReadinessDimensions(careerState);
+  } catch (cErr) {
+    console.warn("[ReadinessService] Canonical state calculation fallback:", cErr.message);
   }
 
   // 1. Resume / ATS (15%)
@@ -205,7 +216,8 @@ export async function updateUserReadinessScore(userId, changeReason = "System Up
     preparation: normalizeScore(prepScore),
     profile: normalizeScore(profileScore),
     communication: normalizeScore(communicationScore),
-    careerStrategy: normalizeScore(strategyScore)
+    careerStrategy: normalizeScore(strategyScore),
+    dimensions: engineResult?.dimensions || null
   };
 
   // Self-healing migration: correct any -1 legacy values that slipped through

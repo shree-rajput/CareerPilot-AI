@@ -89,10 +89,11 @@ export async function syncProjectsFromResume(userId) {
  * Generates an evidence-grounded interview question kit specific to this project,
  * connected to target job requirements if available.
  */
-export async function generateInterviewKit(projectId) {
-  const project = await Project.findById(projectId);
+export async function generateInterviewKit(projectId, userId) {
+  const query = userId ? { _id: projectId, userId } : { _id: projectId };
+  const project = await Project.findOne(query);
   if (!project) {
-    throw new Error("Project not found.");
+    throw new Error("Project not found or access denied.");
   }
 
   // Fetch active application for job requirement connection
@@ -225,9 +226,14 @@ export async function getProjects(userId) {
 }
 
 /**
- * Get project by ID
+ * Get project by ID with optional userId ownership check
  */
-export async function getProjectById(projectId) {
-  return await Project.findById(projectId);
+export async function getProjectById(projectId, userId = null) {
+  const query = userId ? { _id: projectId, userId } : { _id: projectId };
+  const project = await Project.findOne(query);
+  if (!project && userId) {
+    throw new Error("Project not found or access denied.");
+  }
+  return project;
 }
 

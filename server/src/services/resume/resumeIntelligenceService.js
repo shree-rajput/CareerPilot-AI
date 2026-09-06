@@ -25,10 +25,11 @@ export async function analyzeResumeAgainstJob(resumeId, jobId, userId) {
   }
 
   if (!job && jobId) {
+    const escapedJobId = String(jobId).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     job = await Job.findOne({
       $or: [
-        { title: new RegExp(jobId, "i") },
-        { company: new RegExp(jobId, "i") }
+        { title: new RegExp(escapedJobId, "i") },
+        { company: new RegExp(escapedJobId, "i") }
       ]
     });
   }

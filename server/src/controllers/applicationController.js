@@ -11,6 +11,7 @@ import { Notification } from "../models/Notification.js";
 import { classifyEmailEvent } from "../services/career/emailClassificationService.js";
 import { matchEmailToApplication } from "../services/career/applicationMatchingService.js";
 import { validateAndApplyTransition, canTransitionStatus } from "../services/career/statusTransitionEngine.js";
+import { domainEvents, DOMAIN_EVENTS } from "../services/events/domainEvents.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
@@ -270,6 +271,16 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
   }
 
   await app.save();
+
+  if (["interview", "screening", "oa"].includes(targetStatus)) {
+    domainEvents.emit(DOMAIN_EVENTS.APPLICATION_INTERVIEW_SCHEDULED, {
+      userId: req.user._id,
+      applicationId: app._id,
+      company: app.company,
+      role: app.role,
+      date: app.interviewDate || new Date()
+    });
+  }
 
   // Create notification for major status updates
   await Notification.create({

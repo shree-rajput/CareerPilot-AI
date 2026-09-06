@@ -46,13 +46,15 @@ export function createApp() {
   app.use(cookieParser());
   app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
 
+  const isDev = env.nodeEnv !== "production";
   app.use(
     "/api",
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      limit: 200,
+      limit: isDev ? 3000 : 600,
       standardHeaders: "draft-7",
       legacyHeaders: false,
+      skip: (req) => req.path === "/health" || req.path.startsWith("/notifications")
     }),
   );
 

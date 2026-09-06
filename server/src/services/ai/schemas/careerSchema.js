@@ -59,21 +59,28 @@ export const projectKitSchema = z.object({
 export const prepPlanSchema = preparationPlanSchema;
 
 export const copilotChatSchema = z.object({
-  sections: z.array(z.object({
-    type: z.enum(["text", "code", "steps", "callout", "markdown"]),
-    title: z.string().optional(),
-    content: z.string().optional(),
-    language: z.string().optional(),
-    items: z.array(z.string()).optional(),
-    intent: z.enum(["info", "warning", "success", "error"]).optional(),
-  })).optional().default([]),
   reply: z.any().optional().transform((val) => {
     if (typeof val === "string") return val;
     if (val && typeof val === "object") {
-      return val.reply || val.content || val.text || val.message || val.answer || val.response || JSON.stringify(val);
+      return val.reply || val.content || val.text || val.message || val.answer || val.response || "";
     }
     return "";
   }),
+  content: z.any().optional().transform((val) => {
+    if (typeof val === "string") return val;
+    if (val && typeof val === "object") {
+      return val.content || val.reply || val.text || val.message || val.answer || "";
+    }
+    return "";
+  }),
+  sections: z.array(z.object({
+    type: z.enum(["text", "code", "steps", "callout", "markdown"]).optional().default("text"),
+    title: z.string().optional().default(""),
+    content: z.string().optional().default(""),
+    language: z.string().optional().default(""),
+    items: z.array(z.string()).optional().default([]),
+    intent: z.enum(["info", "warning", "success", "error"]).optional().default("info"),
+  })).optional().default([]),
   suggestedActions: z.any().optional().transform((val) => {
     if (!Array.isArray(val)) return [];
     return val.map((item) => (typeof item === "string" ? item : item?.label || item?.text || item?.title || String(item || ""))).filter(Boolean);

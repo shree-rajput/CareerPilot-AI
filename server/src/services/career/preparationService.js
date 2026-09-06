@@ -156,35 +156,42 @@ export async function getPreparationDashboard(userId) {
     ? Math.round((verifiedCount / totalGapsCount) * 100) 
     : 100;
 
-  // Build "Today's Focus" list (3-4 prioritized action items for 60-90 min total daily prep)
+  // Build "Today's Focus" list (budgeted by availablePrepMinutesPerDay, default 45 min)
   const todaysFocus = [];
+  const maxAvailableMinutes = user?.availablePrepMinutesPerDay || 45;
+  let allocatedMinutes = 0;
+
   const activeUnverifiedGaps = skillGapItems.filter(g => g.status !== "VERIFIED");
   activeUnverifiedGaps.sort((a, b) => {
     const pWeight = { critical: 4, high: 3, medium: 2, low: 1 };
     return (pWeight[b.priority] || 1) - (pWeight[a.priority] || 1);
   });
 
-  activeUnverifiedGaps.slice(0, 3).forEach((gap) => {
+  for (const gap of activeUnverifiedGaps) {
+    if (allocatedMinutes >= maxAvailableMinutes) break;
+
     const pendingTask = (gap.actionPlan || []).find(t => !t.completed) || gap.actionPlan?.[0];
     if (pendingTask) {
+      const taskTime = allocatedMinutes + 25 <= maxAvailableMinutes ? 25 : (maxAvailableMinutes - allocatedMinutes);
       todaysFocus.push({
         skill: gap.skill,
         title: `${gap.skill}: ${pendingTask.title}`,
         priority: gap.priority,
-        estimatedTimeMinutes: 30,
+        estimatedTimeMinutes: Math.max(10, taskTime),
         taskType: pendingTask.taskType || "practice",
         stepNumber: pendingTask.stepNumber || 1,
         skillStatus: gap.status
       });
+      allocatedMinutes += Math.max(10, taskTime);
     }
-  });
+  }
 
   if (todaysFocus.length === 0) {
     todaysFocus.push({
       skill: "General Practice",
       title: "Complete a mock interview or code practice session to maintain proficiency",
       priority: "medium",
-      estimatedTimeMinutes: 30,
+      estimatedTimeMinutes: Math.min(30, maxAvailableMinutes),
       taskType: "practice",
       stepNumber: 1,
       skillStatus: "VERIFIED"
@@ -528,7 +535,18 @@ export async function generateDailyPlan(userId, options = {}) {
   };
 }
 
-export async function updateActionItemStatus(planId, itemId, status) {
+export async function updateActionItemStatus(userId, planId, itemId, status) {
+  if (planId && planId !== "active-prep-plan") {
+    const plan = await PreparationPlan.findOne({ _id: planId, userId });
+    if (plan) {
+      const item = (plan.actionItems || []).find(i => String(i._id) === String(itemId));
+      if (item) {
+        item.status = status;
+        await plan.save();
+        return plan;
+      }
+    }
+  }
   return { success: true, itemId, status };
 }
 
@@ -536,6 +554,9 @@ export async function getActivePlan(userId) {
   return await generateDailyPlan(userId);
 }
 
-export async function archivePlan(planId) {
+export async function archivePlan(userId, planId) {
+  if (planId && planId !== "active-prep-plan") {
+    await PreparationPlan.updateOne({ _id: planId, userId }, { $set: { isActive: false } });
+  }
   return { success: true, planId };
 }

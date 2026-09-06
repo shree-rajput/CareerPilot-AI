@@ -22,7 +22,22 @@ const codeObject = z.preprocess((val) => {
   cpp: z.string().optional().default("")
 }).default({}));
 
-export const dynamicQuestionSchema = z.object({
+export const dynamicQuestionSchema = z.preprocess((rawObj) => {
+  if (!rawObj || typeof rawObj !== "object") return rawObj;
+  const obj = { ...rawObj };
+
+  // Preprocess title aliases
+  if (!obj.title || typeof obj.title !== "string" || !obj.title.trim()) {
+    obj.title = obj.questionTitle || obj.name || obj.header || obj.topicName || obj.title || "";
+  }
+
+  // Preprocess openingPrompt aliases
+  if (!obj.openingPrompt || typeof obj.openingPrompt !== "string" || !obj.openingPrompt.trim()) {
+    obj.openingPrompt = obj.problemStatement || obj.description || obj.prompt || obj.question || obj.problem || obj.scenario || obj.details || obj.openingPrompt || "";
+  }
+
+  return obj;
+}, z.object({
   title: z.string().min(1, "title is required").describe("Clear, descriptive title for the question"),
   openingPrompt: z.string().min(1, "openingPrompt is required").describe("Comprehensive problem statement, background context, and clear requirements"),
   mode: z.enum(["coding", "development", "system_design", "interview"]).default("coding").describe("Practice mode"),
@@ -50,7 +65,7 @@ export const dynamicQuestionSchema = z.object({
   topic: z.preprocess((val) => String(val || "coding"), z.string().default("coding")),
   subtopic: z.string().optional().default(""),
   difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
-  experienceLevel: z.enum(["fresher", "junior", "mid", "senior"]).default("fresher"),
+  experienceLevel: z.enum(["student", "fresher", "intern", "junior", "mid", "senior"]).default("fresher"),
   concepts: stringArray,
   expectedSkills: stringArray,
   supportedLanguages: z.array(z.string()).default(["javascript", "python", "java", "cpp"]),
@@ -75,4 +90,4 @@ export const dynamicQuestionSchema = z.object({
   constraints: stringArray,
   guidedFollowUps: stringArray,
   evaluationCriteria: stringArray
-});
+}));

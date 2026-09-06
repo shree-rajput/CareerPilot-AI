@@ -1,18 +1,11 @@
 import { User } from "../../models/User.js";
-import { Resume } from "../../models/Resume.js";
-import CodingSubmission from "../../models/CodingSubmission.js";
-import { InterviewSession } from "../../models/InterviewSession.js";
-import { Project } from "../../models/Project.js";
-import { Application } from "../../models/Application.js";
-import { PreparationPlan } from "../../models/PreparationPlan.js";
-import MentorshipSession from "../../models/MentorshipSession.js";
-import { UserSkill } from "../../models/UserSkill.js";
-import { normalizeSkill } from "./taxonomyService.js";
+import { getCanonicalCareerState } from "./careerStateService.js";
 import { updateUserReadinessScore } from "./readinessService.js";
 
 /**
- * Dynamically computes Next Best Actions for the candidate.
+ * Dynamically computes Next Best Actions for the candidate using Canonical Career State.
  * Filters out dismissed and currently snoozed actions.
+ * Every action includes explicit reason, evidence, estimated effort, expected impact, and source entities.
  * 
  * @param {string} userId - User ID
  * @returns {Promise<Array>} List of action cards
@@ -23,65 +16,124 @@ export async function getNextBestActions(userId) {
     throw new Error("User not found");
   }
 
-  // Get current date
+  const careerState = await getCanonicalCareerState(userId);
   const now = new Date();
 
-  // Create list of active snoozed action IDs
+  // Active snoozed and dismissed IDs
   const activeSnoozedIds = (user.snoozedActions || [])
     .filter(s => s.snoozeUntil && s.snoozeUntil > now)
     .map(s => s.actionId);
 
   const dismissedIds = user.dismissedActions || [];
-
   const rawActions = [];
 
-  // 1. Resume / ATS
-  const latestResume = await Resume.findOne({ userId }).sort({ createdAt: -1 });
-  if (!latestResume) {
+  const { profile, resume, skills, projects, applications, interviews, preparation, coding } = careerState;
+
+  // 1. Resume / ATS Baseline
+  if (!resume.hasResume) {
     rawActions.push({
       id: "upload_resume",
       title: "Upload Your Primary Resume",
-      description: "Establish your career baseline. Upload your resume to unlock AI matching and formatting checks.",
+      description: "Establish your career baseline. Upload your resume to unlock evidence extraction and job matching.",
+      action: "Upload resume file in PDF/Docx format",
+      reason: "CareerPilot needs your resume to parse experience and calculate job fit.",
+      evidence: ["No active resume uploaded"],
       priority: "HIGH",
+      estimatedEffort: "5 mins",
+      expectedImpact: "+20% Resume Readiness",
+      sourceEntities: ["User.resumes"],
       ctaText: "Go to Resume Studio",
+      ctaUrl: "/resume",
+      type: "resume",
+      pointsPotential: 20
+    });
+  } else if (resume.atsScore < 70) {
+    rawActions.push({
+      id: "optimize_resume",
+      title: "Optimize Your Resume ATS Score",
+      description: `Your ATS compatibility score is ${resume.atsScore}%. Fix identified section formatting and keyword gaps.`,
+      action: "Review ATS suggestions and strengthen bullet points",
+      reason: "Low ATS compatibility reduces resume parsing success in recruiter systems.",
+      evidence: [`Current ATS score: ${resume.atsScore}%`],
+      priority: "HIGH",
+      estimatedEffort: "15 mins",
+      expectedImpact: "+15% Resume Readiness",
+      sourceEntities: [`Resume:${resume.resumeId}`],
+      ctaText: "Review Recommendations",
       ctaUrl: "/resume",
       type: "resume",
       pointsPotential: 15
     });
-  } else if (latestResume.healthIndicators && (latestResume.healthIndicators.ats || 0) < 70) {
-    const atsScore = latestResume.healthIndicators.ats || 0;
+  }
+
+  // 2. Application Pipeline Health
+  if (applications.total === 0) {
     rawActions.push({
-      id: "optimize_resume",
-      title: "Optimize Your Resume ATS Score",
-      description: `Your current ATS compatibility score is ${atsScore}%. Fix identified layout and keyword issues.`,
+      id: "add_application",
+      title: "Track Your First Target Job Application",
+      description: "Add a target job description to run evidence matching and track your application lifecycle.",
+      action: "Add job posting URL or job description",
+      reason: "Application tracking unlocks job matching and interview preparation alignment.",
+      evidence: ["0 active applications in pipeline"],
       priority: "HIGH",
-      ctaText: "Review Recommendations",
-      ctaUrl: "/resume",
-      type: "resume",
-      pointsPotential: 10
+      estimatedEffort: "5 mins",
+      expectedImpact: "+15% Application Health",
+      sourceEntities: ["User.applications"],
+      ctaText: "Add Job Application",
+      ctaUrl: "/jobs",
+      type: "applications",
+      pointsPotential: 15
+    });
+  } else if (applications.rejectedCount >= 3 && skills.unknown.length > 0) {
+    const unknownName = skills.unknown[0]?.name || "Required Skill";
+    rawActions.push({
+      id: "close_rejection_skill_gap",
+      title: `Build Proof for Skill: ${unknownName}`,
+      description: `You have ${applications.rejectedCount} rejected application(s). Building verified evidence for ${unknownName} improves application match rate.`,
+      action: `Complete a practice quiz or project module using ${unknownName}`,
+      reason: "Rejection analysis shows repeated missing skill requirements across target jobs.",
+      evidence: [`${applications.rejectedCount} rejections in pipeline`, `Skill gap: ${unknownName}`],
+      priority: "HIGH",
+      estimatedEffort: "30 mins",
+      expectedImpact: "+10% Target Role Alignment",
+      sourceEntities: [`UserSkill:${unknownName}`],
+      ctaText: "Practice Skill",
+      ctaUrl: "/skills",
+      type: "skill_gap",
+      pointsPotential: 25
     });
   }
 
-  // 2. Technical / Coding
-  const submissions = await CodingSubmission.find({ candidateId: userId });
-  const completedCount = submissions.filter(s => s.status === "completed").length;
-  if (completedCount === 0) {
+  // 3. Technical & Coding Practice
+  if (coding.totalSubmissions === 0) {
     rawActions.push({
       id: "start_coding",
-      title: "Begin Coding Practice Challenges",
-      description: "Solve your first coding question to test your logic and start building a Technical Readiness score.",
+      title: "Solve Your First Coding Challenge",
+      description: "Complete a data structure or algorithm question to establish your Technical Readiness score.",
+      action: "Solve 1 easy/medium coding challenge",
+      reason: "Coding problem-solving creates verified technical evidence for your candidate profile.",
+      evidence: ["0 coding challenges completed"],
       priority: "HIGH",
+      estimatedEffort: "20 mins",
+      expectedImpact: "+15% Technical Readiness",
+      sourceEntities: ["CodingSubmissions"],
       ctaText: "Start SDE Coding",
       ctaUrl: "/coding",
       type: "coding",
       pointsPotential: 20
     });
-  } else if (completedCount < 5) {
+  } else if (coding.passedCount < 5) {
     rawActions.push({
       id: "practice_dsa",
       title: "Solve 5 Coding Challenges",
-      description: `You have completed ${completedCount} problem(s). Target 5 completed problems to boost technical readiness.`,
+      description: `You have solved ${coding.passedCount} problem(s). Target 5 solved challenges to build technical consistency.`,
+      action: "Complete remaining coding challenges",
+      reason: "Consistent problem solving builds technical fluency for live coding assessments.",
+      evidence: [`Passed challenges: ${coding.passedCount}`],
       priority: "MEDIUM",
+      estimatedEffort: "30 mins",
+      expectedImpact: "+10% Technical Readiness",
+      sourceEntities: ["CodingSubmissions"],
       ctaText: "Practice DSA",
       ctaUrl: "/coding",
       type: "coding",
@@ -89,180 +141,84 @@ export async function getNextBestActions(userId) {
     });
   }
 
-  // 3. Mock Interviews
-  const completedInterviews = await InterviewSession.find({ userId, status: "completed" });
-  if (completedInterviews.length === 0) {
+  // 4. Mock Interviews
+  if (interviews.completedCount === 0) {
     rawActions.push({
       id: "mock_interview",
-      title: "Practice a Tech Mock Interview",
-      description: "Assess your live verbal technical explanation and presence in a simulated whiteboard mock interview.",
+      title: "Complete a Tech Mock Interview",
+      description: "Test your live technical explanation and problem-solving under realistic interview constraints.",
+      action: "Launch 15-minute AI technical mock interview",
+      reason: "Mock interviews provide evidence-grounded feedback on technical depth and communication.",
+      evidence: ["0 mock interview sessions completed"],
       priority: "HIGH",
+      estimatedEffort: "15 mins",
+      expectedImpact: "+20% Interview Readiness",
+      sourceEntities: ["InterviewSessions"],
       ctaText: "Launch AI Mock",
       ctaUrl: "/prepare",
       type: "interview",
       pointsPotential: 20
     });
-  } else {
-    const avgScore = completedInterviews.reduce((sum, i) => sum + (i.overallScore <= 10 ? i.overallScore * 10 : i.overallScore), 0) / completedInterviews.length;
-    if (avgScore < 70) {
-      rawActions.push({
-        id: "improve_interview",
-        title: "Boost Mock Interview Performance",
-        description: `Your average interview score is ${Math.round(avgScore)}%. Start a new session focusing on your weak areas.`,
-        priority: "MEDIUM",
-        ctaText: "Retake Mock Session",
-        ctaUrl: "/prepare",
-        type: "interview",
-        pointsPotential: 10
-      });
-
-      // AI -> Human Mentor Escalation
-      rawActions.push({
-        id: "escalate_to_mentor",
-        title: "AI → Human Mentor Escalation Recommended",
-        description: `Your recent interview performance (${Math.round(avgScore)}%) indicates difficulties with live explanations or architectural concepts. Book a 1:1 session with an expert software engineering mentor.`,
-        priority: "HIGH",
-        ctaText: "Talk to a Mentor",
-        ctaUrl: "/mentorship",
-        type: "mentorship",
-        pointsPotential: 15
-      });
-    }
+  } else if (interviews.avgScore < 70) {
+    rawActions.push({
+      id: "improve_interview",
+      title: "Retake Mock Interview Session",
+      description: `Your average interview score is ${interviews.avgScore}%. Focus on explaining trade-offs and core concepts.`,
+      action: "Start a mock session focused on weak topics",
+      reason: "Interview depth gaps identified in recent session evaluation.",
+      evidence: [`Average interview score: ${interviews.avgScore}%`],
+      priority: "HIGH",
+      estimatedEffort: "20 mins",
+      expectedImpact: "+15% Interview Readiness",
+      sourceEntities: [interviews.latestSession?.id ? `InterviewSession:${interviews.latestSession.id}` : "InterviewSessions"],
+      ctaText: "Retake Mock Session",
+      ctaUrl: "/prepare",
+      type: "interview",
+      pointsPotential: 15
+    });
   }
 
-  // 4. Projects
-  const projects = await Project.find({ userId });
-  if (projects.length === 0) {
+  // 5. Portfolio & Projects
+  if (projects.count === 0) {
     rawActions.push({
       id: "add_project",
-      title: "Add a Project Portfolio Item",
-      description: "Register your main development project to generate an interactive AI architectural interview kit.",
+      title: "Register a Portfolio Project",
+      description: "Register a project to generate architectural evidence and an interactive AI interview kit.",
+      action: "Add project name, tech stack, and description",
+      reason: "Projects provide real-world architectural proof for recruiters and interviewers.",
+      evidence: ["0 registered projects in portfolio"],
       priority: "HIGH",
+      estimatedEffort: "10 mins",
+      expectedImpact: "+20% Portfolio Strength",
+      sourceEntities: ["User.projects"],
       ctaText: "Register Project",
       ctaUrl: "/projects",
       type: "projects",
-      pointsPotential: 10
-    });
-  } else if (projects.length < 3) {
-    rawActions.push({
-      id: "add_more_projects",
-      title: "Expand Project Tech Diversity",
-      description: `You have registered ${projects.length} project(s). Add up to 3 projects to showcase stack breadth.`,
-      priority: "LOW",
-      ctaText: "Add Project",
-      ctaUrl: "/projects",
-      type: "projects",
-      pointsPotential: 5
+      pointsPotential: 15
     });
   }
 
-  // 5. Application Pipeline Tracking
-  const applications = await Application.find({ userId });
-  if (applications.length === 0) {
+  // 6. Daily Preparation Plan
+  if (preparation.hasActivePlan && preparation.pendingCount > 0) {
     rawActions.push({
-      id: "add_application",
-      title: "Add Your First Job Application",
-      description: "Add a job description you're interested in to unlock ATS compatibility comparisons and track status changes.",
+      id: "daily_checklist",
+      title: "Complete Today's Preparation Plan",
+      description: `You have ${preparation.pendingCount} preparation task(s) remaining for today. Maintain your prep streak.`,
+      action: "Execute daily learning tasks",
+      reason: "Daily consistent preparation keeps learning retention high.",
+      evidence: [`${preparation.pendingCount} pending tasks today`, `Current streak: ${preparation.streakDays} days`],
       priority: "MEDIUM",
-      ctaText: "Track Job App",
-      ctaUrl: "/jobs",
-      type: "applications",
+      estimatedEffort: `${profile.availablePrepMinutesPerDay || 45} mins`,
+      expectedImpact: "+5% Preparation Consistency",
+      sourceEntities: [`PreparationPlan:${preparation.planId}`],
+      ctaText: "View Daily Plan",
+      ctaUrl: "/prepare",
+      type: "preparation",
       pointsPotential: 10
     });
   }
 
-  // 6. Mentor Session
-  const mentorshipSessions = await MentorshipSession.find({ studentId: userId });
-  if (mentorshipSessions.length === 0) {
-    rawActions.push({
-      id: "book_mentor",
-      title: "Connect with a Human Mentor",
-      description: "Get personalized matching and book a slot with an industry expert to resolve skill bottlenecks.",
-      priority: "HIGH",
-      ctaText: "Find a Mentor",
-      ctaUrl: "/mentorship",
-      type: "mentorship",
-      pointsPotential: 5
-    });
-  } else {
-    // Check if there are active incomplete action items assigned by the mentor
-    let pendingActions = 0;
-    mentorshipSessions.forEach(sess => {
-      if (sess.actionItems) {
-        pendingActions += sess.actionItems.filter(item => item.status === "pending").length;
-      }
-    });
-    if (pendingActions > 0) {
-      rawActions.push({
-        id: "mentor_actions",
-        title: "Solve Mentor Action Items",
-        description: `You have ${pendingActions} tasks assigned by your mentor. Complete them to advance career strategy.`,
-        priority: "HIGH",
-        ctaText: "View Mentorship Hub",
-        ctaUrl: "/mentorship",
-        type: "mentorship",
-        pointsPotential: 5
-      });
-    }
-  }
-
-  // 7. Complete Profile Info
-  if (!user.targetRoles || user.targetRoles.length === 0 || !user.targetCompanies || user.targetCompanies.length === 0) {
-    rawActions.push({
-      id: "complete_profile",
-      title: "Configure Target Roles & Companies",
-      description: "Complete your job hunting parameters so next-step suggestions are tailored to your target companies.",
-      priority: "MEDIUM",
-      ctaText: "Update Profile",
-      ctaUrl: "/profile",
-      type: "profile",
-      pointsPotential: 5
-    });
-  }
-
-  // 8. Preparation Plan Checklists
-  const activePlan = await PreparationPlan.findOne({ userId, isActive: true });
-  if (activePlan && activePlan.actionItems && activePlan.actionItems.length > 0) {
-    const pendingCount = activePlan.actionItems.filter(item => item.status === "pending").length;
-    if (pendingCount > 0) {
-      rawActions.push({
-        id: "daily_checklist",
-        title: "Execute Daily Preparation Items",
-        description: `You have ${pendingCount} checklist task(s) remaining for today. Maintain your prep streak.`,
-        priority: "MEDIUM",
-        ctaText: "Complete Checklist",
-        ctaUrl: "/prepare",
-        type: "preparation",
-        pointsPotential: 5
-      });
-    }
-  }
-
-  // 9. Skill Gaps against Target Role
-  const primaryRole = user.targetRoles?.find(r => r.isPrimary) || user.targetRoles?.[0];
-  if (primaryRole && primaryRole.techStack && primaryRole.techStack.length > 0) {
-    for (const stackItem of primaryRole.techStack) {
-      const normalized = normalizeSkill(stackItem);
-      if (normalized && normalized.isKnown) {
-        const skill = await UserSkill.findOne({ userId, canonicalName: normalized.canonicalName });
-        if (!skill || skill.confidence < 60) {
-          rawActions.push({
-            id: `skill_gap_${normalized.canonicalName}`,
-            title: `Close Skill Gap: ${normalized.canonicalName}`,
-            description: `Your target role requires ${normalized.canonicalName}. Complete coding challenges or register projects using this skill to boost confidence.`,
-            priority: "HIGH",
-            ctaText: "Practice Skill",
-            ctaUrl: "/coding",
-            type: "skill_gap",
-            pointsPotential: 25
-          });
-          break; // Suggest closing one critical skill gap at a time
-        }
-      }
-    }
-  }
-
-  // Filter out dismissed and active-snoozed actions
+  // Filter out snoozed/dismissed actions
   const activeActions = rawActions.filter(action => {
     return !dismissedIds.includes(action.id) && !activeSnoozedIds.includes(action.id);
   });
@@ -292,7 +248,6 @@ export async function snoozeAction(userId, actionId, hours = 24) {
   const snoozeUntil = new Date();
   snoozeUntil.setHours(snoozeUntil.getHours() + hours);
 
-  // Remove existing snooze config for the same action ID if any, and add new one
   await User.findByIdAndUpdate(userId, {
     $pull: { snoozedActions: { actionId } }
   });

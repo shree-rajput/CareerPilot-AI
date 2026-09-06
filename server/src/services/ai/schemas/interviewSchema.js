@@ -49,15 +49,22 @@ export const interviewEvaluationStandardSchema = z.object({
   nextQuestion: z.string().nullable().default(null)
 });
 
-export const interviewQuestionSchema = z.object({
+export const interviewQuestionSchema = z.preprocess((rawObj) => {
+  if (!rawObj || typeof rawObj !== "object") return rawObj;
+  const obj = { ...rawObj };
+  if (!obj.questionText || typeof obj.questionText !== "string" || !obj.questionText.trim()) {
+    obj.questionText = obj.question || obj.text || obj.prompt || obj.description || obj.questionText || "";
+  }
+  return obj;
+}, z.object({
   questionText: z.string().min(1, "questionText must not be empty").describe("The interview question to ask."),
   category: z.string().min(1, "category must not be empty").describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
-  difficulty: z.enum(["easy", "medium", "hard"]).describe("The difficulty level of the question"),
-  expectedConcepts: z.array(z.string()).describe("List of key concepts or keywords expected in a good answer"),
+  difficulty: z.enum(["easy", "medium", "hard"]).default("medium").describe("The difficulty level of the question"),
+  expectedConcepts: z.preprocess((val) => Array.isArray(val) ? val.map(String) : [], z.array(z.string()).default([])).describe("List of key concepts or keywords expected in a good answer"),
   followUpStrategy: z.string().default("Ask a focused follow-up based on the candidate's depth and specificity."),
   generationSource: z.enum(["ai", "deterministic_fallback"]).default("ai"),
   fallbackReason: z.string().default("")
-});
+}));
 
 export const interviewChallengeSchema = z.object({
   question: z.string().describe("The actual coding question description and requirements."),

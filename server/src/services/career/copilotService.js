@@ -138,6 +138,62 @@ function budgetContextData(contextData, maxChars = 3000) {
  * Handles sending a message to a specific conversation with Intent Detection,
  * Context Relevance Filtering, and Post-Generation Relevance Validation.
  */
+/**
+ * Normalizes any LLM response structure into a clean content string, sections array, and suggested actions.
+ */
+function normalizeCopilotResponse(response) {
+  if (typeof response === "string") {
+    return {
+      content: response.trim(),
+      sections: [],
+      suggestedActions: []
+    };
+  }
+
+  if (!response || typeof response !== "object") {
+    return {
+      content: "",
+      sections: [],
+      suggestedActions: []
+    };
+  }
+
+  let content = (response.reply || response.content || response.text || response.message || response.answer || response.response || "").trim();
+  let sections = Array.isArray(response.sections) ? response.sections : [];
+  let suggestedActions = Array.isArray(response.suggestedActions)
+    ? response.suggestedActions.map(a => (typeof a === "string" ? a : a?.label || a?.text || a?.title || String(a || ""))).filter(Boolean)
+    : [];
+
+  // If top-level reply/content is empty but UI sections exist, synthesize full markdown content
+  if (!content && sections.length > 0) {
+    const parts = [];
+    for (const sec of sections) {
+      if (sec.type === "code") {
+        parts.push(`\`\`\`${sec.language || ""}\n${sec.content || ""}\n\`\`\``);
+      } else if (sec.type === "steps") {
+        const titleHeader = sec.title ? `### ${sec.title}\n` : "";
+        const itemLines = (sec.items || []).map(item => `- ${item}`).join("\n");
+        parts.push(`${titleHeader}${itemLines}`);
+      } else if (sec.type === "callout") {
+        parts.push(`> **${sec.title || "Note"}**: ${sec.content || ""}`);
+      } else {
+        if (sec.title) parts.push(`### ${sec.title}`);
+        if (sec.content) parts.push(sec.content);
+      }
+    }
+    content = parts.filter(Boolean).join("\n\n");
+  }
+
+  return {
+    content,
+    sections,
+    suggestedActions
+  };
+}
+
+/**
+ * Send a user message and generate a structured Copilot response.
+ */
 export async function sendMessage(userId, conversationId, query) {
   const startTime = Date.now();
 
@@ -160,7 +216,7 @@ export async function sendMessage(userId, conversationId, query) {
   }
 
   // 1. Add User Message
-  conv.messages.push({ role: "user", content: query });
+  conv.messages.push({ role: "user", content: query, sections: [] });
 
   // 2. Context Planning
   const plan = await planContext(query, conv.messages.slice(0, -1));
@@ -178,12 +234,13 @@ export async function sendMessage(userId, conversationId, query) {
 
   const budgetedContextStr = budgetContextData(cleanContext, 1500);
 
-  let aiResponseContent = "";
+  let normalizedContent = "";
+  let normalizedSections = [];
   let suggestedActions = [];
+  let isFallback = false;
   let wasCorrected = false;
 
   try {
-    // We only pass recent history to avoid topic drift
     const history = conv.messages.slice(0, -1).slice(-4).map(m => ({
       role: m.role,
       content: typeof m.content === 'string' && m.content.length > 150 ? m.content.substring(0, 150) + "..." : m.content
@@ -196,11 +253,10 @@ export async function sendMessage(userId, conversationId, query) {
       contextData: budgetedContextStr
     });
 
-    // Handle plain text response fallback safely
-    if (typeof response === "string") {
-      aiResponseContent = response;
-    } else {
-      // 5. Response Relevance Check
+    let normalized = normalizeCopilotResponse(response);
+
+    // 5. Response Relevance Check if structured object
+    if (typeof response !== "string") {
       let validation = validateResponseRelevance(response, query, intent, rawContext);
 
       if (!validation.isValid) {
@@ -214,14 +270,23 @@ export async function sendMessage(userId, conversationId, query) {
           history,
           contextData: budgetedContextStr
         });
-      }
 
-      aiResponseContent = typeof response === "string" ? response : (response.reply || response.content || "I am here to assist with your career goals.");
-      suggestedActions = Array.isArray(response.suggestedActions) ? response.suggestedActions : [];
+        normalized = normalizeCopilotResponse(response);
+      }
+    }
+
+    normalizedContent = normalized.content;
+    normalizedSections = normalized.sections;
+    suggestedActions = normalized.suggestedActions;
+
+    if (!normalizedContent) {
+      console.error("[CopilotService] Normalized content is empty after primary AI call!");
+      normalizedContent = "I could not format a complete response for your query. Please try rephrasing your question.";
     }
 
   } catch (error) {
     console.warn("[CopilotService] Primary AI Copilot request failed. Retrying with minimal fallback context...", error?.message || error);
+    isFallback = true;
 
     try {
       const minimalContext = {
@@ -230,48 +295,76 @@ export async function sendMessage(userId, conversationId, query) {
 
       const fallbackResponse = await executeAiTask("COPILOT_CHAT", {
         query,
-        history: [], // Drop history to eliminate token bloat
+        history: [],
         contextData: JSON.stringify(minimalContext)
       });
 
-      aiResponseContent = typeof fallbackResponse === "string" ? fallbackResponse : (fallbackResponse.reply || fallbackResponse.content || "I am here to help you navigate your career.");
-      suggestedActions = Array.isArray(fallbackResponse.suggestedActions) ? fallbackResponse.suggestedActions : [];
+      const normalized = normalizeCopilotResponse(fallbackResponse);
+      normalizedContent = normalized.content || "I couldn't generate the answer right now. Please try again.";
+      normalizedSections = normalized.sections;
+      suggestedActions = normalized.suggestedActions;
     } catch (fallbackErr) {
       console.error("[CopilotService] AI Copilot fallback also failed:", fallbackErr?.message || fallbackErr);
       
       const errCode = fallbackErr?.code || fallbackErr?.errorCode || "AI_UNAVAILABLE";
       if (errCode === "AI_RATE_LIMITED" || fallbackErr?.statusCode === 429) {
-        aiResponseContent = "AI usage limit reached. Please try again in a few seconds.";
+        normalizedContent = "AI usage limit reached. Please wait a few seconds and try again.";
       } else if (errCode === "AI_NOT_CONFIGURED" || fallbackErr?.statusCode === 503) {
-        aiResponseContent = "CareerPilot AI is not configured correctly. Please verify your environment settings.";
+        normalizedContent = "CareerPilot AI is not configured correctly. Please check your environment settings.";
       } else if (errCode === "AI_MODEL_NOT_FOUND") {
-        aiResponseContent = "The configured AI model is currently unavailable.";
+        normalizedContent = "The configured AI model is currently unavailable.";
       } else if (errCode === "ETIMEDOUT" || errCode === "AI_TIMEOUT") {
-        aiResponseContent = "The AI request took too long to complete. Please retry.";
+        normalizedContent = "The AI request timed out. Please try rephrasing your question.";
       } else {
-        aiResponseContent = `CareerPilot AI encountered an issue (${fallbackErr?.message || "service unavailable"}). Please try rephrasing your question.`;
+        normalizedContent = `CareerPilot AI encountered an error (${fallbackErr?.message || "service unavailable"}). Please try asking your question again.`;
       }
       
       suggestedActions = ["Retry question", "Explore Job Board", "View Preparation Plan"];
     }
   }
 
-  // 6. Save AI Message
-  conv.messages.push({ role: "assistant", content: aiResponseContent });
+  // 6. Save AI Message in Conversation with Content & Sections
+  conv.messages.push({
+    role: "assistant",
+    content: normalizedContent,
+    sections: normalizedSections
+  });
   await conv.save();
 
-  // 7. Observability Logging
+  // 7. Server-Side Detailed Debug Logging
+  console.log(`
+[COPILOT DEBUG LOG]
+---------------------------------------------------
+query: "${query}"
+intent: ${intent}
+mode: ${mode}
+contextSize: ${budgetedContextStr?.length || 0}
+responseLength: ${normalizedContent.length}
+sectionsCount: ${normalizedSections.length}
+suggestedActionsCount: ${suggestedActions.length}
+fallbackTriggered: ${isFallback}
+wasCorrected: ${wasCorrected}
+---------------------------------------------------
+  `);
+
+  // 8. Observability Logging
   aiLogger.logOperation({
     task: "COPILOT_CHAT",
     modelRole: mode,
     latencyMs: Date.now() - startTime,
-    success: true,
+    success: !isFallback,
     retryCount: wasCorrected ? 1 : 0,
-    validationResult: wasCorrected ? "corrected" : "passed"
+    validationResult: wasCorrected ? "corrected" : (isFallback ? "fallback" : "passed")
   });
 
   return {
-    reply: aiResponseContent,
+    success: true,
+    reply: normalizedContent,
+    message: {
+      role: "assistant",
+      content: normalizedContent,
+      sections: normalizedSections
+    },
     suggestedActions,
     intent,
     mode,

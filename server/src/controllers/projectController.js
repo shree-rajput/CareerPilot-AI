@@ -1,9 +1,17 @@
 import * as projectService from "../services/career/projectService.js";
+import { domainEvents, DOMAIN_EVENTS } from "../services/events/domainEvents.js";
 
 export const createProject = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const project = await projectService.createProject(userId, req.body);
+
+    domainEvents.emit(DOMAIN_EVENTS.PROJECT_CREATED, {
+      userId,
+      name: project.name,
+      technologies: project.technologies
+    });
+
     res.status(201).json({ status: "success", data: project });
   } catch (error) {
     next(error);
@@ -13,7 +21,8 @@ export const createProject = async (req, res, next) => {
 export const generateInterviewKit = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const kit = await projectService.generateInterviewKit(id);
+    const userId = req.user.id;
+    const kit = await projectService.generateInterviewKit(id, userId);
     res.status(200).json({ status: "success", data: kit });
   } catch (error) {
     next(error);
@@ -32,7 +41,8 @@ export const getProjects = async (req, res, next) => {
 
 export const getProjectById = async (req, res, next) => {
   try {
-    const project = await projectService.getProjectById(req.params.id);
+    const userId = req.user.id;
+    const project = await projectService.getProjectById(req.params.id, userId);
     res.status(200).json({ status: "success", data: project });
   } catch (error) {
     next(error);

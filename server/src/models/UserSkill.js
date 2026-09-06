@@ -35,6 +35,11 @@ const userSkillSchema = new mongoose.Schema(
     skillId: { type: mongoose.Schema.Types.ObjectId, ref: "Skill" },
     canonicalName: { type: String, required: true }, // Denormalized for fast queries
     category: { type: String, default: "other" },
+    provenance: {
+      type: String,
+      enum: ["VERIFIED", "DERIVED", "INFERRED", "UNKNOWN"],
+      default: "DERIVED"
+    },
     status: {
       type: String,
       enum: ["NOT_STARTED", "IN_PROGRESS", "PRACTICING", "READY_FOR_ASSESSMENT", "VERIFIED", "RESOLVED"],

@@ -70,9 +70,10 @@ export const generateDailyPlan = async (req, res, next) => {
 
 export const updateActionItemStatus = async (req, res, next) => {
   try {
+    const userId = req.user.id;
     const { id, itemId } = req.params;
     const { status } = req.body;
-    const plan = await preparationService.updateActionItemStatus(id, itemId, status);
+    const plan = await preparationService.updateActionItemStatus(userId, id, itemId, status);
     res.status(200).json({ status: "success", data: plan });
   } catch (error) {
     next(error);
@@ -91,8 +92,9 @@ export const getActivePlan = async (req, res, next) => {
 
 export const archivePlan = async (req, res, next) => {
   try {
+    const userId = req.user.id;
     const { id } = req.params;
-    const plan = await preparationService.archivePlan(id);
+    const plan = await preparationService.archivePlan(userId, id);
     res.status(200).json({ status: "success", data: plan });
   } catch (error) {
     next(error);

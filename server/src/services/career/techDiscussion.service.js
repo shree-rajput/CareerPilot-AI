@@ -148,7 +148,7 @@ export async function createTechDiscussionRoom({
   const resolvedCategory = category === "coding" ? (user?.interviewPreferences?.preferredQuestionCategories?.[0] || "coding") : category;
   const resolvedTopic = topic === "Coding" ? (userTargetRole || "Software Engineering") : topic;
   const resolvedDifficulty = validDifficulties.includes(String(difficulty).toLowerCase()) && difficulty !== "medium" ? String(difficulty).toLowerCase() : (user?.interviewPreferences?.defaultDifficulty || "medium");
-  const resolvedExperience = ["fresher", "junior", "mid", "senior"].includes(String(experienceLevel).toLowerCase()) && experienceLevel !== "fresher" ? String(experienceLevel).toLowerCase() : (user?.experienceLevel || "fresher");
+  const resolvedExperience = ["student", "fresher", "intern", "junior", "mid", "senior"].includes(String(experienceLevel).toLowerCase()) && experienceLevel !== "fresher" ? String(experienceLevel).toLowerCase() : (user?.experienceLevel || "fresher");
   const resolvedLanguage = language === "javascript" ? (user?.primaryTechStack?.[0] || user?.technicalSkills?.[0] || "javascript") : language;
 
   const normCategory = normalizeCategory(resolvedCategory);

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { InterviewSession } from "../models/InterviewSession.js";
 import { InterviewQuestion } from "../models/InterviewQuestion.js";
 import { InterviewChallenge } from "../models/InterviewChallenge.js";
+import { domainEvents, DOMAIN_EVENTS } from "../services/events/domainEvents.js";
 import {
   buildFallbackInterviewEvaluation,
   buildFallbackInterviewQuestion,
@@ -149,9 +150,9 @@ export async function createSession(req, res, next) {
     let extractedResumeText = resumeText || "";
     let resumeData = null;
     if (!extractedResumeText && applicationId) {
-      const app = await Application.findById(applicationId);
+      const app = await Application.findOne({ _id: applicationId, userId: req.user._id });
       if (app && app.resumeVersionId) {
-        const resume = await Resume.findById(app.resumeVersionId);
+        const resume = await Resume.findOne({ _id: app.resumeVersionId, userId: req.user._id });
         if (resume) {
           extractedResumeText = resume.rawText;
           resumeData = resume.structuredData;
@@ -1054,11 +1055,9 @@ export async function runCode(req, res, next) {
       throw new AppError("Challenge not found", 404);
     }
 
-    const sessionUserId = challenge.interviewSessionId?.userId
-      ? challenge.interviewSessionId.userId.toString()
-      : challenge.interviewSessionId?.toString();
-
-    if (sessionUserId && sessionUserId !== req.user._id.toString()) {
+    const targetSessionId = challenge.interviewSessionId?._id || challenge.interviewSessionId;
+    const session = await InterviewSession.findOne({ _id: targetSessionId, userId: req.user._id });
+    if (!session) {
       throw new AppError("Unauthorized access to this challenge", 403);
     }
 
@@ -1115,11 +1114,9 @@ export async function submitCodingAnswer(req, res, next) {
       throw new AppError("Challenge not found", 404);
     }
 
-    const sessionUserId = challenge.interviewSessionId?.userId
-      ? challenge.interviewSessionId.userId.toString()
-      : challenge.interviewSessionId?.toString();
-
-    if (sessionUserId && sessionUserId !== req.user._id.toString()) {
+    const targetSessionId = challenge.interviewSessionId?._id || challenge.interviewSessionId;
+    const session = await InterviewSession.findOne({ _id: targetSessionId, userId: req.user._id });
+    if (!session) {
       throw new AppError("Unauthorized access to this challenge", 403);
     }
 
@@ -1275,6 +1272,18 @@ export async function completeSession(req, res, next) {
     session.scores = scores;
 
     await session.save();
+
+    // Emit domain event for interview completion
+    try {
+      const weakTopics = session.finalReport?.weaknesses || [];
+      domainEvents.emit(DOMAIN_EVENTS.INTERVIEW_COMPLETED, {
+        userId: req.user._id,
+        overallScore: session.overallScore || 0,
+        weakTopics
+      });
+    } catch (eErr) {
+      console.warn("[InterviewController] Failed emitting INTERVIEW_COMPLETED event:", eErr.message);
+    }
 
     res.status(200).json({
       success: true,

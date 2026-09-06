@@ -23,11 +23,16 @@ export async function planContext(query, history = []) {
       history: recentHistory
     });
 
+    const sources = plan.sources || [];
+    if (!sources.includes("canonicalState")) {
+      sources.push("canonicalState");
+    }
+
     return {
       intent: plan.intent || "general",
       mode: mapIntentToMode(plan.intent),
       entities: plan.entities || [],
-      sources: plan.sources || []
+      sources
     };
   } catch (error) {
     console.error("[ContextPlanner] Error generating context plan. Falling back to default plan.", error.message);
