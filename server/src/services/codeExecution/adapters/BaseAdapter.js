@@ -10,15 +10,15 @@ export class BaseAdapter {
     this.maxOutputSize = 1024 * 1024; // 1 MB
   }
 
-  async prepare({ code, executionContract, testCase, tempDir }) {
+  async prepare({ _code, _executionContract, _testCase, _tempDir }) {
     throw new Error("prepare() must be implemented by adapter subclass.");
   }
 
-  async compile({ tempDir, timeoutMs }) {
+  async compile({ _tempDir, _timeoutMs }) {
     return { status: "completed", stdout: "", stderr: "", exitCode: 0 };
   }
 
-  async execute({ tempDir, timeoutMs }) {
+  async execute({ _tempDir, _timeoutMs }) {
     throw new Error("execute() must be implemented by adapter subclass.");
   }
 

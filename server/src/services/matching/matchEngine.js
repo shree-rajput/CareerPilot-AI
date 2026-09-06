@@ -23,15 +23,22 @@
 import { cosineSimilarity } from "./cosineSimilarity.js";
 import { embedTexts } from "./embeddingService.js";
 import { calculateScore, classifySimilarity, clampScore } from "./scoringEngine.js";
+import { compareSkills } from "../skill/skillIntelligenceService.js";
 
 /**
- * Deterministic token overlap fallback for string matching.
+ * Semantic & Taxonomy matching engine fallback for skill and requirement evaluation.
  */
 function computeTokenOverlap(itemA, itemB) {
   if (!itemA || !itemB) return 0;
   const strA = String(typeof itemA === "string" ? itemA : itemA.skillName || itemA.name || itemA.canonicalName || String(itemA)).toLowerCase().trim();
   const strB = String(typeof itemB === "string" ? itemB : itemB.skillName || itemB.name || itemB.canonicalName || String(itemB)).toLowerCase().trim();
   if (!strA || !strB) return 0;
+
+  // Leverage Skill Intelligence taxonomy comparison first
+  const taxonomyMatch = compareSkills(strA, strB);
+  if (taxonomyMatch.score > 0) {
+    return taxonomyMatch.score;
+  }
 
   if (strA === strB) return 1.0;
   if (strA.includes(strB) || strB.includes(strA)) return 0.85;

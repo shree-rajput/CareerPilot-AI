@@ -2,7 +2,6 @@ import MentorshipSession from "../../models/MentorshipSession.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import { MatchResult } from "../../models/MatchResult.js";
 import { Application } from "../../models/Application.js";
-import { Job } from "../../models/Job.js";
 import { User } from "../../models/User.js";
 import { createNotification } from "./notificationService.js";
 

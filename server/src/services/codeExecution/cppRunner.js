@@ -9,7 +9,7 @@ const MAX_OUTPUT_SIZE = 1024 * 1024; // 1 MB
 
 export const runCpp = async ({
   code,
-  input,
+  _input,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) => {
   const tempDirectory = await mkdtemp(path.join(tmpdir(), "careerpilot-cpp-"));
@@ -19,8 +19,6 @@ export const runCpp = async ({
   const execFilePath = path.join(tempDirectory, execFileName);
 
   try {
-    const inputStr = JSON.stringify(input);
-
     const wrappedCode = `#include <iostream>
 #include <vector>
 #include <string>

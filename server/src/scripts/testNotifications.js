@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { connectDatabase } from "../config/db.js";
 import { User } from "../models/User.js";
 import { Application } from "../models/Application.js";

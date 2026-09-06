@@ -10,6 +10,7 @@ import { Card, CardContent } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
 import { Badge } from "../components/ui/Badge";
 import { PreparationAssistant } from "../components/preparation/PreparationAssistant";
+import { PreparationTimerWidget } from "../components/preparation/PreparationTimerWidget";
 import { SkillVerificationModal } from "../components/preparation/SkillVerificationModal";
 
 export function PreparationPage() {
@@ -355,8 +356,14 @@ export function PreparationPage() {
         </div>
       </div>
 
-      <div className="w-72 border-l border-border bg-surface shrink-0 hidden lg:block">
-        <PreparationAssistant activePlan={dashboard?.todaysFocus?.[0]} />
+      <div className="w-80 border-l border-border bg-surface shrink-0 hidden lg:flex flex-col gap-4 p-4 overflow-y-auto">
+        <PreparationTimerWidget 
+          activeTask={dashboard?.todaysFocus?.[0]} 
+          onTaskCompleted={loadDashboard} 
+        />
+        <div className="flex-1 min-h-[350px]">
+          <PreparationAssistant activePlan={dashboard?.todaysFocus?.[0]} />
+        </div>
       </div>
 
       <SkillVerificationModal

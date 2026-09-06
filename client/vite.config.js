@@ -26,6 +26,18 @@ export default defineConfig({
   optimizeDeps: {
     include: ['yjs', 'y-monaco', 'monaco-editor']
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'monaco-vendor': ['monaco-editor', '@monaco-editor/react'],
+          'recharts-vendor': ['recharts'],
+          'livekit-vendor': ['livekit-client', '@livekit/components-react'],
+          'vendor': ['react', 'react-dom', 'react-router-dom', 'axios', 'lucide-react']
+        }
+      }
+    }
+  },
   server: {
     port: 5173,
     proxy: {

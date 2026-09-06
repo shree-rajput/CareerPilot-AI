@@ -239,7 +239,7 @@ export async function mergeCareerProfile(userId, extractedData = {}) {
   if (!user) throw new Error("User not found");
 
   const { UserSkill } = await import("../../models/UserSkill.js");
-  const { normalizeSkill } = await import("./taxonomyService.js");
+  const { normalizeSkill } = await import("../skill/skillIntelligenceService.js");
 
   const existingSkillsSet = new Set((user.technicalSkills || []).map(s => s.toLowerCase()));
   const newAppliedSkills = [];

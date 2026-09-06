@@ -6,8 +6,7 @@ import { PreparationPlan } from "../models/PreparationPlan.js";
 import { Notification } from "../models/Notification.js";
 import { Message } from "../models/Message.js";
 import { requestSession, respondToSession, completeSession } from "../services/career/mentorSessionService.js";
-import { createNotification, getUserNotifications, markAsRead } from "../services/notification/notificationService.js";
-import { runNotificationEngine } from "../services/notification/notificationEngine.js";
+import { createNotification, getUserNotifications } from "../services/notification/notificationService.js";
 import { getNextBestActions } from "../services/career/nextBestActionService.js";
 import { sendMessage, getConversation } from "../controllers/messageController.js";
 

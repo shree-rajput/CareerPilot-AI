@@ -100,3 +100,34 @@ export const archivePlan = async (req, res, next) => {
     next(error);
   }
 };
+
+export const updateSchedulePreferences = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { studyHours, emailTime } = req.body;
+    const result = await preparationService.updateSchedulePreferences(userId, { studyHours, emailTime });
+    res.status(200).json({ status: "success", data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTimerState = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.getTimerState(userId);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const syncTimerState = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.syncTimerState(userId, req.body);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};

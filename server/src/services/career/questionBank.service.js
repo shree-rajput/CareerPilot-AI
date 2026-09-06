@@ -1,5 +1,3 @@
-import CodingQuestion from "../../models/CodingQuestions.js";
-import TechnicalScenarioBank from "../../models/TechnicalScenarioBank.js";
 import { normalizeCategory } from "../../config/techDiscussionTaxonomy.js";
 
 /**

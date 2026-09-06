@@ -1,4 +1,3 @@
-import TechnicalScenarioBank from "../../models/TechnicalScenarioBank.js";
 import PeerInterviewRoom from "../../models/PeerInterviewRoom.js";
 import { getCareerIntelligence } from "./careerIntelligenceService.js";
 import { getPreparationDashboard } from "./preparationService.js";

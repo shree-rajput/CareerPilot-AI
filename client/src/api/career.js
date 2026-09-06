@@ -43,6 +43,9 @@ export const preparationApi = {
   generateDailyPlan: (data) => http.post("/preparation", data).then((res) => res.data),
   archivePlan: (id) => http.patch(`/preparation/${id}/archive`).then((res) => res.data),
   updateActionItemStatus: (id, itemId, status) => http.patch(`/preparation/${id}/items/${itemId}/status`, { status }).then((res) => res.data),
+  updateSchedule: (data) => http.post("/preparation/schedule", data).then((res) => res.data),
+  getTimer: () => http.get("/preparation/timer").then((res) => res.data),
+  syncTimer: (data) => http.post("/preparation/timer/sync", data).then((res) => res.data),
 };
 
 

@@ -110,13 +110,13 @@ export const NAVIGATION_CATEGORIES = [
   {
     category: "Growth & Network",
     items: [
-      {
-        id: "mentorship",
-        to: "/mentorship",
-        label: "Mentor Connect",
-        icon: GraduationCap,
-        status: FEATURE_STATUS.WORKING
-      },
+      // {
+      //   id: "mentorship",
+      //   to: "/mentorship",
+      //   label: "Mentor Connect",
+      //   icon: GraduationCap,
+      //   status: FEATURE_STATUS.WORKING
+      // },
       {
         id: "analytics",
         to: "/analytics",

@@ -155,7 +155,7 @@ export async function getNextBestActions(userId) {
       expectedImpact: "+20% Interview Readiness",
       sourceEntities: ["InterviewSessions"],
       ctaText: "Launch AI Mock",
-      ctaUrl: "/prepare",
+      ctaUrl: "/preparation",
       type: "interview",
       pointsPotential: 20
     });
@@ -172,7 +172,7 @@ export async function getNextBestActions(userId) {
       expectedImpact: "+15% Interview Readiness",
       sourceEntities: [interviews.latestSession?.id ? `InterviewSession:${interviews.latestSession.id}` : "InterviewSessions"],
       ctaText: "Retake Mock Session",
-      ctaUrl: "/prepare",
+      ctaUrl: "/preparation",
       type: "interview",
       pointsPotential: 15
     });
@@ -212,7 +212,7 @@ export async function getNextBestActions(userId) {
       expectedImpact: "+5% Preparation Consistency",
       sourceEntities: [`PreparationPlan:${preparation.planId}`],
       ctaText: "View Daily Plan",
-      ctaUrl: "/prepare",
+      ctaUrl: "/preparation",
       type: "preparation",
       pointsPotential: 10
     });

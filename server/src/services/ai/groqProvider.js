@@ -113,7 +113,8 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
     const request = {
       model,
       messages: sanitizedMessages,
-      temperature
+      temperature,
+      max_tokens: maxTokens
     };
 
     if (jsonMode) {
@@ -162,8 +163,8 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
           const fallbackModels = [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768",
-            "gemma2-9b-it",
+            "qwen-2.5-coder-32b",
+            "deepseek-r1-distill-llama-70b",
             "openai/gpt-oss-20b"
           ].filter(m => m !== model);
 
@@ -173,7 +174,8 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
               const fallbackRequest = {
                 model: fallbackModel,
                 messages: sanitizedMessages,
-                temperature
+                temperature,
+                max_tokens: maxTokens
               };
               if (jsonMode) {
                 fallbackRequest.response_format = { type: "json_object" };

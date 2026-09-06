@@ -148,6 +148,17 @@ const userSchema = new mongoose.Schema(
       index: true
     },
     passwordHash: { type: String, required: true },
+    role: {
+      type: String,
+      enum: ["student", "mentor", "admin"],
+      default: "student",
+      index: true
+    },
+    mentorProfileId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MentorProfile",
+      default: null
+    },
     phone: { type: String, trim: true, default: "" },
     education: { type: educationSchema, default: () => ({}) },
     
@@ -218,6 +229,16 @@ const userSchema = new mongoose.Schema(
       default: []
     },
     completedActions: { type: [String], default: [] },
+    // Security, Verification & Recovery Fields
+    isEmailVerified: { type: Boolean, default: false },
+    emailVerificationTokenHash: { type: String, default: null },
+    emailVerificationExpiresAt: { type: Date, default: null },
+    resetPasswordTokenHash: { type: String, default: null },
+    resetPasswordExpiresAt: { type: Date, default: null },
+    timezone: { type: String, default: "UTC" },
+    availablePrepMinutesPerDay: { type: Number, default: 45, min: 10, max: 300 },
+    prepReminderTime: { type: String, default: "09:00" },
+
     mentorStatus: {
       type: String,
       enum: ["none", "pending", "under_review", "approved", "verified", "rejected", "suspended"],
@@ -249,6 +270,8 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.toSafeObject = function toSafeObject() {
   const user = this.toObject();
   delete user.passwordHash;
+  delete user.emailVerificationTokenHash;
+  delete user.resetPasswordTokenHash;
   delete user.__v;
   return user;
 };

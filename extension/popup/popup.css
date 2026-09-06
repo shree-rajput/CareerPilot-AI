@@ -286,6 +286,54 @@ body {
   color: var(--text-main);
 }
 
+/* Status Grid & Buttons */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.btn-status {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-status:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-main);
+  border-color: #475569;
+}
+
+.btn-status.active {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.btn-status.btn-danger:hover:not(:disabled) {
+  background-color: rgba(244, 63, 94, 0.1);
+  color: var(--accent-rose);
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+.btn-status.btn-danger.active {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: var(--accent-rose);
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.btn-status:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Badges */
 .badge {
   font-size: 10px;

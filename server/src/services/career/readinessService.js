@@ -6,7 +6,7 @@ import { Project } from "../../models/Project.js";
 import { Application } from "../../models/Application.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import MentorshipSession from "../../models/MentorshipSession.js";
-import { NOT_ASSESSED, safeNumber, clampScore, safeAverage, assertFiniteScore, normalizeScore } from "../../utils/math.js";
+import { NOT_ASSESSED, safeNumber, clampScore, safeAverage, normalizeScore } from "../../utils/math.js";
 import { getCanonicalCareerState } from "./careerStateService.js";
 import { calculateReadinessDimensions } from "./readinessEngine.js";
 

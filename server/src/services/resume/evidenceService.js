@@ -5,7 +5,7 @@ import { Project } from "../../models/Project.js";
  * Parses structured resume data and creates/updates UserSkill and Project records.
  * Acts as the entrypoint for Phase 3 Career Intelligence.
  */
-export async function extractEvidenceFromResume(userId, structuredData, sourceName) {
+export async function extractEvidenceFromResume(userId, structuredData, _sourceName) {
   if (!structuredData) return;
 
   const { skills = [], projects = [] } = structuredData;

@@ -2,7 +2,6 @@ import * as jobService from "../services/career/jobService.js";
 import { ingestJobOpportunity } from "../services/jobIngestionService.js";
 import { extractPdfTextWithQualityCheck } from "../services/pdfExtractionService.js";
 import { Application } from "../models/Application.js";
-import { Job } from "../models/Job.js";
 
 /**
  * POST /api/jobs/ingest

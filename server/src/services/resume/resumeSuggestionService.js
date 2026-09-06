@@ -116,7 +116,7 @@ export class ResumeSuggestionService {
   /**
    * Builds deterministic evidence-grounded fallback suggestions.
    */
-  buildGroundedFallbackSuggestions({ jobTitle, company, requiredSkills, candidateEvidenceSummary, matchResult, resume, projects }) {
+  buildGroundedFallbackSuggestions({ jobTitle, company, requiredSkills, candidateEvidenceSummary, matchResult, _resume, projects }) {
     const suggestions = [];
 
     // Category A: HIGH IMPACT - REST APIs / Tech Stack Visibility
@@ -212,7 +212,7 @@ export class ResumeSuggestionService {
   /**
    * Sanitizes AI output and ensures no unsafe HTML or arbitrary code execution.
    */
-  sanitizeAndValidateSuggestions(rawSuggestions, candidateEvidence) {
+  sanitizeAndValidateSuggestions(rawSuggestions, _candidateEvidence) {
     if (!Array.isArray(rawSuggestions)) return [];
 
     return rawSuggestions.map((sug, idx) => ({

@@ -6,7 +6,7 @@ import { PDFParse } from "pdf-parse";
  * @param {Buffer} pdfBuffer
  * @returns {Promise<string>}
  */
-export async function extractWithOcr(pdfBuffer) {
+export async function extractWithOcr(_pdfBuffer) {
   // Service boundary: If OCR engine (Tesseract/Cloud Vision) is configured in environment,
   // execute OCR here. Otherwise return empty string.
   console.log("[pdfExtractionService] OCR fallback invoked for low-confidence PDF.");

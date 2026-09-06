@@ -281,7 +281,6 @@ export async function shouldApplyRecommendation(jobId, userId) {
   const score = matchData.overallScore || 0;
   const matched = matchData.matchedSkills?.length || 0;
   const missing = matchData.missingSkills?.length || 0;
-  const partial = matchData.partialSkills?.length || 0;
 
   let verdict, reasoning, effort, tailoringRecommended;
 

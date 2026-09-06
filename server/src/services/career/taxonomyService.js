@@ -1,5 +1,3 @@
-import { Skill } from "../../models/Skill.js";
-
 // A robust initial seed/dictionary for normalizing common technologies.
 // In a full production system, this would be synced with DB or an external API.
 const TAXONOMY_DICTIONARY = [

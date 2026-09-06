@@ -1,6 +1,4 @@
 import { Resume } from "../models/Resume.js";
-import { Job } from "../models/Job.js";
-import { Application } from "../models/Application.js";
 import { createError } from "../utils/error.js";
 import { analyzeResumeAgainstJob, getInlineResumeSuggestion } from "../services/resume/resumeIntelligenceService.js";
 
@@ -175,7 +173,7 @@ Generate 3 progressively stronger rewrites.`;
         ? JSON.parse(result.reply)
         : result;
       rawOptions = parsed?.options || [];
-    } catch (_) {
+    } catch {
       rawOptions = [{ text: result?.reply || bullet, rationale: "AI rewrite" }];
     }
 

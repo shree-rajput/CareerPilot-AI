@@ -5,32 +5,30 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 
 import { registerPeerInterviewSocket } from "./sockets/peerInterview.socket.js";
+import { registerMentorSessionSocketHandlers } from "./sockets/mentorSession.socket.js";
 import { seedDefaultMentors } from "./scripts/seedMentors.js";
-import { initStaleScheduler } from "./services/staleScheduler.js";
+import { initCronScheduler } from "./services/scheduler/cronScheduler.js";
 import { registerEventSubscribers } from "./services/events/eventSubscribers.js";
 
 async function bootstrap() {
   await connectDatabase();
   await seedDefaultMentors();
-  initStaleScheduler();
+  initCronScheduler();
   registerEventSubscribers();
 
   const app = createApp();
-
-  // app.listen(env.port, () => {
-  //   console.log(`CareerPilot API running on port ${env.port}`);
-  // });
 
   const httpServer = createServer(app);
 
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL,
+      origin: process.env.CLIENT_URL || "*",
       credentials: true,
     },
   });
 
   registerPeerInterviewSocket(io);
+  registerMentorSessionSocketHandlers(io);
 
   httpServer.listen(env.port, () => {
     console.log(`Server running on port ${env.port}`);

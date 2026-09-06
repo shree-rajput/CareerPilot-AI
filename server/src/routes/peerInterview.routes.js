@@ -3,7 +3,6 @@ import {
   createRoomController,
   joinRoomController,
   getLiveKitTokenController,
-  getAIRecommendationController,
   getAINudgeController,
   executeContextActionController,
   endSessionController,

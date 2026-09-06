@@ -1,4 +1,5 @@
 import { PreparationPlan } from "../../models/PreparationPlan.js";
+import { PreparationTimer } from "../../models/PreparationTimer.js";
 import { UserSkill } from "../../models/UserSkill.js";
 import { Application } from "../../models/Application.js";
 import { User } from "../../models/User.js";
@@ -559,4 +560,66 @@ export async function archivePlan(userId, planId) {
     await PreparationPlan.updateOne({ _id: planId, userId }, { $set: { isActive: false } });
   }
   return { success: true, planId };
+}
+
+/**
+ * Updates daily study hours & reminder email time preferences.
+ */
+export async function updateSchedulePreferences(userId, { studyHours, emailTime }) {
+  const prepMinutes = Math.min(Math.max(Number(studyHours) * 60 || 45, 10), 300);
+  const reminderTime = String(emailTime || "09:00").trim();
+
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      availablePrepMinutesPerDay: prepMinutes,
+      prepReminderTime: reminderTime
+    },
+    { new: true }
+  ).lean();
+
+  return {
+    success: true,
+    availablePrepMinutesPerDay: user.availablePrepMinutesPerDay,
+    prepReminderTime: user.prepReminderTime,
+    message: `Schedule preferences saved: ${studyHours}h daily target, reminder at ${reminderTime}.`
+  };
+}
+
+/**
+ * Retrieves persistent active timer session for a user.
+ */
+export async function getTimerState(userId) {
+  const timer = await PreparationTimer.findOne({ userId }).lean();
+  return timer || {
+    userId,
+    skillName: "",
+    taskTitle: "",
+    targetMinutes: 25,
+    elapsedSeconds: 0,
+    isPaused: true,
+    isRunning: false
+  };
+}
+
+/**
+ * Persists/updates study timer session state.
+ */
+export async function syncTimerState(userId, { skillName, taskTitle, targetMinutes, elapsedSeconds, isPaused, isRunning }) {
+  const timer = await PreparationTimer.findOneAndUpdate(
+    { userId },
+    {
+      userId,
+      skillName: skillName || "General Practice",
+      taskTitle: taskTitle || "Preparation Study Session",
+      targetMinutes: Number(targetMinutes) || 25,
+      elapsedSeconds: Number(elapsedSeconds) || 0,
+      isPaused: Boolean(isPaused),
+      isRunning: Boolean(isRunning),
+      lastSyncAt: new Date()
+    },
+    { upsert: true, new: true }
+  ).lean();
+
+  return timer;
 }

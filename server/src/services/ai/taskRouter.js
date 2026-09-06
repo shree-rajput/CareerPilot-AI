@@ -14,7 +14,6 @@ import { GENERATE_PROJECT_KIT_SYSTEM, buildProjectKitPrompt, GENERATE_PREP_PLAN_
 import { buildMatchExplanationPrompt } from "./prompts/matchExplanation.js";
 import {
   buildInterviewEvaluationContext,
-  buildInterviewQuestionContext,
   buildResumeAnalysisContext,
   buildJdAnalysisContext,
   buildMatchContext,

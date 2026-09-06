@@ -19,7 +19,7 @@ function computeFingerprint(title = "") {
 /**
  * Ensures starter code has stubs for supported languages.
  */
-function normalizeStarterCode(starterCode = {}, functionName = "solution", params = [], returnType = "AUTO") {
+function normalizeStarterCode(starterCode = {}, functionName = "solution", params = [], _returnType = "AUTO") {
   const paramNames = Array.isArray(params) ? params.map((p) => p.name || p).join(", ") : "";
 
   const jsDefault = `function ${functionName}(${paramNames}) {\n  // Write your code here\n}\n`;

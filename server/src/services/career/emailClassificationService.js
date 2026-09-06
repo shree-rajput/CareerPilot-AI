@@ -308,7 +308,6 @@ export function classifyEmailEvent(emailData) {
   const relevance = classifyEmailRelevance(emailData);
 
   const {
-    senderEmail = "",
     senderDomain = "",
     senderName = "",
     subject = "",

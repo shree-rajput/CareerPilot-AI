@@ -13,6 +13,23 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128)
 });
 
+export const verifyEmailSchema = z.object({
+  token: z.string().trim().min(16).max(256)
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().email().max(120).toLowerCase()
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(120).toLowerCase()
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(16).max(256),
+  newPassword: z.string().min(8).max(128)
+});
+
 export const profileUpdateSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   phone: z.string().trim().max(25).optional(),

@@ -27,10 +27,10 @@ import { groqTranscribe } from "../services/ai/groqProvider.js";
 import { normalizeCodingQuestion } from "../services/codeExecution/questionNormalizationService.js";
 import fs from "fs";
 import crypto from "crypto";
-import { isNovelQuestion, fingerprintQuestion, getNextDiverseCategory } from "../services/interview/questionNoveltyService.js";
+import { isNovelQuestion, fingerprintQuestion } from "../services/interview/questionNoveltyService.js";
 import { validateGeneratedQuestion } from "../services/interview/questionValidationService.js";
 import { executeCode } from "../services/codeExecution/executionService.js";
-import { calculateSessionScores, normalizeQuestionEvaluation, safeScore } from "../services/interview/reportScoringService.js";
+import { calculateSessionScores, normalizeQuestionEvaluation } from "../services/interview/reportScoringService.js";
 import { scoreQuestionFromEvidence } from "../services/interview/deterministicScoringEngine.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -805,7 +805,7 @@ export async function submitAnswer(req, res, next) {
             transcript: question.transcript,
             evaluation: question.evaluation
           });
-        } catch (rErr) {
+        } catch {
           interviewerReaction = { reaction: "Answer already analyzed. Moving forward.", tone: "affirming" };
         }
 
@@ -989,7 +989,7 @@ export async function submitAnswer(req, res, next) {
         transcript,
         evaluation: question.evaluation
       });
-    } catch (reactionErr) {
+    } catch {
       const { correctness } = question.evaluation;
       if (correctness === 'High') {
         interviewerReaction = { reaction: "Good explanation. Let me ask a follow-up on that.", tone: "affirming" };
@@ -1439,7 +1439,7 @@ export async function getReplay(req, res, next) {
     // Merge verbal questions and coding challenges into single chronological timeline
     const timeline = [];
 
-    normalizedQuestions.forEach((q, idx) => {
+    normalizedQuestions.forEach((q) => {
       timeline.push({
         id: q._id,
         createdAt: q.createdAt,

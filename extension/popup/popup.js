@@ -374,83 +374,88 @@ function renderPreview(payload) {
     }
   };
 
-  document.getElementById("saveJobBtn").onclick = handleSaveJob;
+  attachStatusListeners(null, ".preview-status-grid", null);
   showState(statePreview);
 }
 
-async function handleSaveJob() {
-  const saveBtn = document.getElementById("saveJobBtn");
-  if (saveBtn.disabled) return;
+function attachStatusListeners(appId, containerSelector, currentStatus) {
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
 
-  saveBtn.disabled = true;
-  saveBtn.innerText = "Saving...";
+  const buttons = container.querySelectorAll(".btn-status");
+  buttons.forEach(btn => {
+    const status = btn.dataset.status;
+    
+    btn.classList.remove("active");
+    btn.disabled = false;
+    btn.innerText = btn.dataset.originalText || btn.innerText;
+    if (!btn.dataset.originalText) btn.dataset.originalText = btn.innerText;
 
-  const reviewForm = document.getElementById("reviewForm");
-  if (!reviewForm.classList.contains("hidden")) {
-    extractedPayload.title = document.getElementById("editTitle").value;
-    extractedPayload.company = document.getElementById("editCompany").value;
-    extractedPayload.location = document.getElementById("editLocation").value;
-    extractedPayload.description = document.getElementById("editDescription").value;
-  }
-
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "INGEST_JOB",
-      payload: extractedPayload,
-    });
-
-    if (!response.success) {
-      if (response.error?.includes("SESSION_EXPIRED") || response.error?.includes("AUTH_REQUIRED")) {
-        initUI();
-        return;
-      }
-      alert(`Ingestion notice: ${response.error}`);
-      saveBtn.disabled = false;
-      saveBtn.innerText = "Save to CareerPilot";
-      return;
+    if (currentStatus && currentStatus.toLowerCase() === status) {
+      btn.classList.add("active");
+      btn.innerText = "✓ " + btn.dataset.originalText;
+      btn.disabled = true;
     }
 
-    const data = response.data;
-    if (data.isDuplicate) {
-      renderDuplicateState(data);
-    } else {
-      renderSuccessState(data);
-    }
-  } catch (err) {
-    alert(`Connection error: ${err.message}`);
-    saveBtn.disabled = false;
-    saveBtn.innerText = "Save to CareerPilot";
-  }
+    btn.onclick = () => handleOneClickStatus(status, appId, buttons, btn);
+  });
 }
 
-async function handleMarkApplied(appId, buttonEl, statusPillEl = null) {
-  if (!appId) return;
-  buttonEl.disabled = true;
-  buttonEl.innerText = "Updating...";
+async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
+  allButtons.forEach(b => b.disabled = true);
+  
+  const originalText = clickedBtn.dataset.originalText;
+  clickedBtn.innerText = "Updating...";
+
+  const payload = {
+    targetStatus: status,
+    source: "extension_manual_action",
+    evidence: "User clicked status in extension popup",
+  };
+
+  if (appId) {
+    payload.applicationId = appId;
+  } else {
+    const reviewForm = document.getElementById("reviewForm");
+    if (reviewForm && !reviewForm.classList.contains("hidden")) {
+      extractedPayload.title = document.getElementById("editTitle").value;
+      extractedPayload.company = document.getElementById("editCompany").value;
+      extractedPayload.location = document.getElementById("editLocation").value;
+      extractedPayload.description = document.getElementById("editDescription").value;
+    }
+    Object.assign(payload, extractedPayload);
+    payload.jobUrl = payload.url;
+    payload.role = payload.title;
+  }
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: "UPDATE_APPLICATION_STATUS",
-      payload: {
-        applicationId: appId,
-        targetStatus: "applied",
-        source: "extension_manual_action",
-        evidence: "User clicked Mark as Applied in extension popup",
-      },
+      payload,
     });
 
-    if (response?.success) {
-      buttonEl.innerText = "✓ Applied";
-      if (statusPillEl) statusPillEl.innerText = "APPLIED";
-    } else {
+    if (!response?.success) {
+      if (response?.error?.includes("SESSION_EXPIRED") || response?.error?.includes("AUTH_REQUIRED")) {
+        initUI();
+        return;
+      }
       alert(`Status update failed: ${response?.error || "Unknown error"}`);
-      buttonEl.disabled = false;
-      buttonEl.innerText = "Mark as Applied";
+      allButtons.forEach(b => b.disabled = false);
+      clickedBtn.innerText = originalText;
+      return;
     }
+
+    const data = response.data;
+    if (!data.application) {
+       data.application = data; 
+    }
+    
+    // Always render duplicate state after successful update, as it is now in the pipeline
+    renderDuplicateState(data);
   } catch (err) {
     alert(`Connection error: ${err.message}`);
-    buttonEl.disabled = false;
-    buttonEl.innerText = "Mark as Applied";
+    allButtons.forEach(b => b.disabled = false);
+    clickedBtn.innerText = originalText;
   }
 }
 
@@ -471,15 +476,7 @@ function renderDuplicateState(data) {
     document.getElementById("dupMatchContainer").classList.add("hidden");
   }
 
-  const markAppliedBtn = document.getElementById("dupMarkAppliedBtn");
-  if (currentStatus === "applied") {
-    markAppliedBtn.disabled = true;
-    markAppliedBtn.innerText = "✓ Applied";
-  } else {
-    markAppliedBtn.disabled = false;
-    markAppliedBtn.innerText = "Mark as Applied";
-    markAppliedBtn.onclick = () => handleMarkApplied(appId, markAppliedBtn, dupStatusEl);
-  }
+  attachStatusListeners(appId, ".duplicate-status-grid", currentStatus);
 
   document.getElementById("openAppBtn").onclick = () => {
     const url = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;
@@ -503,15 +500,7 @@ function renderSuccessState(data) {
 
   document.getElementById("resResumeVersion").innerText = data.recommendedResume?.name || "Primary Resume";
 
-  const markAppliedBtn = document.getElementById("successMarkAppliedBtn");
-  if (currentStatus === "applied") {
-    markAppliedBtn.disabled = true;
-    markAppliedBtn.innerText = "✓ Applied";
-  } else {
-    markAppliedBtn.disabled = false;
-    markAppliedBtn.innerText = "Mark as Applied";
-    markAppliedBtn.onclick = () => handleMarkApplied(appId, markAppliedBtn);
-  }
+  attachStatusListeners(appId, ".success-status-grid", currentStatus);
 
   document.getElementById("viewAppWorkspaceBtn").onclick = () => {
     const targetUrl = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;

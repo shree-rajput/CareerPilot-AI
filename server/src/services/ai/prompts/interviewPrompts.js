@@ -4,7 +4,7 @@ export const generateQuestionPrompt = (params) => {
   
   let historyContext = "No previous questions.";
   if (params.previousQuestions && params.previousQuestions.length > 0) {
-    historyContext = params.previousQuestions.map((q, i) => 
+    historyContext = params.previousQuestions.map((q) => 
       `- ${q.questionText} (Score: ${q.analysis?.technicalAccuracy || q.evaluation?.correctness || 'N/A'})`
     ).join("\n");
   }

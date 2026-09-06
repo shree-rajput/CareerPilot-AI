@@ -12,7 +12,7 @@ import { getCanonicalCareerState } from "./careerStateService.js";
  */
 export async function calculateExplainableJobMatch(userId, jobDetails) {
   const careerState = await getCanonicalCareerState(userId);
-  const { jobDescription = "", extractedJd } = jobDetails;
+  const { extractedJd } = jobDetails;
 
   const requiredSkills = extractedJd?.requiredSkills || [];
   const preferredSkills = extractedJd?.preferredSkills || [];

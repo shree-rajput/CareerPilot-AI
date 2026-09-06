@@ -28,7 +28,6 @@ export async function matchEmailToApplication(userId, emailData, classifiedEvent
   } = classifiedEvent || {};
 
   const {
-    senderEmail = "",
     senderDomain = "",
     subject = "",
     links = [],

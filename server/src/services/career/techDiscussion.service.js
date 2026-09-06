@@ -3,9 +3,6 @@ import PeerInterviewRoom from "../../models/PeerInterviewRoom.js";
 import CodingQuestion from "../../models/CodingQuestions.js";
 import { User } from "../../models/User.js";
 import { createLiveKitToken } from "../../utils/livekit.js";
-import { getCareerIntelligence } from "./careerIntelligenceService.js";
-import { updateUserReadinessScore } from "./readinessService.js";
-import { updateSkillStatus } from "./preparationService.js";
 import { executeAiTask } from "../ai/orchestrator.js";
 import { getDeterministicScenarioRecommendation } from "./deterministicSelectionService.js";
 import { generateDynamicInterviewQuestion } from "./dynamicQuestionEngine.js";
@@ -479,7 +476,7 @@ export async function generateTechDiscussionToken({ roomId, userId }) {
 /**
  * AI Technical Facilitator: Progressive Nudges (Level 1 to 4).
  */
-export async function getAIProgressiveNudge({ roomId, currentCode, hintLevel = 1, questionTitle, selectedSnippet }) {
+export async function getAIProgressiveNudge({ _roomId, currentCode, hintLevel = 1, questionTitle, selectedSnippet }) {
   const levelNames = {
     1: "Question (Socratic Guidance)",
     2: "Conceptual Hint (Architecture / Pattern)",

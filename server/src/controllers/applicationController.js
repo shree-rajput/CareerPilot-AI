@@ -2,7 +2,6 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { Application, STATUS_VALUES } from "../models/Application.js";
 import { Resume } from "../models/Resume.js";
-import { MatchResult } from "../models/MatchResult.js";
 import { extractJobDescription } from "../services/ai/aiService.js";
 import { getApplicationIntelligence } from "../services/career/careerIntelligenceService.js";
 import { executeAiTask } from "../services/ai/orchestrator.js";
@@ -24,6 +23,7 @@ const createApplicationSchema = z.object({
   location: z.string().trim().max(100).optional().or(z.literal("")),
   notes: z.string().trim().max(2000).optional()
 });
+
 
 const updateApplicationSchema = z.object({
   status: z.enum(STATUS_VALUES).optional(),
@@ -101,37 +101,147 @@ export const createApplication = asyncHandler(async (req, res) => {
   });
 });
 
+export const externalCaptureSchema = z.object({
+  company: z.string().trim().min(1).max(150),
+  role: z.string().trim().min(1).max(150),
+  jobDescription: z.string().trim().optional().default(""),
+  jobUrl: z.string().trim().optional().default(""),
+  location: z.string().trim().max(100).optional().default(""),
+  notes: z.string().trim().max(2000).optional().default(""),
+  status: z.enum(STATUS_VALUES).optional().default("applied"),
+  confidence: z.preprocess((val) => (typeof val === "string" ? val.toLowerCase() : val), z.enum(["high", "medium", "low"])).optional().default("high"),
+  evidence: z.string().optional().default("Captured via Chrome Extension"),
+  source: z.string().optional().default("extension")
+});
+
 /**
  * POST /api/applications/external
- * Endpoint for browser extension to capture application data
+ * Endpoint for browser extension to capture application data & perform status sync/deduplication.
  */
 export const captureExternalApplication = asyncHandler(async (req, res) => {
-  const parsed = createApplicationSchema.safeParse(req.body);
+  const parsed = externalCaptureSchema.safeParse(req.body);
 
   if (!parsed.success) {
-    throw new AppError(parsed.error.errors[0]?.message || "Invalid request.", 400, "VALIDATION_ERROR");
+    throw new AppError(parsed.error.errors[0]?.message || "Invalid capture request.", 400, "VALIDATION_ERROR");
   }
 
-  const { company, role, jobDescription, jobUrl, location, notes } = parsed.data;
+  const { company, role, jobDescription, jobUrl, location, notes, status: targetStatus, confidence, evidence, source } = parsed.data;
+  const userId = req.user._id || req.user.id;
 
-  // We do NOT extract JD here to make the extension capture instant.
-  // The user can trigger JD extraction later from the dashboard.
-  
+  // 1. Search for matching existing application by jobUrl or company/role pair
+  let existingApp = null;
+  if (jobUrl && jobUrl.length > 5) {
+    // Strip query tracking params for clean URL matching
+    const cleanUrl = jobUrl.split("?")[0];
+    existingApp = await Application.findOne({
+      userId,
+      jobUrl: { $regex: cleanUrl.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&"), $options: "i" }
+    });
+  }
+
+  if (!existingApp) {
+    existingApp = await Application.findOne({
+      userId,
+      company: new RegExp(`^${company.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
+      role: new RegExp(`^${role.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i")
+    });
+  }
+
+  // 2. Handle matching existing application
+  if (existingApp) {
+    if (existingApp.status === targetStatus) {
+      return res.status(200).json({
+        message: `Matching application already exists at status '${targetStatus}'.`,
+        application: existingApp,
+        isDuplicate: true
+      });
+    }
+
+    // Apply validated status transition
+    const transitionResult = validateAndApplyTransition(existingApp, {
+      targetStatus,
+      source: source || "extension_automation",
+      confidence: confidence || "high",
+      evidence: evidence || "Captured from external site DOM event",
+      note: `Status synchronized via Chrome Extension`
+    });
+
+    if (!transitionResult.success) {
+      // If low confidence or forbidden, log suggestion rather than breaking
+      return res.status(400).json({
+        message: transitionResult.reason || `Status transition from '${existingApp.status}' to '${targetStatus}' forbidden.`,
+        application: existingApp
+      });
+    }
+
+    if (jobUrl && !existingApp.jobUrl) existingApp.jobUrl = jobUrl;
+    if (location && !existingApp.location) existingApp.location = location;
+
+    await existingApp.save();
+
+    // Trigger notification if major milestone
+    if (["applied", "interview", "screening", "oa", "offer"].includes(targetStatus)) {
+      await Notification.create({
+        userId,
+        type: "APPLICATION_STATUS",
+        title: `${existingApp.company} Application Updated`,
+        message: `Extension synchronized application for ${existingApp.role} at ${existingApp.company} as ${targetStatus.toUpperCase()}.`,
+        entityType: "application",
+        entityId: existingApp._id.toString(),
+        actionUrl: `/applications/${existingApp._id}`,
+        idempotencyKey: `ext-status-${existingApp._id}-${targetStatus}-${Date.now()}`
+      }).catch(() => {});
+    }
+
+    return res.status(200).json({
+      message: `Existing application updated to '${targetStatus}' via extension.`,
+      application: existingApp,
+      updated: true
+    });
+  }
+
+  // 3. Create new application record if no match exists
   const app = await Application.create({
-    userId: req.user._id,
+    userId,
     company,
     role,
-    jobDescription,
-    extractedJd: null, 
+    jobDescription: jobDescription || "",
+    extractedJd: null,
     jobUrl: jobUrl || "",
     location: location || "",
     notes: notes || "",
-    statusHistory: [{ status: "saved" }]
+    status: targetStatus,
+    source: source || "extension_capture",
+    statusHistory: [
+      {
+        fromStatus: "",
+        toStatus: targetStatus,
+        changedAt: new Date(),
+        source: source || "extension_capture",
+        confidence: confidence || "high",
+        evidence: evidence || "Captured via Chrome Extension",
+        note: `Initial capture at status '${targetStatus}'`
+      }
+    ]
   });
 
+  if (["applied", "interview", "screening", "oa", "offer"].includes(targetStatus)) {
+    await Notification.create({
+      userId,
+      type: "APPLICATION_STATUS",
+      title: `New Application Tracked: ${company}`,
+      message: `Automatically captured application for ${role} at ${company} (${targetStatus.toUpperCase()}).`,
+      entityType: "application",
+      entityId: app._id.toString(),
+      actionUrl: `/applications/${app._id}`,
+      idempotencyKey: `ext-create-${app._id}-${targetStatus}`
+    }).catch(() => {});
+  }
+
   return res.status(201).json({
-    message: "Application captured via extension.",
-    application: app
+    message: "New application captured & synchronized via extension.",
+    application: app,
+    created: true
   });
 });
 
@@ -805,7 +915,7 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
   const isHighEvent = classified.eventConfidence?.toUpperCase() === "HIGH";
 
   if (isHighMatch && isHighEvent) {
-    const transition = validateAndApplyTransition(app, {
+    validateAndApplyTransition(app, {
       targetStatus: classified.detectedStatus,
       source: "email",
       confidence: "high",
@@ -891,5 +1001,6 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
     });
   }
 });
+
 
 

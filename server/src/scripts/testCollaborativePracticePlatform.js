@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { User } from "../models/User.js";
-import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
 import {
   createTechDiscussionRoom,
   joinTechDiscussionRoom,

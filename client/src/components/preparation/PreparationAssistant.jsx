@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { MessageSquare, Bell, CalendarClock, Send, Sparkles, CheckCircle } from "lucide-react";
+import { preparationApi } from "../../api/career";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../../context/ToastContext";
-import api from "../../api/axios";
 
 export function PreparationAssistant({ activePlan }) {
   const [loadingSchedule, setLoadingSchedule] = useState(false);
@@ -13,20 +13,14 @@ export function PreparationAssistant({ activePlan }) {
   const [emailTime, setEmailTime] = useState("09:00");
 
   const handleSchedule = async () => {
-    if (!activePlan) return;
     setLoadingSchedule(true);
     try {
-      // Mocking an API call to schedule the study plan and email reminders
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // In a real implementation, this would hit: 
-      // await api.post('/career/preparation/schedule', { planId: activePlan._id, studyHours, emailTime })
-      
+      const res = await preparationApi.updateSchedule({ studyHours, emailTime });
       setScheduled(true);
-      toast.success("Schedule & reminder set successfully!");
+      toast.success(res.data?.message || res.message || "Schedule & reminder set successfully!");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to schedule plan.");
+      toast.error(err.response?.data?.message || "Failed to schedule plan.");
     } finally {
       setLoadingSchedule(false);
     }
@@ -50,14 +44,14 @@ export function PreparationAssistant({ activePlan }) {
         <div className="bg-bg-secondary p-3 rounded-lg rounded-tl-none border border-border max-w-[90%] text-xs text-text leading-relaxed">
           <p>Hi! I'm your CareerCopilot.</p>
           {!activePlan ? (
-             <p className="mt-2">Generate a plan first, and I will help you schedule your study hours and set up reminders so you stay on track.</p>
+             <p className="mt-2">Set your daily target study hours and reminder time below to keep your career preparation on track!</p>
           ) : (
-             <p className="mt-2">I see you have an active plan for today! Let's schedule your study hours and set up an email reminder.</p>
+             <p className="mt-2">I see you have active target skills today! Schedule your study hours and set up a daily email reminder.</p>
           )}
         </div>
 
         {/* Schedule Controls */}
-        {activePlan && !scheduled && (
+        {!scheduled ? (
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col gap-4 animate-in fade-in">
             <div>
               <label className="text-[10px] font-bold text-text-secondary uppercase mb-1 block flex items-center gap-1">
@@ -78,7 +72,7 @@ export function PreparationAssistant({ activePlan }) {
 
             <div>
               <label className="text-[10px] font-bold text-text-secondary uppercase mb-1 block flex items-center gap-1">
-                <Bell size={12} /> Daily Reminder Email
+                <Bell size={12} /> Daily Reminder Time
               </label>
               <input 
                 type="time" 
@@ -92,16 +86,17 @@ export function PreparationAssistant({ activePlan }) {
               {loadingSchedule ? <Spinner size="xs" className="mr-2" /> : "Set Schedule & Reminders"}
             </Button>
           </div>
-        )}
-
-        {scheduled && (
+        ) : (
           <div className="bg-success/10 border border-success/20 rounded-xl p-4 flex items-start gap-3 animate-in fade-in">
             <CheckCircle size={18} className="text-success shrink-0 mt-0.5" />
             <div>
               <h4 className="text-sm font-bold text-text m-0">Schedule Active</h4>
               <p className="text-xs text-text-secondary mt-1">
-                Allocated {studyHours} hours of study. You will receive an email reminder every day at {emailTime}.
+                Target: {studyHours} hours of daily study. Scheduled daily reminder at {emailTime}.
               </p>
+              <Button size="xs" variant="outline" className="mt-2" onClick={() => setScheduled(false)}>
+                Edit Schedule
+              </Button>
             </div>
           </div>
         )}

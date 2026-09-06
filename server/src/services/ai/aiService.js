@@ -36,10 +36,6 @@ export function buildFallbackInterviewQuestion(params = {}, reason = "AI service
   };
 }
 
-function clampScore(score) {
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 export function buildFallbackInterviewEvaluation(params = {}, reason = "AI service unavailable") {
   const transcript = String(params.transcript || "").trim();
   const words = transcript ? transcript.split(/\s+/).length : 0;
@@ -127,7 +123,7 @@ export async function generateInterviewQuestion(params) {
     console.error("Failed to generate interview question:", error.stack || error);
     try {
       import('fs').then(fs => fs.writeFileSync('last_ai_error.log', error.stack || error.message));
-    } catch (e) {}
+    } catch {}
     return buildFallbackInterviewQuestion(params, error.code || error.message);
   }
 }

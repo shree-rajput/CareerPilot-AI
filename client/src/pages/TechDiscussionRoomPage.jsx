@@ -88,18 +88,13 @@ class LiveKitErrorBoundary extends React.Component {
 }
 
 function PeerStreamPanel({ peerPresence, participants, isVideoMinimized, onClose }) {
-  let tracks = [];
-  try {
-    tracks = useTracks(
-      [
-        { source: Track.Source.Camera, withPlaceholder: true },
-        { source: Track.Source.ScreenShare, withPlaceholder: false }
-      ],
-      { onlySubscribed: false }
-    );
-  } catch (err) {
-    console.warn("useTracks hook warning:", err?.message);
-  }
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false }
+    ],
+    { onlySubscribed: false }
+  );
 
   const hasActiveVideoTrack = Array.isArray(tracks) && tracks.some(t => t?.publication && !t.publication.isMuted && t.publication.track);
 

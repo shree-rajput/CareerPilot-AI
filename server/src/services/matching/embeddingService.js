@@ -10,8 +10,6 @@
  * Singleton pattern: model loads once, reused for all requests.
  */
 
-import { AppError } from "../../utils/errors.js";
-
 const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
 
 let _pipeline = null;

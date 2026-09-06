@@ -18,7 +18,7 @@ export function sanitizeUrl(rawUrl = "") {
     const paramsToClean = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "refId", "trackingId", "trk"];
     paramsToClean.forEach((p) => parsed.searchParams.delete(p));
     return parsed.toString();
-  } catch (e) {
+  } catch {
     return rawUrl.trim();
   }
 }

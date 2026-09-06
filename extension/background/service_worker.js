@@ -226,14 +226,42 @@ async function handleJobIngestion(jobPayload) {
 
 async function handleStatusUpdate(payload) {
   const { apiUrl, token } = await getApiConfig();
-  const { applicationId, targetStatus, source = "extension_manual_action", evidence = "", note = "" } = payload || {};
+  const { applicationId, targetStatus, source = "extension_manual_action", evidence = "", note = "", company, role, jobUrl, confidence, jobDescription } = payload || {};
 
   if (!token) {
     throw new Error("AUTH_REQUIRED: Connect CareerPilot to update application status.");
   }
 
   if (!applicationId) {
-    throw new Error("applicationId is required to update status.");
+    const response = await fetch(`${apiUrl}/applications/external`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        company,
+        role,
+        jobUrl,
+        jobDescription,
+        status: targetStatus,
+        confidence,
+        evidence: evidence || note,
+        source: source || "chrome_extension",
+      }),
+    });
+
+    const resData = await response.json();
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        await chrome.storage.local.remove(["token", "user"]);
+        throw new Error("SESSION_EXPIRED: Your CareerPilot session expired.");
+      }
+      throw new Error(resData.message || `Status update failed (${response.status})`);
+    }
+
+    return resData;
   }
 
   const response = await fetch(`${apiUrl}/applications/${applicationId}/status`, {

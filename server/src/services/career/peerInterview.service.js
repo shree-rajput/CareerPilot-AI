@@ -129,7 +129,7 @@ export async function createPeerInterviewRoom({ userId, clientUrl, targetRole, t
   };
 }
 
-export async function joinPeerInterviewRoom({ roomId, userId, requestedRole }) {
+export async function joinPeerInterviewRoom({ roomId, userId, _requestedRole }) {
   if (!roomId || !userId) {
     throw new Error("Room ID and user ID are required");
   }

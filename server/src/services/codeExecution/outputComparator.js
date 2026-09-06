@@ -71,12 +71,10 @@ function normalizeJson(val) {
 export function classifyResultStatus(executionDetails) {
   const {
     stderr = "",
-    stdout = "",
     exitCode,
     timedOut,
     outputLimitExceeded,
     passed,
-    parseError,
     isCompileStage = false,
   } = executionDetails;
 

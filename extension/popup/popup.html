@@ -106,9 +106,20 @@
           </div>
         </form>
 
-        <div class="action-bar">
+        <div class="status-control-panel mt-12">
+          <p class="hint font-semibold mb-4">Set Status:</p>
+          <div class="status-grid preview-status-grid">
+            <button class="btn-status" data-status="saved">Saved</button>
+            <button class="btn-status" data-status="applied">Applied</button>
+            <button class="btn-status" data-status="oa">Assessment</button>
+            <button class="btn-status" data-status="interview">Interview</button>
+            <button class="btn-status" data-status="offer">Offer</button>
+            <button class="btn-status btn-danger" data-status="rejected">Rejected</button>
+          </div>
+        </div>
+
+        <div class="action-bar mt-8">
           <button id="toggleEditBtn" class="btn btn-ghost">Edit Details</button>
-          <button id="saveJobBtn" class="btn btn-primary">Save to CareerPilot</button>
         </div>
       </div>
 
@@ -121,8 +132,20 @@
           <p><strong>Pipeline Status:</strong> <span id="dupStatus" class="status-pill">SAVED</span></p>
           <p id="dupMatchContainer"><strong>Match Score:</strong> <span id="dupMatch">--%</span></p>
         </div>
-        <div class="action-bar mt-12">
-          <button id="dupMarkAppliedBtn" class="btn btn-secondary">Mark as Applied</button>
+        
+        <div class="status-control-panel mt-12">
+          <p class="hint font-semibold mb-4">Update Status:</p>
+          <div class="status-grid duplicate-status-grid">
+            <button class="btn-status" data-status="saved">Saved</button>
+            <button class="btn-status" data-status="applied">Applied</button>
+            <button class="btn-status" data-status="oa">Assessment</button>
+            <button class="btn-status" data-status="interview">Interview</button>
+            <button class="btn-status" data-status="offer">Offer</button>
+            <button class="btn-status btn-danger" data-status="rejected">Rejected</button>
+          </div>
+        </div>
+
+        <div class="action-bar mt-8">
           <button id="openAppBtn" class="btn btn-primary">Open Workspace</button>
         </div>
       </div>
@@ -145,8 +168,19 @@
           </div>
         </div>
 
-        <div class="action-bar mt-12">
-          <button id="successMarkAppliedBtn" class="btn btn-secondary">Mark as Applied</button>
+        <div class="status-control-panel mt-12">
+          <p class="hint font-semibold mb-4">Update Status:</p>
+          <div class="status-grid success-status-grid">
+            <button class="btn-status" data-status="saved">Saved</button>
+            <button class="btn-status" data-status="applied">Applied</button>
+            <button class="btn-status" data-status="oa">Assessment</button>
+            <button class="btn-status" data-status="interview">Interview</button>
+            <button class="btn-status" data-status="offer">Offer</button>
+            <button class="btn-status btn-danger" data-status="rejected">Rejected</button>
+          </div>
+        </div>
+
+        <div class="action-bar mt-8">
           <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Workspace</button>
         </div>
       </div>

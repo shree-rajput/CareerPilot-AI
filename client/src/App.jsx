@@ -32,12 +32,17 @@ import { SkillsPage } from "./pages/SkillsPage";
 import { PreparationPage } from "./pages/PreparationPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { MentorshipPage } from "./pages/MentorshipPage";
+import { MentorProfilePage } from "./pages/MentorProfilePage";
 import { MentorDashboardPage } from "./pages/MentorDashboardPage";
 import { BecomeAMentorPage } from "./pages/BecomeAMentorPage";
 import { MentorSessionRoomPage } from "./pages/MentorSessionRoomPage";
+import { AdminMentorModerationPage } from "./pages/AdminMentorModerationPage";
 import { CodingPracticePage } from "./pages/CodingPracticePage";
 import { CopilotPage } from "./pages/CopilotPage";
 import { ExtensionAuthorizePage } from "./pages/ExtensionAuthorizePage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 
 export function App() {
   return (
@@ -46,6 +51,9 @@ export function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/signup" element={<AuthPage mode="signup" />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route element={<ProtectedRoute />}>
           {/* Extension Connect Page (Standalone layout) */}
@@ -72,6 +80,7 @@ export function App() {
             <Route path="/jobs/inbox" element={<JobInboxPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
             <Route path="/skills" element={<Navigate to="/preparation" replace />} />
+            <Route path="/prepare" element={<Navigate to="/preparation" replace />} />
             <Route path="/preparation" element={<PreparationPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
 
@@ -128,10 +137,12 @@ export function App() {
             <Route path="/coding" element={<Navigate to="/preparation" replace />} />
             <Route path="/coding/:id" element={<Navigate to="/preparation" replace />} />
             <Route path="/mentorship" element={<MentorshipPage />} />
+            <Route path="/mentorship/profile/:mentorId" element={<MentorProfilePage />} />
             <Route path="/become-a-mentor" element={<BecomeAMentorPage />} />
             <Route path="/mentor" element={<Navigate to="/mentor/dashboard" replace />} />
             <Route path="/mentor/dashboard" element={<MentorDashboardPage />} />
             <Route path="/mentor/session/:sessionId" element={<MentorSessionRoomPage />} />
+            <Route path="/admin/mentors" element={<AdminMentorModerationPage />} />
           </Route>
         </Route>
       </Routes>

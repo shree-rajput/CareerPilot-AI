@@ -5,7 +5,7 @@
 import { BaseAdapter } from "./BaseAdapter.js";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { serializeValue, inferJavaType, unpackTestCaseArguments } from "../serializers.js";
+import { serializeValue, unpackTestCaseArguments } from "../serializers.js";
 
 export class JavaAdapter extends BaseAdapter {
   constructor() {

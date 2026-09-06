@@ -81,8 +81,8 @@ importers:
         specifier: ^9.8.0
         version: 9.39.5(jiti@2.7.0)
       eslint-plugin-react-hooks:
-        specifier: ^4.6.2
-        version: 4.6.2(eslint@9.39.5(jiti@2.7.0))
+        specifier: ^5.1.0
+        version: 5.1.0(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react-refresh:
         specifier: ^0.4.9
         version: 0.4.26(eslint@9.39.5(jiti@2.7.0))
@@ -158,6 +158,9 @@ importers:
       node-cron:
         specifier: ^4.6.0
         version: 4.6.0
+      nodemailer:
+        specifier: ^10.0.0
+        version: 10.0.0
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
@@ -1553,11 +1556,11 @@ packages:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
 
-  eslint-plugin-react-hooks@4.6.2:
-    resolution: {integrity: sha512-QzliNJq4GinDBcD8gPB5v0wh6g8q3SUi6EFF0x8N/BL9PoVs0atuGc47ozMRyOWAKdwaZ5OnbOEa3WR+dSGKuQ==}
+  eslint-plugin-react-hooks@5.1.0:
+    resolution: {integrity: sha512-mpJRtPgHN2tNAvZ35AMfqeB3Xqeo273QxrHJsbBEPWODRM4r0yB6jfoROqKEYrOn27UtRPpcpHc2UqyBSuUNTw==}
     engines: {node: '>=10'}
     peerDependencies:
-      eslint: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0
+      eslint: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0 || ^9.0.0
 
   eslint-plugin-react-refresh@0.4.26:
     resolution: {integrity: sha512-1RETEylht2O6FM/MvgnyvT+8K21wLqDNg4qD51Zj3guhjt433XbnnkVttHMyaVyAFD03QSV4LPS5iE3VQmO7XQ==}
@@ -2236,6 +2239,10 @@ packages:
   node-releases@2.0.53:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
+
+  nodemailer@10.0.0:
+    resolution: {integrity: sha512-wdv+hXBg0iIPIOf108FaZyTxqjQpCvQeAJt9pHHTooPy/y3vQtI9eiImM9AIVKR3e/0FeMA1oueNfBjFJcaK+Q==}
+    engines: {node: '>=20.0.0'}
 
   nodemon@3.1.14:
     resolution: {integrity: sha512-jakjZi93UtB3jHMWsXL68FXSAosbLfY0In5gtKq3niLSkrWznrVBzXFNOEMJUfc9+Ke7SHWoAZsiMkNP3vq6Jw==}
@@ -4096,7 +4103,7 @@ snapshots:
 
   escape-string-regexp@4.0.0: {}
 
-  eslint-plugin-react-hooks@4.6.2(eslint@9.39.5(jiti@2.7.0)):
+  eslint-plugin-react-hooks@5.1.0(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       eslint: 9.39.5(jiti@2.7.0)
 
@@ -4768,6 +4775,8 @@ snapshots:
   node-cron@4.6.0: {}
 
   node-releases@2.0.53: {}
+
+  nodemailer@10.0.0: {}
 
   nodemon@3.1.14:
     dependencies:

@@ -19,4 +19,9 @@ router.get("/active", preparationController.getActivePlan);
 router.patch("/:id/archive", preparationController.archivePlan);
 router.patch("/:id/items/:itemId/status", preparationController.updateActionItemStatus);
 
+// Schedule & Timer Persistence Endpoints
+router.post("/schedule", preparationController.updateSchedulePreferences);
+router.get("/timer", preparationController.getTimerState);
+router.post("/timer/sync", preparationController.syncTimerState);
+
 export default router;

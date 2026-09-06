@@ -28,3 +28,18 @@ export async function requireAuth(req, _res, next) {
     );
   }
 }
+
+export function requireRole(...allowedRoles) {
+  return (req, _res, next) => {
+    if (!req.user) {
+      return next(new AppError("Authentication required", 401, "AUTH_REQUIRED"));
+    }
+
+    const userRole = req.user.role || "student";
+    if (!allowedRoles.includes(userRole)) {
+      return next(new AppError(`Access denied: Requires one of [${allowedRoles.join(", ")}] roles.`, 403, "FORBIDDEN_ROLE"));
+    }
+
+    return next();
+  };
+}
