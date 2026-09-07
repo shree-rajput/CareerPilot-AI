@@ -200,7 +200,7 @@ export const AI_TASKS = {
     buildPrompt: (context) => buildCopilotChatPrompt(context),
     schema: copilotChatSchema,
     buildContext: buildCopilotChatContext,
-    jsonMode: true
+    jsonMode: false
   },
   GENERATE_MENTOR_EXPLANATION: {
     featureName: "mentor explanation",

@@ -70,6 +70,10 @@ async function initUI() {
   try {
     const isGmailTab = tab.url.includes("mail.google.com");
 
+    // Fetch tab context state machine status
+    const tabContextRes = await chrome.runtime.sendMessage({ type: "GET_TAB_JOB_CONTEXT", tabId: tab.id }).catch(() => null);
+    const tabContext = tabContextRes?.jobContext;
+
     const jobResult = await getJobDataFromTab(tab);
 
     if (jobResult.status === "INJECTION_FAILED") {
@@ -92,14 +96,17 @@ async function initUI() {
             source: "manual_override",
             title: "", company: "", location: "", description: "", extractionConfidence: "LOW"
           };
-          renderPreview(extractedPayload);
+          renderPreview(extractedPayload, tabContext);
         };
       }
       return;
     }
 
     extractedPayload = jobResult.data;
-    renderPreview(extractedPayload);
+    if (tabContext) {
+      extractedPayload.state = tabContext.state;
+    }
+    renderPreview(extractedPayload, tabContext);
   } catch (err) {
     console.error("[CareerPilot] Unexpected tab extraction failure:", err);
     document.getElementById("injectionErrorMsg").innerText = "Unexpected error inspecting page.";
@@ -355,12 +362,29 @@ function showState(targetState) {
   if (targetState) targetState.classList.remove("hidden");
 }
 
-function renderPreview(payload) {
+function renderPreview(payload, tabContext = null) {
   const statePreview = document.getElementById("statePreview");
   document.getElementById("previewSource").innerText = (payload.source || "Generic").toUpperCase();
   document.getElementById("previewTitle").innerText = payload.title || "Untitled Role";
   document.getElementById("previewCompany").innerText = payload.company || "Unknown Company";
   document.getElementById("previewLocation").innerText = payload.location || "Location not specified";
+
+  const currentState = tabContext?.state || payload.state || "JOB_VIEWED";
+  const confidenceBanner = document.getElementById("confidenceBanner");
+
+  if (currentState === "APPLICATION_CREATED") {
+    confidenceBanner.innerText = "✓ Application tracked in database";
+    confidenceBanner.className = "banner banner-success mb-3";
+    confidenceBanner.classList.remove("hidden");
+  } else if (currentState === "PROMPT_PENDING") {
+    confidenceBanner.innerText = "⚡ Application intent detected — prompt active on page";
+    confidenceBanner.className = "banner banner-info mb-3";
+    confidenceBanner.classList.remove("hidden");
+  } else if (currentState === "USER_IGNORED") {
+    confidenceBanner.innerText = "ℹ️ Prompt dismissed — Local context only";
+    confidenceBanner.className = "banner banner-neutral mb-3";
+    confidenceBanner.classList.remove("hidden");
+  }
 
   const workplaceBadge = document.getElementById("previewWorkplace");
   if (payload.workplaceType) {
@@ -383,16 +407,20 @@ function renderPreview(payload) {
   document.getElementById("editLocation").value = payload.location || "";
   document.getElementById("editDescription").value = payload.description || "";
 
-  const confidenceBanner = document.getElementById("confidenceBanner");
   const reviewForm = document.getElementById("reviewForm");
   const toggleEditBtn = document.getElementById("toggleEditBtn");
+  const applyBtn = document.getElementById("applyBtn");
 
-  if (payload.extractionConfidence === "LOW") {
-    confidenceBanner.classList.remove("hidden");
+  if (payload.extractionConfidence === "LOW" || (!payload.company || !payload.title)) {
+    if (currentState === "JOB_VIEWED") {
+      confidenceBanner.classList.remove("hidden");
+    }
     reviewForm.classList.remove("hidden");
     toggleEditBtn.innerText = "Hide Form";
   } else {
-    confidenceBanner.classList.add("hidden");
+    if (currentState === "JOB_VIEWED") {
+      confidenceBanner.classList.add("hidden");
+    }
     reviewForm.classList.add("hidden");
     toggleEditBtn.innerText = "Edit Details";
   }
@@ -408,62 +436,57 @@ function renderPreview(payload) {
     }
   };
 
-  attachStatusListeners(null, ".preview-status-grid", null);
+  if (applyBtn) {
+    applyBtn.onclick = () => handleApply();
+  }
+
   showState(statePreview);
 }
 
-function attachStatusListeners(appId, containerSelector, currentStatus) {
-  const container = document.querySelector(containerSelector);
-  if (!container) return;
-
-  const buttons = container.querySelectorAll(".btn-status");
-  buttons.forEach(btn => {
-    const status = btn.dataset.status;
-    
-    btn.classList.remove("active");
-    btn.disabled = false;
-    btn.innerText = btn.dataset.originalText || btn.innerText;
-    if (!btn.dataset.originalText) btn.dataset.originalText = btn.innerText;
-
-    if (currentStatus && currentStatus.toLowerCase() === status) {
-      btn.classList.add("active");
-      btn.innerText = "✓ " + btn.dataset.originalText;
-      btn.disabled = true;
-    }
-
-    btn.onclick = () => handleOneClickStatus(status, appId, buttons, btn);
-  });
-}
-
-async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
+async function handleApply() {
   if (!window.isAuthenticated) {
     showState(document.getElementById("stateAuth"));
+    return;
+  }
+
+  // Update extracted payload with user edits if present
+  const editTitleVal = document.getElementById("editTitle")?.value?.trim() || "";
+  const editCompanyVal = document.getElementById("editCompany")?.value?.trim() || "";
+  const editLocationVal = document.getElementById("editLocation")?.value?.trim() || "";
+  const editDescriptionVal = document.getElementById("editDescription")?.value?.trim() || "";
+
+  if (editTitleVal) extractedPayload.title = editTitleVal;
+  if (editCompanyVal) extractedPayload.company = editCompanyVal;
+  if (editLocationVal) extractedPayload.location = editLocationVal;
+  if (editDescriptionVal) extractedPayload.description = editDescriptionVal;
+
+  // Validate Minimum Evidence Contract
+  const hasMinimumEvidence =
+    (extractedPayload.company && extractedPayload.title) ||
+    (extractedPayload.title && extractedPayload.url);
+
+  if (!hasMinimumEvidence) {
+    const reviewForm = document.getElementById("reviewForm");
+    const toggleEditBtn = document.getElementById("toggleEditBtn");
+    reviewForm.classList.remove("hidden");
+    toggleEditBtn.innerText = "Hide Form";
+    alert("Please provide both Job Title and Company Name (or a valid Job URL) before applying.");
     return;
   }
 
   showState(document.getElementById("stateSaving"));
 
   const payload = {
-    targetStatus: status,
+    ...extractedPayload,
+    role: extractedPayload.title,
+    company: extractedPayload.company,
+    jobUrl: extractedPayload.url,
+    location: extractedPayload.location,
+    jobDescription: extractedPayload.description,
+    targetStatus: "applied",
     source: "extension_manual_action",
-    evidence: "User clicked status in extension popup",
+    evidence: "User clicked Apply in Chrome Extension",
   };
-
-  if (appId) {
-    payload.applicationId = appId;
-  } else {
-    const reviewForm = document.getElementById("reviewForm");
-    if (reviewForm && !reviewForm.classList.contains("hidden")) {
-      extractedPayload.title = document.getElementById("editTitle").value;
-      extractedPayload.company = document.getElementById("editCompany").value;
-      extractedPayload.location = document.getElementById("editLocation").value;
-      extractedPayload.description = document.getElementById("editDescription").value;
-    }
-    Object.assign(payload, extractedPayload);
-    payload.source = "extension_manual_action"; // Ensure this is preserved!
-    payload.jobUrl = payload.url;
-    payload.role = payload.title;
-  }
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -477,30 +500,32 @@ async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
         showState(document.getElementById("stateAuth"));
         return;
       }
-      
+
       const errorMsgEl = document.getElementById("networkErrorMsg");
       const retryBtn = document.getElementById("retryNetworkBtn");
-      
-      errorMsgEl.innerText = response?.userMessage || "CareerPilot couldn't complete the request.";
-      retryBtn.onclick = () => showState(document.getElementById("statePreview"));
-      
+
+      errorMsgEl.innerText = response?.userMessage || "We couldn't track this application right now. Your job details are safe.";
+      retryBtn.onclick = () => handleApply();
+
       showState(document.getElementById("stateNetworkError"));
       return;
     }
 
     const data = response.data;
     if (!data.application) {
-       data.application = data; 
+      data.application = data;
     }
-    
+
     if (data.isDuplicate || data.existing) {
       renderDuplicateState(data);
     } else {
       renderSuccessState(data);
     }
   } catch (err) {
-    document.getElementById("networkErrorMsg").innerText = "Failed to communicate with CareerPilot extension background worker.";
-    document.getElementById("retryNetworkBtn").onclick = () => showState(document.getElementById("statePreview"));
+    const errorMsgEl = document.getElementById("networkErrorMsg");
+    const retryBtn = document.getElementById("retryNetworkBtn");
+    errorMsgEl.innerText = "We couldn't track this application right now. Your job details are safe.";
+    retryBtn.onclick = () => handleApply();
     showState(document.getElementById("stateNetworkError"));
   }
 }
@@ -508,10 +533,10 @@ async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
 function renderDuplicateState(data) {
   const stateDuplicate = document.getElementById("stateDuplicate");
   const appId = data.application?._id;
-  const currentStatus = (data.application?.status || "saved").toLowerCase();
+  const currentStatus = (data.application?.status || "applied").toLowerCase();
 
-  document.getElementById("dupTitle").innerText = data.job?.title || extractedPayload.title;
-  document.getElementById("dupCompany").innerText = data.job?.company || extractedPayload.company;
+  document.getElementById("dupTitle").innerText = data.application?.role || data.job?.title || extractedPayload.title;
+  document.getElementById("dupCompany").innerText = data.application?.company || data.job?.company || extractedPayload.company;
   const dupStatusEl = document.getElementById("dupStatus");
   dupStatusEl.innerText = currentStatus.toUpperCase();
 
@@ -533,16 +558,11 @@ function renderDuplicateState(data) {
 function renderSuccessState(data) {
   const stateSuccess = document.getElementById("stateSuccess");
   const appId = data.application?._id;
-  const currentStatus = (data.application?.status || "saved").toLowerCase();
+  const currentStatus = (data.application?.status || "applied").toLowerCase();
 
-  const score = data.matchScore || data.matchResult?.overallScore;
-  if (typeof score === "number" && score > 0) {
-    document.getElementById("resMatchScore").innerText = `${score}%`;
-  } else {
-    document.getElementById("resMatchScore").innerText = "Ready";
-  }
-
-  document.getElementById("resResumeVersion").innerText = data.recommendedResume?.name || "Primary Resume";
+  document.getElementById("successRole").innerText = data.application?.role || extractedPayload.title || "Job Application";
+  document.getElementById("successCompany").innerText = data.application?.company || extractedPayload.company || "Company";
+  document.getElementById("successStatus").innerText = currentStatus.toUpperCase();
 
   document.getElementById("viewAppWorkspaceBtn").onclick = () => {
     const targetUrl = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;

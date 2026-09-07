@@ -43,6 +43,8 @@
       ],
       "js": [
         "content/contextDetector.js",
+        "content/intentDetector.js",
+        "content/intentOverlay.js",
         "content/gmailExtractor.js",
         "content/gmailOverlay.js",
         "content/content_script.js"

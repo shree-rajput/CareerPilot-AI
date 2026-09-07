@@ -70,10 +70,61 @@ async function processOutboxQueue() {
 // Check outbox periodically or on startup
 chrome.runtime.onStartup?.addListener(() => processOutboxQueue());
 
+const storageArea = chrome.storage?.session || chrome.storage?.local;
+
+async function setTabJobContext(tabId, jobContext) {
+  if (!tabId) return;
+  const key = `tab_job_context_${tabId}`;
+  await storageArea.set({ [key]: jobContext });
+}
+
+async function getTabJobContext(tabId) {
+  if (!tabId) return null;
+  const key = `tab_job_context_${tabId}`;
+  const res = await storageArea.get(key);
+  return res[key] || null;
+}
+
+async function removeTabJobContext(tabId) {
+  if (!tabId) return;
+  const key = `tab_job_context_${tabId}`;
+  await storageArea.remove(key);
+}
+
+chrome.tabs?.onRemoved?.addListener((tabId) => {
+  removeTabJobContext(tabId);
+});
+
 // -----------------------------------------------------------------------------
 // Main Runtime Message Listener
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  const targetTabId = request.tabId || sender?.tab?.id;
+
+  if (request.type === "SET_TAB_JOB_CONTEXT") {
+    setTabJobContext(targetTabId, request.payload?.jobContext)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.type === "GET_TAB_JOB_CONTEXT") {
+    getTabJobContext(targetTabId)
+      .then((jobContext) => sendResponse({ success: true, jobContext }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.type === "DISMISS_APPLICATION_INTENT") {
+    getTabJobContext(targetTabId).then((current) => {
+      if (current) {
+        setTabJobContext(targetTabId, { ...current, state: "USER_IGNORED" });
+      }
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
   if (request.type === "INGEST_JOB") {
     handleJobIngestion(request.payload)
       .then((res) => sendResponse({ success: true, data: res }))

@@ -841,8 +841,8 @@
     jobData.contextType = evidence.contextType;
     jobData.detectionScore = evidence.score;
 
-    // Minimum Capture Contract: Must have Company and Role
-    const hasMinimumIdentity = !!(jobData.company && jobData.title);
+    // Minimum Capture Contract: Must have Company & Role OR Role & Job URL
+    const hasMinimumIdentity = !!((jobData.company && jobData.title) || (jobData.title && jobData.url));
 
     // Dynamic Confidence
     let finalScore = evidence.score; // Base score from page structure
@@ -960,6 +960,100 @@
 
   observeGmailChanges();
 
+  // 11. Intent Detection Integration Engine
+  function initIntentPipeline() {
+    if (window.location.hostname.includes("mail.google.com")) return;
+
+    const extracted = extractCurrentJob();
+    if (!extracted || !extracted.data) return;
+
+    const jobData = extracted.data;
+    const canonicalUrl = sanitizeJobUrl(jobData.url || window.location.href);
+
+    // Save temporary local job context to Service Worker session storage (NO DATABASE ACTIONS)
+    chrome.runtime.sendMessage({
+      type: "SET_TAB_JOB_CONTEXT",
+      payload: {
+        jobContext: {
+          url: canonicalUrl,
+          company: jobData.company,
+          role: jobData.title,
+          location: jobData.location,
+          description: jobData.description,
+          sourcePlatform: extracted.diagnostics?.detectedPlatform || "generic",
+          detectedAt: new Date().toISOString(),
+          state: "JOB_VIEWED"
+        }
+      }
+    });
+
+    if (window.__CAREERPILOT_INTENT_DETECTOR__) {
+      window.__CAREERPILOT_INTENT_DETECTOR__.initIntentDetection({
+        onIntentDetected: (intentDetails) => {
+          chrome.runtime.sendMessage({ type: "GET_TAB_JOB_CONTEXT" }, (res) => {
+            const currentContext = res?.jobContext || {};
+            const currentState = currentContext?.state;
+
+            if (currentState === "USER_IGNORED" || currentState === "APPLICATION_CREATED" || currentState === "PROMPT_PENDING") {
+              return;
+            }
+
+            chrome.runtime.sendMessage({
+              type: "SET_TAB_JOB_CONTEXT",
+              payload: { jobContext: { ...currentContext, state: "PROMPT_PENDING" } }
+            });
+
+            if (window.__CAREERPILOT_INTENT_OVERLAY__) {
+              window.__CAREERPILOT_INTENT_OVERLAY__.renderIntentOverlay({
+                jobContext: jobData,
+                onConfirm: (confirmedContext) => {
+                  return new Promise((resolve, reject) => {
+                    chrome.runtime.sendMessage(
+                      {
+                        type: "CAPTURE_JOB_REQUEST",
+                        payload: {
+                          company: confirmedContext.company || jobData.company,
+                          role: confirmedContext.role || confirmedContext.title || jobData.title,
+                          jobUrl: canonicalUrl,
+                          jobDescription: confirmedContext.description || jobData.description,
+                          targetStatus: "applied",
+                          source: "intent_detection_toast"
+                        }
+                      },
+                      (response) => {
+                        if (chrome.runtime.lastError) {
+                          reject({ userMessage: "We couldn't track this application right now." });
+                          return;
+                        }
+                        if (response?.success) {
+                          chrome.runtime.sendMessage({
+                            type: "SET_TAB_JOB_CONTEXT",
+                            payload: { jobContext: { ...currentContext, state: "APPLICATION_CREATED" } }
+                          });
+                          resolve(response.data);
+                        } else {
+                          reject({ userMessage: response?.userMessage || "Failed to save application." });
+                        }
+                      }
+                    );
+                  });
+                },
+                onIgnore: () => {
+                  chrome.runtime.sendMessage({
+                    type: "SET_TAB_JOB_CONTEXT",
+                    payload: { jobContext: { ...currentContext, state: "USER_IGNORED" } }
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  }
+
+  setTimeout(initIntentPipeline, 1000);
+
   // 9. Message Listener with Context Awareness
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const isGmail = window.__CAREERPILOT_CONTEXT_DETECTOR__?.isGmail() || window.location.hostname.includes("mail.google.com");
@@ -986,9 +1080,16 @@
     } else if (request.type === "GET_GMAIL_EVENT") {
       const result = window.__CAREERPILOT_GMAIL_EXTRACTOR__?.extractOpenedGmailMessage();
       sendResponse(result);
+    } else if (request.type === "TRIGGER_INTENT_TOAST") {
+      if (window.__CAREERPILOT_INTENT_DETECTOR__) {
+        window.__CAREERPILOT_INTENT_DETECTOR__.resetJobSession();
+      }
+      initIntentPipeline();
+      sendResponse({ success: true });
     } else if (request.type === "PING") {
       sendResponse({ status: "PONG", ok: true });
     }
     return true;
   });
 })();
+

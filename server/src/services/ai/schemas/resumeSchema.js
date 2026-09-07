@@ -1,5 +1,23 @@
 import { z } from "zod";
 
+const safeStringArray = z.preprocess((val) => {
+  if (Array.isArray(val)) return val.map((x) => String(x ?? "")).filter(Boolean);
+  if (typeof val === "string") return val.trim() ? [val.trim()] : [];
+  if (val && typeof val === "object") return Object.values(val).map((x) => String(x ?? "")).filter(Boolean);
+  return [];
+}, z.array(z.string()).default([]));
+
+function safeEnum(values, defaultValue) {
+  const normalized = values.map((v) => String(v).toLowerCase());
+  return z.preprocess((val) => {
+    if (!val) return defaultValue;
+    const s = String(val).trim().toLowerCase();
+    const idx = normalized.indexOf(s);
+    if (idx !== -1) return values[idx];
+    return defaultValue;
+  }, z.enum(values).default(defaultValue));
+}
+
 const educationItemSchema = z.object({
   institution: z.string().default(""),
   degree: z.string().default(""),
@@ -20,13 +38,13 @@ const experienceItemSchema = z.object({
 const projectItemSchema = z.object({
   name: z.string().default(""),
   description: z.string().default(""),
-  technologies: z.array(z.string()).default([]),
+  technologies: safeStringArray,
   architecture: z.string().optional().default(""),
   frontend: z.string().optional().default(""),
   backend: z.string().optional().default(""),
   database: z.string().optional().default(""),
   deployment: z.string().optional().default(""),
-  keyResponsibilities: z.array(z.string()).optional().default([]),
+  keyResponsibilities: safeStringArray,
   link: z.string().default(""),
   problemSolved: z.string().default(""),
   technicalComplexity: z.string().default(""),
@@ -42,78 +60,106 @@ const certificationItemSchema = z.object({
 });
 
 const skillEntitySchema = z.object({
-  canonicalName: z.string().describe("The normalized, universally accepted name of the skill (e.g., 'React' instead of 'ReactJS' or 'react framework')"),
-  originalMention: z.string().describe("The exact string found in the resume"),
-  category: z.enum([
+  canonicalName: z.string().default(""),
+  originalMention: z.string().default(""),
+  category: safeEnum([
     "language", "framework", "library", "database", "tool", "cloud", 
     "concept", "domain", "soft_skill", "certification", "other"
-  ]).default("other").describe("The broad category of the skill/technology"),
-  // Source provenance: where this skill was found in the resume
-  source: z.enum([
+  ], "other"),
+  source: safeEnum([
     "skills_section", "experience", "project", "certification", "education", "summary"
-  ]).optional().default("skills_section").describe("Where this skill was explicitly mentioned in the resume"),
-  proficiency: z.enum(["strong", "intermediate", "familiar", "emerging"]).default("emerging").describe("Inferred strength of the skill based on resume evidence"),
+  ], "skills_section"),
+  proficiency: safeEnum(["strong", "intermediate", "familiar", "emerging"], "emerging"),
   confidence: z.number().min(0).max(100).default(100),
-  evidence: z.string().default("").describe("Why this proficiency was assigned (e.g. 'Used in 3 projects')")
+  evidence: z.string().default("")
 });
+
+const safeSkillEntityArray = z.preprocess((val) => {
+  if (!Array.isArray(val)) {
+    if (typeof val === "string" && val.trim()) {
+      return [{ canonicalName: val.trim(), originalMention: val.trim(), category: "other", source: "skills_section", proficiency: "intermediate", confidence: 90, evidence: "Extracted skill" }];
+    }
+    return [];
+  }
+  return val.map((item) => {
+    if (typeof item === "string") {
+      return { canonicalName: item, originalMention: item, category: "other", source: "skills_section", proficiency: "intermediate", confidence: 90, evidence: "Extracted skill" };
+    }
+    if (item && typeof item === "object") {
+      return {
+        canonicalName: String(item.canonicalName || item.name || item.skill || ""),
+        originalMention: String(item.originalMention || item.name || item.skill || ""),
+        category: item.category || "other",
+        source: item.source || "skills_section",
+        proficiency: item.proficiency || "emerging",
+        confidence: typeof item.confidence === "number" ? item.confidence : 100,
+        evidence: String(item.evidence || "")
+      };
+    }
+    return { canonicalName: String(item || ""), originalMention: String(item || ""), category: "other", source: "skills_section", proficiency: "emerging", confidence: 100, evidence: "" };
+  });
+}, z.array(skillEntitySchema).default([]));
 
 export const resumeStructureSchema = z.object({
   name: z.string().default(""),
   email: z.string().default(""),
   phone: z.string().default(""),
   location: z.string().default(""),
-  links: z.array(z.string()).default([]),
+  links: safeStringArray,
   summary: z.string().default(""),
-  skills: z.array(skillEntitySchema).default([]),
-  education: z.array(educationItemSchema).default([]),
-  experience: z.array(experienceItemSchema).default([]),
-  projects: z.array(projectItemSchema).default([]),
-  certifications: z.array(certificationItemSchema).default([]),
-  achievements: z.array(z.string()).default([]),
+  skills: safeSkillEntityArray,
+  education: z.preprocess((val) => Array.isArray(val) ? val : [], z.array(educationItemSchema).default([])),
+  experience: z.preprocess((val) => Array.isArray(val) ? val : [], z.array(experienceItemSchema).default([])),
+  projects: z.preprocess((val) => Array.isArray(val) ? val : [], z.array(projectItemSchema).default([])),
+  certifications: z.preprocess((val) => Array.isArray(val) ? val : [], z.array(certificationItemSchema).default([])),
+  achievements: safeStringArray,
   parserSource: z.string().default("ai")
 });
 
 export const resumeAnalysisResultSchema = z.object({
-  matchScore: z.number().min(0).max(100),
-  atsScore: z.number().min(0).max(100),
-  keywordCoverage: z.number().min(0).max(100),
-  missingSkills: z.array(z.string()),
-  foundSkills: z.array(z.string()),
-  healthIndicators: z.object({
-    ats: z.number(),
-    match: z.number(),
-    content: z.number(),
-    clarity: z.number(),
-    completeness: z.number()
-  }),
-  aiSuggestions: z.array(
+  matchScore: z.number().min(0).max(100).default(70),
+  atsScore: z.number().min(0).max(100).default(70),
+  keywordCoverage: z.number().min(0).max(100).default(70),
+  missingSkills: safeStringArray,
+  foundSkills: safeStringArray,
+  healthIndicators: z.preprocess((val) => {
+    if (val && typeof val === "object") return val;
+    return { ats: 70, match: 70, content: 70, clarity: 70, completeness: 70 };
+  }, z.object({
+    ats: z.number().default(70),
+    match: z.number().default(70),
+    content: z.number().default(70),
+    clarity: z.number().default(70),
+    completeness: z.number().default(70)
+  }).default({ ats: 70, match: 70, content: 70, clarity: 70, completeness: 70 })),
+  aiSuggestions: z.preprocess((val) => Array.isArray(val) ? val : [], z.array(
     z.object({
-      section: z.string(),
-      sourceText: z.string(),
-      suggestedText: z.string(),
-      reason: z.string(),
-      risk: z.enum(["low", "medium", "high"])
+      section: z.string().default("Experience"),
+      sourceText: z.string().default(""),
+      suggestedText: z.string().default(""),
+      reason: z.string().default(""),
+      risk: safeEnum(["low", "medium", "high"], "medium")
     })
-  )
+  ).default([]))
 });
 
 export const inlineSuggestionSchema = z.object({
-  suggestion: z.string()
+  suggestion: z.string().default("")
 });
 
 export const resumeSuggestionsSchema = z.object({
-  suggestions: z.array(
+  suggestions: z.preprocess((val) => Array.isArray(val) ? val : [], z.array(
     z.object({
       id: z.string().optional(),
-      category: z.enum([
+      category: safeEnum([
         "HIGH_IMPACT",
         "RESUME_WORDING",
         "KEYWORD_OPPORTUNITIES",
         "MISSING_EVIDENCE",
         "PROJECT_EMPHASIS",
         "EXPERIENCE_EMPHASIS"
-      ]).default("RESUME_WORDING"),
-      priority: z.enum(["high", "medium", "low"]).default("medium"),
+      ], "RESUME_WORDING"),
+      priority: safeEnum(["high", "medium", "low"], "medium"),
       section: z.string().default("Experience"),
       title: z.string().default("Resume Suggestion"),
       evidenceSource: z.string().default("Supported by Candidate Profile"),
@@ -122,7 +168,8 @@ export const resumeSuggestionsSchema = z.object({
       suggestedText: z.string().default(""),
       reason: z.string().default("")
     })
-  )
+  ).default([]))
 });
+
 
 

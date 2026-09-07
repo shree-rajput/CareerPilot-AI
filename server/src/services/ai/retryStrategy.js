@@ -15,7 +15,7 @@ export async function callWithRetry({
   userPrompt, 
   modelRole, 
   jsonMode = true, 
-  maxTokens = 1024,
+  maxTokens = 4096,
   validateFn, 
   featureName 
 }) {
@@ -92,7 +92,7 @@ export async function callWithRetry({
         ];
       }
 
-      correctionOutput = await groqChat(correctionMessages, { jsonMode, modelRole });
+      correctionOutput = await groqChat(correctionMessages, { jsonMode, modelRole, maxTokens });
     } catch (correctionErr) {
       throw correctionErr;
     }

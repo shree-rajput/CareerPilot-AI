@@ -1,38 +1,56 @@
 import { z } from "zod";
 
+const safeStringArray = z.preprocess((val) => {
+  if (Array.isArray(val)) return val.map((x) => String(x ?? "")).filter(Boolean);
+  if (typeof val === "string") return val.trim() ? [val.trim()] : [];
+  if (val && typeof val === "object") return Object.values(val).map((x) => String(x ?? "")).filter(Boolean);
+  return [];
+}, z.array(z.string()).default([]));
+
+function safeEnum(values, defaultValue) {
+  const normalized = values.map((v) => String(v).toLowerCase());
+  return z.preprocess((val) => {
+    if (!val) return defaultValue;
+    const s = String(val).trim().toLowerCase();
+    const idx = normalized.indexOf(s);
+    if (idx !== -1) return values[idx];
+    return defaultValue;
+  }, z.enum(values).default(defaultValue));
+}
+
 export const dsaSolutionSchema = z.object({
   summary: z.string().default(""),
-  approach: z.array(z.string()).default([]),
+  approach: safeStringArray,
   algorithm: z.string().default(""),
   correctness: z.string().default("Verified"),
-  complexity: z.object({
+  complexity: z.preprocess((val) => (val && typeof val === "object" ? val : {}), z.object({
     time: z.string().default("O(N)"),
     space: z.string().default("O(1)")
-  }).default({ time: "O(N)", space: "O(1)" }),
+  }).default({ time: "O(N)", space: "O(1)" })),
   code: z.string().default(""),
-  edgeCases: z.array(z.string()).default([]),
+  edgeCases: safeStringArray,
   interviewTip: z.string().default("")
 });
 
 export const codeReviewStandardSchema = z.object({
   summary: z.string().default(""),
-  bugs: z.array(z.string()).default([]),
-  correctnessIssues: z.array(z.string()).default([]),
-  performanceIssues: z.array(z.string()).default([]),
-  securityIssues: z.array(z.string()).default([]),
-  suggestions: z.array(z.string()).default([]),
+  bugs: safeStringArray,
+  correctnessIssues: safeStringArray,
+  performanceIssues: safeStringArray,
+  securityIssues: safeStringArray,
+  suggestions: safeStringArray,
   improvedCode: z.string().default("")
 });
 
 export const systemDesignSchema = z.object({
-  requirements: z.array(z.string()).default([]),
-  architecture: z.array(z.string()).default([]),
-  dataFlow: z.array(z.string()).default([]),
+  requirements: safeStringArray,
+  architecture: safeStringArray,
+  dataFlow: safeStringArray,
   database: z.record(z.any()).default({}),
-  scaling: z.array(z.string()).default([]),
-  bottlenecks: z.array(z.string()).default([]),
-  tradeoffs: z.array(z.string()).default([]),
-  missingAreas: z.array(z.string()).default([]),
+  scaling: safeStringArray,
+  bottlenecks: safeStringArray,
+  tradeoffs: safeStringArray,
+  missingAreas: safeStringArray,
   score: z.number().min(0).max(100).default(75),
   nextQuestion: z.string().nullable().default(null)
 });
@@ -43,9 +61,9 @@ export const interviewEvaluationStandardSchema = z.object({
   technicalKnowledge: z.record(z.any()).default({}),
   problemSolving: z.record(z.any()).default({}),
   correctness: z.record(z.any()).default({}),
-  strengths: z.array(z.string()).default([]),
-  weaknesses: z.array(z.string()).default([]),
-  improvements: z.array(z.string()).default([]),
+  strengths: safeStringArray,
+  weaknesses: safeStringArray,
+  improvements: safeStringArray,
   nextQuestion: z.string().nullable().default(null)
 });
 
@@ -57,168 +75,176 @@ export const interviewQuestionSchema = z.preprocess((rawObj) => {
   }
   return obj;
 }, z.object({
-  questionText: z.string().min(1, "questionText must not be empty").describe("The interview question to ask."),
-  category: z.string().min(1, "category must not be empty").describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
-  difficulty: z.enum(["easy", "medium", "hard"]).default("medium").describe("The difficulty level of the question"),
-  expectedConcepts: z.preprocess((val) => Array.isArray(val) ? val.map(String) : [], z.array(z.string()).default([])).describe("List of key concepts or keywords expected in a good answer"),
+  questionText: z.string().default("Describe a challenging technical problem you solved.").describe("The interview question to ask."),
+  category: z.string().default("Technical Core").describe("The topic category, e.g., 'React', 'System Design', 'Behavioral'"),
+  difficulty: safeEnum(["easy", "medium", "hard"], "medium"),
+  expectedConcepts: safeStringArray,
   followUpStrategy: z.string().default("Ask a focused follow-up based on the candidate's depth and specificity."),
-  generationSource: z.enum(["ai", "deterministic_fallback"]).default("ai"),
+  generationSource: safeEnum(["ai", "deterministic_fallback"], "ai"),
   fallbackReason: z.string().default("")
 }));
 
 export const interviewChallengeSchema = z.object({
-  question: z.string().describe("The actual coding question description and requirements."),
-  technology: z.string().describe("The primary technology or framework (e.g. 'React', 'Node.js', or just 'Algorithms')."),
-  language: z.string().describe("The primary language expected (e.g. 'javascript', 'python')."),
-  difficulty: z.enum(["easy", "medium", "hard"]).describe("Difficulty level."),
-  functionName: z.string().default("solution").describe("The camelCase function name, e.g. 'solution', 'twoSum', 'findMax'."),
-  parameters: z.array(z.object({
-    name: z.string().describe("Parameter variable name, e.g. 'arr', 'nums', 'target', 's', 'a', 'b'."),
-    type: z.string().describe("Canonical language-agnostic type string: 'integer', 'float', 'boolean', 'string', 'integer[]', 'string[]', 'integer[][]', 'string[][]'. NEVER use 'Object' or 'any'.")
-  })).describe("List of parameter definitions with exact canonical types."),
-  returnType: z.string().describe("Canonical return type string: 'integer', 'float', 'boolean', 'string', 'integer[]', 'string[]', 'integer[][]', 'string[][]'."),
+  question: z.string().default("Solve the problem."),
+  technology: z.string().default("Algorithms"),
+  language: z.string().default("javascript"),
+  difficulty: safeEnum(["easy", "medium", "hard"], "medium"),
+  functionName: z.string().default("solution"),
+  parameters: z.preprocess((val) => {
+    if (!Array.isArray(val)) return [];
+    return val.map((p) => {
+      if (typeof p === "string") return { name: p, type: "string" };
+      if (p && typeof p === "object") return { name: String(p.name || "param"), type: String(p.type || "string") };
+      return { name: "param", type: "string" };
+    });
+  }, z.array(z.object({
+    name: z.string().default("param"),
+    type: z.string().default("string")
+  })).default([])),
+  returnType: z.string().default("string"),
   starterCode: z.union([z.record(z.string()), z.string()]).optional().default({}),
-  requirements: z.array(z.string()).describe("List of functional requirements."),
-  constraints: z.array(z.string()).describe("List of technical constraints (e.g., O(n) time complexity)."),
-  evaluationCriteria: z.array(z.string()).describe("What to look for when reviewing the code."),
-  testCases: z.array(z.object({
-    input: z.any().describe("The input arguments, formatted so they can be parsed or evaluated."),
-    expectedOutput: z.any().describe("The expected return value or output."),
-    explanation: z.string().describe("Why this test case is here."),
-    hidden: z.boolean().describe("True if this test case should be hidden from the user before submission.")
-  })).describe("A list of test cases to validate the solution.")
+  requirements: safeStringArray,
+  constraints: safeStringArray,
+  evaluationCriteria: safeStringArray,
+  testCases: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.object({
+    input: z.any().default(null),
+    expectedOutput: z.any().default(null),
+    explanation: z.string().default("Test case"),
+    hidden: z.boolean().default(false)
+  })).default([]))
 });
 
 export const interviewPlanSchema = z.object({
-  plan: z.array(z.object({
-    section: z.string().describe("E.g., Introduction, Resume Deep Dive, Technical Core, System Design"),
-    skill: z.string().describe("The specific skill being evaluated, e.g., React, Scalability, Leadership"),
-    difficulty: z.enum(["easy", "medium", "hard"]).describe("Target difficulty for this section"),
-    objective: z.string().describe("What the interviewer should try to discover in this section"),
-    evaluationCriteria: z.array(z.string()).describe("List of criteria to look for in the candidate's answers")
-  }))
+  plan: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.object({
+    section: z.string().default("Core Evaluation"),
+    skill: z.string().default("Problem Solving"),
+    difficulty: safeEnum(["easy", "medium", "hard"], "medium"),
+    objective: z.string().default("Assess candidate capability"),
+    evaluationCriteria: safeStringArray
+  })).default([]))
 });
 
 export const candidateContextSchema = z.object({
-  summary: z.string().describe("A brief 2-3 sentence summary of the candidate's background relative to the target role."),
-  relevantSkills: z.array(z.string()).describe("Skills from the candidate's resume that match the job description."),
-  potentialGaps: z.array(z.string()).describe("Missing skills or areas of concern to probe during the interview.")
+  summary: z.string().default("Candidate profile summary."),
+  relevantSkills: safeStringArray,
+  potentialGaps: safeStringArray
 });
 
 export const adaptiveActionSchema = z.object({
-  action: z.enum(["FOLLOW_UP", "MOVE_FORWARD", "INCREASE_DIFFICULTY", "CLARIFY", "WRAP_UP"]).describe("The next logical step for the interviewer."),
-  reason: z.string().describe("Internal reasoning for taking this action based on the candidate's last answer."),
-  nextQuestionText: z.string().describe("The actual text of the next question or follow-up to ask."),
-  expectedConcepts: z.array(z.string()).describe("Concepts expected in the answer to this next question.")
+  action: safeEnum(["FOLLOW_UP", "MOVE_FORWARD", "INCREASE_DIFFICULTY", "CLARIFY", "WRAP_UP"], "FOLLOW_UP"),
+  reason: z.string().default("Logical progression"),
+  nextQuestionText: z.string().default("Can you elaborate on your solution?"),
+  expectedConcepts: safeStringArray
 });
 
 export const evidenceEvaluationSchema = z.object({
-  answerStatus: z.enum([
+  answerStatus: safeEnum([
     "CORRECT_ANSWER",
     "PARTIAL_ANSWER",
     "INCORRECT_ANSWER",
     "NO_ANSWER",
     "IRRELEVANT_ANSWER",
     "TRANSCRIPTION_FAILURE"
-  ]).default("CORRECT_ANSWER"),
-  evidence: z.object({
-    demonstratedConcepts: z.array(z.string()).default([]),
-    missingConcepts: z.array(z.string()).default([]),
-    incorrectClaims: z.array(z.string()).default([]),
-    reasoningSignals: z.array(z.string()).default([]),
-    practicalSignals: z.array(z.string()).default([]),
-    communicationSignals: z.object({
+  ], "CORRECT_ANSWER"),
+  evidence: z.preprocess((val) => (val && typeof val === "object" ? val : {}), z.object({
+    demonstratedConcepts: safeStringArray,
+    missingConcepts: safeStringArray,
+    incorrectClaims: safeStringArray,
+    reasoningSignals: safeStringArray,
+    practicalSignals: safeStringArray,
+    communicationSignals: z.preprocess((val) => (val && typeof val === "object" ? val : {}), z.object({
       clarity: z.string().default("Answer point is clear"),
       structure: z.string().default("Logical sequence"),
       relevance: z.string().default("Stays on topic"),
       conciseness: z.string().default("Concise and direct"),
       explanationQuality: z.string().default("Explains reasoning effectively")
-    }).default({}),
+    }).default({})),
     uncertaintyExpressed: z.boolean().default(false),
     isCorruptedTranscription: z.boolean().default(false)
-  }).default({}),
-  evidenceCollected: z.array(z.string()).default([]),
-  strengths: z.array(z.string()).default([]),
-  weaknesses: z.array(z.string()).default([]),
-  missingConcepts: z.array(z.string()).default([]),
-  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).default("MEDIUM"),
-  idealAnswer: z.object({
+  }).default({})),
+  evidenceCollected: safeStringArray,
+  strengths: safeStringArray,
+  weaknesses: safeStringArray,
+  missingConcepts: safeStringArray,
+  confidence: safeEnum(["HIGH", "MEDIUM", "LOW"], "MEDIUM"),
+  idealAnswer: z.preprocess((val) => (val && typeof val === "object" ? val : {}), z.object({
     text: z.string().default(""),
     explanation: z.string().default("")
-  }).default({ text: "", explanation: "" }),
-  analysisSource: z.enum(["ai", "deterministic_fallback", "deterministic_non_answer", "deterministic_transcription_failure"]).default("ai"),
+  }).default({ text: "", explanation: "" })),
+  analysisSource: safeEnum(["ai", "deterministic_fallback", "deterministic_non_answer", "deterministic_transcription_failure"], "ai"),
   fallbackReason: z.string().default("")
 });
 
 export const coachingReportSchema = z.object({
-  overallAssessment: z.string().describe("A professional, high-level summary of the candidate's interview performance."),
-  whatYouDidWell: z.array(z.string()).describe("Specific, evidence-based strengths observed across the entire interview."),
-  whatWentWrong: z.array(z.string()).describe("Specific areas where the candidate struggled, with examples."),
-  whyItWentWrong: z.string().describe("A root-cause analysis of the weaknesses (e.g., 'You lack practical experience with scaling')."),
-  howToImprove: z.array(z.string()).describe("Actionable steps to fix the weaknesses."),
-  practicePlan: z.array(z.object({
-    day: z.number().describe("Day number (1-7)"),
-    focus: z.string().describe("The topic to focus on for this day"),
-    action: z.string().describe("A specific task or exercise to complete")
-  })).describe("A 7-day personalized practice plan.")
+  overallAssessment: z.string().default("Solid overall performance."),
+  whatYouDidWell: safeStringArray,
+  whatWentWrong: safeStringArray,
+  whyItWentWrong: z.string().default("Focus on deepening fundamental understanding."),
+  howToImprove: safeStringArray,
+  practicePlan: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.object({
+    day: z.number().default(1),
+    focus: z.string().default("Core Practice"),
+    action: z.string().default("Complete practice exercises")
+  })).default([]))
 });
 
 export const copilotSuggestionSchema = z.object({
-  suggestedFollowUp: z.string().describe("A suggested follow-up question for the interviewer to ask"),
-  reason: z.string().describe("Why this question is useful right now"),
-  difficulty: z.string().describe("The difficulty of this follow-up")
+  suggestedFollowUp: z.string().default("How would you scale this approach?"),
+  reason: z.string().default("Evaluate architectural depth."),
+  difficulty: z.string().default("medium")
 });
 
 export const codeReviewSchema = z.object({
   summary: z.string().default(""),
-  bugs: z.array(z.string()).default([]),
-  correctnessIssues: z.array(z.string()).default([]),
-  performanceIssues: z.array(z.string()).default([]),
-  securityIssues: z.array(z.string()).default([]),
-  suggestions: z.array(z.string()).default([]),
+  bugs: safeStringArray,
+  correctnessIssues: safeStringArray,
+  performanceIssues: safeStringArray,
+  securityIssues: safeStringArray,
+  suggestions: safeStringArray,
   improvedCode: z.string().default(""),
-  metrics: z.object({
+  metrics: z.preprocess((val) => (val && typeof val === "object" ? val : {}), z.object({
     correctness: z.number().min(0).max(100).default(80),
     efficiency: z.number().min(0).max(100).default(80),
     codeQuality: z.number().min(0).max(100).default(80),
     edgeCases: z.number().min(0).max(100).default(80)
-  }).optional(),
+  }).optional()),
   timeComplexity: z.string().optional().default("O(N)"),
   spaceComplexity: z.string().optional().default("O(1)")
 });
 
 export const interviewerReactionSchema = z.object({
-  reaction: z.string().min(1).describe("Short 1-3 sentence natural interviewer reaction to the candidate's last answer."),
-  tone: z.enum(["affirming", "neutral", "probing", "redirecting"]).describe("The emotional tone of the reaction.")
+  reaction: z.string().default("That makes sense."),
+  tone: safeEnum(["affirming", "neutral", "probing", "redirecting"], "neutral")
 });
 
 export const codingFollowUpSchema = z.object({
-  comment: z.string().min(1).describe("2-3 sentence natural code review comment from the interviewer."),
-  followUpQuestion: z.string().min(1).describe("A specific verbal question about the code submitted, probing deeper understanding.")
+  comment: z.string().default("Nice solution."),
+  followUpQuestion: z.string().default("Can you optimize the space complexity further?")
 });
 
 export const techDiscussionEvaluationSchema = z.object({
-  correctElements: z.array(z.string()).describe("List of correct technical points or patterns identified."),
-  missingDetails: z.array(z.string()).describe("Important technical details or edge cases missed by candidate."),
-  technicalCorrections: z.array(z.string()).describe("Direct technical corrections for errors or anti-patterns."),
-  timeComplexity: z.string().default("N/A").describe("Analyzed Big-O time complexity."),
-  spaceComplexity: z.string().default("N/A").describe("Analyzed Big-O space complexity."),
-  communicationFeedback: z.string().default("").describe("Feedback on technical communication and clarity."),
-  readinessScore: z.number().min(0).max(100).default(75).describe("Overall technical readiness score out of 100."),
-  nextTargetedQuestion: z.string().default("").describe("ONE targeted question to advance to the next technical stage.")
+  correctElements: safeStringArray,
+  missingDetails: safeStringArray,
+  technicalCorrections: safeStringArray,
+  timeComplexity: z.string().default("N/A"),
+  spaceComplexity: z.string().default("N/A"),
+  communicationFeedback: z.string().default(""),
+  readinessScore: z.number().min(0).max(100).default(75),
+  nextTargetedQuestion: z.string().default("")
 });
 
 export const techDiscussionNudgeSchema = z.object({
-  level: z.number().min(1).max(4).default(1).describe("The hint level (1-4)."),
-  nudgeText: z.string().min(1).describe("The targeted hint or socratic question."),
-  keyTakeaway: z.string().min(1).describe("1 line key technical takeaway."),
-  nextTargetedQuestion: z.string().default("").describe("ONE targeted follow-up question for the candidate.")
+  level: z.number().min(1).max(4).default(1),
+  nudgeText: z.string().default("Consider edge cases."),
+  keyTakeaway: z.string().default("Check constraints."),
+  nextTargetedQuestion: z.string().default("")
 });
 
 export const techDiscussionContextActionSchema = z.object({
-  actionType: z.string().min(1).describe("The action type executed."),
-  title: z.string().min(1).describe("Short title for the analysis output."),
-  response: z.string().min(1).describe("Structured feedback or analysis in clean markdown."),
-  stage: z.enum(["Approach", "Complexity", "Implementation", "Test Cases", "Evaluation", "Requirements", "Architecture", "Data Flow", "Trade-offs", "Bottlenecks"]).optional(),
-  nextTargetedQuestion: z.string().default("").describe("ONE single targeted follow-up question.")
+  actionType: z.string().default("Analysis"),
+  title: z.string().default("Technical Overview"),
+  response: z.string().default("Feedback summary."),
+  stage: safeEnum(["Approach", "Complexity", "Implementation", "Test Cases", "Evaluation", "Requirements", "Architecture", "Data Flow", "Trade-offs", "Bottlenecks"], "Approach"),
+  nextTargetedQuestion: z.string().default("")
 });
+

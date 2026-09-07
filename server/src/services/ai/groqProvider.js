@@ -84,7 +84,7 @@ export async function groqTranscribe(audioFileStream) {
   }
 }
 
-export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, jsonMode = false, modelRole } = {}) {
+export async function groqChat(messages, { temperature = 0.3, maxTokens = 4096, jsonMode = false, modelRole } = {}) {
   const client = getClient();
   const model = getModelForRole(modelRole);
 
@@ -148,6 +148,29 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
     // Pass through AppErrors as-is (already structured)
     if (error instanceof AppError) throw error;
 
+    // ── Groq Strict JSON mode failure (400) ──────────────────────────────────
+    if (jsonMode && (error.status === 400 || error.message?.includes("json_validate") || error.message?.includes("tokens reached"))) {
+      console.warn(`[Groq] Strict JSON mode failed on ${model} (400) — retrying without strict json_object enforcement…`);
+      try {
+        const fallbackReq = {
+          model,
+          messages: sanitizedMessages,
+          temperature,
+          max_tokens: Math.max(maxTokens, 4096)
+        };
+        const completion = await client.chat.completions.create(fallbackReq, {
+          timeout: env.aiRequestTimeoutMs
+        });
+        const content = completion.choices?.[0]?.message?.content;
+        if (content) {
+          console.log(`[AI_RESPONSE] Provider: Groq | Non-strict fallback succeeded | LatencyMs: ${Date.now() - callStartTime}`);
+          return content;
+        }
+      } catch (fallbackErr) {
+        console.warn(`[Groq] Non-strict JSON retry failed: ${fallbackErr.message}`);
+      }
+    }
+
     // ── Groq provider rate limit (429) ──────────────────────────────────────
     // Retry once with a 2-second backoff. If still 429, attempt fallback models.
     if (error.status === 429) {
@@ -161,11 +184,11 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 2048, 
 
         if (retryError.status === 429) {
           const fallbackModels = [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant",
-            "qwen-2.5-coder-32b",
-            "deepseek-r1-distill-llama-70b",
-            "openai/gpt-oss-20b"
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.8-27b",
+            "qwen/qwen3.6-27b",
+            "groq/compound"
           ].filter(m => m !== model);
 
           for (const fallbackModel of fallbackModels) {

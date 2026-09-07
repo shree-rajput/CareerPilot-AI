@@ -37,7 +37,7 @@
       <!-- Saving State -->
       <div id="stateSaving" class="state-card hidden">
         <div class="spinner"></div>
-        <p class="state-loading-text">Saving application...</p>
+        <p class="state-loading-text">Applying...</p>
       </div>
 
       <!-- Injection Failure State (Page Access) -->
@@ -52,10 +52,10 @@
       <!-- Network Error State (Backend Down) -->
       <div id="stateNetworkError" class="state-card hidden">
         <div class="state-icon icon-warning">⚠️</div>
-        <h3>CareerPilot is temporarily unavailable</h3>
-        <p id="networkErrorMsg">Your job details are still safe.</p>
+        <h3>We couldn't track this application right now</h3>
+        <p id="networkErrorMsg">Your job details are safe.</p>
         <p class="hint" id="networkErrorDetail"></p>
-        <button id="retryNetworkBtn" class="btn btn-secondary mt-12">Retry Save</button>
+        <button id="retryNetworkBtn" class="btn btn-secondary mt-12">Retry</button>
       </div>
 
       <!-- Not A Job Page State -->
@@ -122,15 +122,8 @@
           </div>
         </form>
 
-        <div class="status-control-panel mt-12">
-          <p class="hint font-semibold mb-4">Set Status:</p>
-          <div class="status-grid preview-status-grid" style="grid-template-columns: 1fr 1fr;">
-            <button class="btn-status" data-status="saved">Save</button>
-            <button class="btn-status" data-status="applied">Mark Applied</button>
-          </div>
-        </div>
-
-        <div class="action-bar mt-8">
+        <div class="action-bar mt-12">
+          <button id="applyBtn" class="btn btn-primary">Apply</button>
           <button id="toggleEditBtn" class="btn btn-ghost">Edit Details</button>
         </div>
       </div>
@@ -141,7 +134,7 @@
         <h3 id="dupTitle" class="job-title mt-8">Software Engineer</h3>
         <p id="dupCompany" class="job-company">Meta</p>
         <div class="dup-details">
-          <p><strong>Pipeline Status:</strong> <span id="dupStatus" class="status-pill">SAVED</span></p>
+          <p><strong>Pipeline Status:</strong> <span id="dupStatus" class="status-pill">APPLIED</span></p>
           <p id="dupMatchContainer"><strong>Match Score:</strong> <span id="dupMatch">--%</span></p>
         </div>
         
@@ -154,14 +147,16 @@
       <div id="stateSuccess" class="state-card hidden">
         <div class="success-header">
           <div class="check-icon">✓</div>
-          <h3>Saved to CareerPilot</h3>
+          <h3>Application tracked</h3>
         </div>
         
+        <div class="job-card mt-8">
+          <h2 id="successRole" class="job-title">Software Engineer</h2>
+          <p id="successCompany" class="job-company">Company</p>
+          <p class="hint mt-4">Status: <span id="successStatus" class="status-pill">APPLIED</span></p>
         </div>
 
-
-
-        <div class="action-bar mt-8">
+        <div class="action-bar mt-12">
           <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Workspace</button>
         </div>
       </div>

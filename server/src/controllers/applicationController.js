@@ -244,7 +244,7 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
       {
         fromStatus: "",
         toStatus: targetStatus,
-        changedAt: new Date(),
+        timestamp: new Date(),
         source: source || "extension_capture",
         confidence: confidence || "high",
         evidence: evidence || "Captured via Chrome Extension",

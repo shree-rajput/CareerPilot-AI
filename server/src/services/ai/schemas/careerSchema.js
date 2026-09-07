@@ -1,20 +1,38 @@
 import { z } from "zod";
 
+const safeStringArray = z.preprocess((val) => {
+  if (Array.isArray(val)) return val.map((x) => String(x ?? "")).filter(Boolean);
+  if (typeof val === "string") return val.trim() ? [val.trim()] : [];
+  if (val && typeof val === "object") return Object.values(val).map((x) => String(x ?? "")).filter(Boolean);
+  return [];
+}, z.array(z.string()).default([]));
+
+function safeEnum(values, defaultValue) {
+  const normalized = values.map((v) => String(v).toLowerCase());
+  return z.preprocess((val) => {
+    if (!val) return defaultValue;
+    const s = String(val).trim().toLowerCase();
+    const idx = normalized.indexOf(s);
+    if (idx !== -1) return values[idx];
+    return defaultValue;
+  }, z.enum(values).default(defaultValue));
+}
+
 export const copilotSchema = z.object({
-  answer: z.string().describe("Direct conversational answer or explanation."),
-  keyPoints: z.array(z.string()).default([]).describe("Key takeaways or bullet points."),
-  actionItems: z.array(z.string()).default([]).describe("Actionable steps."),
+  answer: z.string().default("").describe("Direct conversational answer or explanation."),
+  keyPoints: safeStringArray,
+  actionItems: safeStringArray,
   data: z.any().nullable().default(null).describe("Structured data object if applicable.")
 }).passthrough();
 
 export const resumeAnalysisSchema = z.object({
   summary: z.string().default(""),
-  strengths: z.array(z.string()).default([]),
-  weaknesses: z.array(z.string()).default([]),
-  skills: z.array(z.string()).default([]),
-  experience: z.array(z.any()).default([]),
-  education: z.array(z.any()).default([]),
-  recommendations: z.array(z.string()).default([]),
+  strengths: safeStringArray,
+  weaknesses: safeStringArray,
+  skills: safeStringArray,
+  experience: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.any()).default([])),
+  education: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.any()).default([])),
+  recommendations: safeStringArray,
   parserConfidence: z.number().min(0).max(100).default(85)
 });
 
@@ -22,38 +40,38 @@ export const atsAnalysisSchema = z.object({
   atsCompatibilityScore: z.number().min(0).max(100).default(75),
   status: z.string().default("VALID"),
   breakdown: z.record(z.any()).default({}),
-  issues: z.array(z.string()).default([]),
-  recommendations: z.array(z.string()).default([]),
-  evidence: z.array(z.string()).default([])
+  issues: safeStringArray,
+  recommendations: safeStringArray,
+  evidence: safeStringArray
 });
 
 export const jobMatchSchema = z.object({
   matchScore: z.number().min(0).max(100).default(70),
-  requiredSkills: z.array(z.string()).default([]),
-  preferredSkills: z.array(z.string()).default([]),
-  matchedSkills: z.array(z.string()).default([]),
-  missingSkills: z.array(z.string()).default([]),
-  evidence: z.array(z.string()).default([]),
-  recommendations: z.array(z.string()).default([])
+  requiredSkills: safeStringArray,
+  preferredSkills: safeStringArray,
+  matchedSkills: safeStringArray,
+  missingSkills: safeStringArray,
+  evidence: safeStringArray,
+  recommendations: safeStringArray
 });
 
 export const preparationPlanSchema = z.object({
   currentLevel: z.string().default("Intermediate"),
-  weakSkills: z.array(z.string()).default([]),
-  priorityTopics: z.array(z.string()).default([]),
-  dailyTasks: z.array(z.any()).default([]),
-  reasoning: z.array(z.string()).default([]),
+  weakSkills: safeStringArray,
+  priorityTopics: safeStringArray,
+  dailyTasks: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.any()).default([])),
+  reasoning: safeStringArray,
   nextBestAction: z.string().default("")
 });
 
 export const projectKitSchema = z.object({
-  kit: z.array(
+  kit: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(
     z.object({
-      question: z.string(),
-      category: z.string(),
-      difficulty: z.enum(["easy", "medium", "hard"])
+      question: z.string().default(""),
+      category: z.string().default("Technical"),
+      difficulty: safeEnum(["easy", "medium", "hard"], "medium")
     })
-  )
+  ).default([]))
 });
 
 export const prepPlanSchema = preparationPlanSchema;
@@ -73,60 +91,82 @@ export const copilotChatSchema = z.object({
     }
     return "";
   }),
-  sections: z.array(z.object({
-    type: z.enum(["text", "code", "steps", "callout", "markdown"]).optional().default("text"),
+  sections: z.preprocess((val) => (Array.isArray(val) ? val : []), z.array(z.object({
+    type: z.string().optional().default("text"),
     title: z.string().optional().default(""),
     content: z.string().optional().default(""),
     language: z.string().optional().default(""),
-    items: z.array(z.string()).optional().default([]),
-    intent: z.enum(["info", "warning", "success", "error"]).optional().default("info"),
-  })).optional().default([]),
+    items: z.preprocess((v) => (Array.isArray(v) ? v.map((x) => String(x || "")) : []), z.array(z.string()).optional().default([])),
+    intent: z.string().optional().default("info"),
+  })).optional().default([])),
   suggestedActions: z.any().optional().transform((val) => {
     if (!Array.isArray(val)) return [];
     return val.map((item) => (typeof item === "string" ? item : item?.label || item?.text || item?.title || String(item || ""))).filter(Boolean);
   }),
-  keyPoints: z.array(z.string()).optional().default([]),
-  actionItems: z.array(z.string()).optional().default([]),
+  keyPoints: safeStringArray,
+  actionItems: safeStringArray,
   data: z.any().optional().default(null)
 }).passthrough();
 
 export const mentorExplanationSchema = z.object({
-  explanation: z.string()
+  explanation: z.string().default("")
 });
 
 export const mentorSummarySchema = z.object({
-  summary: z.string(),
-  actionItems: z.array(z.string())
+  summary: z.string().default(""),
+  actionItems: safeStringArray
 });
 
 export const projectRealityCheckSchema = z.object({
-  status: z.enum(["Fully Verified", "Partially Verified", "Unverified"]),
-  verifiedClaims: z.array(z.string()),
-  unverifiedClaims: z.array(z.string()),
-  confidenceScore: z.number().min(0).max(100),
-  explanation: z.string()
+  status: safeEnum(["Fully Verified", "Partially Verified", "Unverified"], "Partially Verified"),
+  verifiedClaims: safeStringArray,
+  unverifiedClaims: safeStringArray,
+  confidenceScore: z.number().min(0).max(100).default(75),
+  explanation: z.string().default("")
 });
 
 export const coverLetterSchema = z.object({
-  coverLetter: z.string(),
-  wordCount: z.number().optional(),
-  highlightsUsed: z.array(z.string()).optional()
+  coverLetter: z.string().default(""),
+  wordCount: z.number().optional().default(250),
+  highlightsUsed: safeStringArray
 });
 
 export const recruiterMessageSchema = z.object({
-  message: z.string(),
-  type: z.string().optional(),
-  subjectLine: z.string().optional()
+  message: z.string().default(""),
+  type: z.string().optional().default("outreach"),
+  subjectLine: z.string().optional().default("")
 });
 
 export const copilotContextPlanSchema = z.object({
-  intent: z.string().describe("Detected intent of the user's question, e.g. 'resume', 'skills', 'application', 'general', 'coding'"),
-  entities: z.array(
-    z.object({
-      type: z.string(),
-      id: z.string().optional(),
-      description: z.string().optional()
-    })
-  ).describe("Entities extracted from the user's question, like 'that application' or 'my resume'"),
-  sources: z.array(z.string()).describe("List of data sources required to answer the question, e.g. 'resume', 'profile', 'application', 'projects'")
+  intent: z.preprocess(
+    (val) => (typeof val === "string" ? val.toLowerCase().trim() : "general"),
+    z.string().default("general")
+  ),
+  entities: z.preprocess(
+    (val) => {
+      if (!Array.isArray(val)) return [];
+      return val.map((e) => {
+        if (typeof e === "string") return { type: "general", name: e, description: e };
+        if (e && typeof e === "object") {
+          return {
+            type: String(e.type || e.category || "general"),
+            id: e.id ? String(e.id) : undefined,
+            name: e.name ? String(e.name) : undefined,
+            description: e.description ? String(e.description) : undefined
+          };
+        }
+        return { type: "general", description: String(e || "") };
+      });
+    },
+    z.array(
+      z.object({
+        type: z.string().default("general"),
+        id: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional()
+      })
+    ).default([])
+  ),
+  sources: safeStringArray
 });
+

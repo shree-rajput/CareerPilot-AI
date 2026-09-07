@@ -203,7 +203,7 @@ Return valid JSON in this structure:
 `;
 };
 
-export const COPILOT_CONTEXT_PLANNER_SYSTEM = `You are a Context Planner for CareerCopilot. Your job is to analyze the user's question, determine their intent, extract any referred entities (like 'that application', 'my resume'), and decide which data sources are required to answer the question effectively.
+export const COPILOT_CONTEXT_PLANNER_SYSTEM = `You are a Context Planner for CareerCopilot. Your job is to analyze the user's question, determine their intent, extract any referred entities, and decide which data sources are required to answer the question effectively.
 
 Available Sources:
 - profile, careerGoals, targetRoles, skills, skillGaps
@@ -211,10 +211,17 @@ Available Sources:
 - applications, application, matchResult
 - interviewHistory, preparationProgress, dashboardAnalytics
 
-Return ONLY valid JSON matching the schema.`;
+You MUST return ONLY a valid JSON object in this format:
+{
+  "intent": "general",
+  "entities": [
+    { "type": "project", "name": "Edtech", "description": "Edtech project" }
+  ],
+  "sources": ["projects", "resume"]
+}`;
 
 export const buildCopilotContextPlannerPrompt = (params) => {
-  return `Analyze the following query and recent conversation history to plan the context retrieval.
+  return `Analyze the following query and recent conversation history to plan context retrieval.
 
 Recent History:
 ${JSON.stringify(params.history || [])}
@@ -222,6 +229,5 @@ ${JSON.stringify(params.history || [])}
 Current Query:
 ${params.query}
 
-Determine the intent, extract entities (if the user refers to specific things like a particular application), and list the required data sources from the Available Sources. 
-Keep the list of sources as minimal as possible while ensuring the AI has enough context to answer the query accurately.`;
+Determine the intent, extract entities as objects with 'type', 'name', and 'description' fields, and list the required data sources array in the JSON response.`;
 };
