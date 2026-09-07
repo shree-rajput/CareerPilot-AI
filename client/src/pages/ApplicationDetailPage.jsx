@@ -43,6 +43,7 @@ export function ApplicationDetailPage() {
 
   const [notes, setNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isRetryingExtraction, setIsRetryingExtraction] = useState(false);
 
   const [tailoringData, setTailoringData] = useState(null);
   const [loadingTailoring, setLoadingTailoring] = useState(false);
@@ -53,6 +54,7 @@ export function ApplicationDetailPage() {
   const [coverLetterTone, setCoverLetterTone] = useState("professional");
   const [coverLetterHighlight, setCoverLetterHighlight] = useState("");
   const [copiedCL, setCopiedCL] = useState(false);
+  const [copiedRM, setCopiedRM] = useState(false);
 
   // Recruiter message state
   const [recruiterMsg, setRecruiterMsg] = useState("");
@@ -66,6 +68,19 @@ export function ApplicationDetailPage() {
   useEffect(() => {
     loadData();
   }, [id]);
+
+  // Poll for status updates if AI extraction is running in the background
+  useEffect(() => {
+    let interval;
+    if (app?.extractionStatus === "PROCESSING") {
+      interval = setInterval(() => {
+        loadData();
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [app?.extractionStatus, id]);
 
   async function loadData() {
     try {
@@ -153,6 +168,19 @@ export function ApplicationDetailPage() {
       toast.error(err.response?.data?.message || "Match failed.");
     } finally {
       setRunningMatch(false);
+    }
+  }
+
+  async function handleRetryExtraction() {
+    setIsRetryingExtraction(true);
+    try {
+      await api.post(`/applications/${id}/retry-intelligence`);
+      toast.info("Job analysis restarted.");
+      await loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to retry analysis.");
+    } finally {
+      setIsRetryingExtraction(false);
     }
   }
 
@@ -364,12 +392,34 @@ export function ApplicationDetailPage() {
                       </div>
                     )}
                   </div>
+                ) : app.extractionStatus === "PROCESSING" ? (
+                  <div className="text-center py-8">
+                    <div className="inline-flex items-center justify-center text-primary mb-3">
+                      <Spinner size="lg" />
+                    </div>
+                    <p className="text-text font-bold">Analyzing job requirements...</p>
+                    <p className="text-xs text-text-secondary mt-2">This may take a few seconds as our AI structures the job description.</p>
+                  </div>
+                ) : app.extractionStatus === "FAILED" ? (
+                  <div className="text-center py-6">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-danger-bg text-danger mb-3">
+                      <TriangleAlert size={24} />
+                    </div>
+                    <p className="text-text-secondary font-medium mb-4">Job analysis couldn't be completed.</p>
+                    {app.extractionError && <p className="text-xs text-danger mb-4">{app.extractionError}</p>}
+                    <Button onClick={handleRetryExtraction} isLoading={isRetryingExtraction} variant="secondary">
+                      Retry Analysis
+                    </Button>
+                  </div>
                 ) : (
                   <div className="text-center py-6">
                     <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-secondary text-text-secondary mb-3">
                       <TriangleAlert size={24} />
                     </div>
-                    <p className="text-text-secondary font-medium">AI extraction pending or failed.</p>
+                    <p className="text-text-secondary font-medium mb-4">AI extraction pending or failed.</p>
+                    <Button onClick={handleRetryExtraction} isLoading={isRetryingExtraction} variant="secondary">
+                      Retry Analysis
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -418,16 +468,24 @@ export function ApplicationDetailPage() {
                       <div>
                         <h4 className="text-sm font-bold text-text mb-3 flex items-center gap-2">
                           Missing Keywords
-                          <span className="bg-danger-bg text-danger px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border border-danger/20">Critical</span>
+                          {intelligence.hasMatchResult && intelligence.missingKeywords.length > 0 && (
+                            <span className="bg-danger-bg text-danger px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border border-danger/20">Missing</span>
+                          )}
+                          {intelligence.hasMatchResult && intelligence.missingKeywords.length === 0 && (
+                            <span className="bg-success-bg text-success px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border border-success/20">All Matched</span>
+                          )}
                         </h4>
                         <div className="flex flex-wrap gap-2">
-                          {intelligence.missingKeywords.slice(0, 8).map((keyword) => (
+                          {!intelligence.hasMatchResult && (
+                            <span className="text-sm text-text-secondary italic">Run the match engine above to see which keywords are missing from your resume.</span>
+                          )}
+                          {intelligence.hasMatchResult && intelligence.missingKeywords.slice(0, 8).map((keyword) => (
                             <span key={keyword} className="bg-danger-bg border border-danger/20 text-danger px-3 py-1 rounded-lg text-xs font-bold shadow-sm">
                               {keyword}
                             </span>
                           ))}
-                          {intelligence.missingKeywords.length === 0 && (
-                            <span className="text-sm text-text-secondary italic">No missing keywords detected.</span>
+                          {intelligence.hasMatchResult && intelligence.missingKeywords.length === 0 && (
+                            <span className="text-sm text-success font-medium">No missing keywords — your resume covers all required skills.</span>
                           )}
                         </div>
                       </div>
@@ -573,14 +631,24 @@ export function ApplicationDetailPage() {
                   <p className="text-sm text-text-secondary mb-6 leading-relaxed">
                     Compare your resume against the JD requirements using our semantic engine.
                   </p>
-                  <Button
-                    className="w-full"
-                    onClick={handleRunMatch}
-                    disabled={runningMatch || !selectedResumeId}
-                    isLoading={runningMatch}
-                  >
-                    {!runningMatch && "Run Match"}
-                  </Button>
+                  {app.extractionStatus === "PROCESSING" ? (
+                    <Button className="w-full" disabled>
+                      Waiting for job analysis...
+                    </Button>
+                  ) : app.extractionStatus === "FAILED" ? (
+                    <Button className="w-full" variant="secondary" onClick={handleRetryExtraction} isLoading={isRetryingExtraction}>
+                      Retry Job Analysis
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      onClick={handleRunMatch}
+                      disabled={runningMatch || !selectedResumeId || !app.extractedJd}
+                      isLoading={runningMatch}
+                    >
+                      {!runningMatch && "Run Match"}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

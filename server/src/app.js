@@ -27,6 +27,7 @@ import projectRoutes from "./routes/projectRoutes.js";
 import preparationRoutes from "./routes/preparationRoutes.js";
 import copilotRoutes from "./routes/copilotRoutes.js";
 import mentorRouter from "./routes/mentorRoutes.js";
+import { mentorPortalRouter } from "./routes/mentorPortalRoutes.js";
 import codingRouter from "./routes/codingRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
@@ -38,7 +39,13 @@ export function createApp() {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.clientOrigin,
+      origin: function (origin, callback) {
+        if (!origin || origin === env.clientOrigin || origin.startsWith("chrome-extension://")) {
+          callback(null, true);
+        } else {
+          callback(null, env.clientOrigin);
+        }
+      },
       credentials: true,
     }),
   );
@@ -78,6 +85,7 @@ export function createApp() {
   app.use("/api/resume", resumeRouter);
   app.use("/api/resumes", resumeRouter); // Plural alias to resolve client-side 404 bugs
   app.use("/api/mentors", mentorRouter); // Mentor ecosystem routes
+  app.use("/api/mentor-portal", mentorPortalRouter); // Dedicated Mentor Portal routes
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/messages", messageRoutes);
   app.use("/api/admin", adminRoutes);

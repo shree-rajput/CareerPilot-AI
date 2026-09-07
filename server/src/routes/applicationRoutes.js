@@ -15,6 +15,7 @@ import {
   confirmStatusSuggestion,
   bulkUpdateStatus,
   processEmailEvent,
+  retryApplicationIntelligence,
 } from "../controllers/applicationController.js";
 import { runAutoStaleCheck } from "../services/staleScheduler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -38,6 +39,7 @@ applicationRouter.post("/trigger-auto-stale", async (req, res) => {
 });
 
 applicationRouter.get("/:id/intelligence", getApplicationIntelligenceSummary);
+applicationRouter.post("/:id/retry-intelligence", retryApplicationIntelligence);
 applicationRouter.get("/:id/readiness", getApplicationReadiness);
 applicationRouter.get("/:id", getApplication);
 applicationRouter.patch("/:id", updateApplication);

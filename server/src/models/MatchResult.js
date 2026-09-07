@@ -73,7 +73,9 @@ const matchResultSchema = new mongoose.Schema(
     },
     evidence: { type: [evidenceItemSchema], default: [] },
     // AI writes the explanation — it does NOT calculate the score
-    explanation: { type: String, default: "" }
+    explanation: { type: String, default: "" },
+    // Algorithm version — used to invalidate stale cached results when matching logic changes
+    matchingEngineVersion: { type: String, default: "2.0", index: true }
   },
   { timestamps: true }
 );

@@ -33,7 +33,7 @@ const TAXONOMY_DICTIONARY = [
     name: "React.js",
     canonicalName: "React",
     category: "framework",
-    aliases: ["react", "react.js", "reactjs", "react js"],
+    aliases: ["react", "react.js", "reactjs", "react js", "react-js"],
     technologyType: "frontend",
     parentSkill: "JavaScript"
   },
@@ -49,7 +49,7 @@ const TAXONOMY_DICTIONARY = [
     name: "Express.js",
     canonicalName: "Express.js",
     category: "framework",
-    aliases: ["express", "expressjs", "express.js", "express js"],
+    aliases: ["express", "expressjs", "express.js", "express-js", "express js"],
     technologyType: "backend",
     parentSkill: "Node.js"
   },
@@ -57,7 +57,7 @@ const TAXONOMY_DICTIONARY = [
     name: "Node.js",
     canonicalName: "Node.js",
     category: "framework",
-    aliases: ["node", "nodejs", "node.js", "node js"],
+    aliases: ["node", "nodejs", "node.js", "node-js", "node js"],
     technologyType: "backend",
     parentSkill: "JavaScript"
   },

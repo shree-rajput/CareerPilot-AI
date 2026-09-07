@@ -45,43 +45,32 @@ async function initUI() {
   // 2. Check authentication status
   const authRes = await chrome.runtime.sendMessage({ type: "CHECK_AUTH" }).catch(() => ({ isAuthenticated: false }));
 
+  window.isAuthenticated = authRes.isAuthenticated;
+
   if (!authRes.isAuthenticated) {
     connectionBadge.innerText = "● Disconnected";
     connectionBadge.className = "badge badge-neutral";
     disconnectBtn.classList.add("hidden");
-    showState(stateAuth);
 
-    document.getElementById("connectAppBtn").onclick = () => {
-      const connectUrl = `${DEFAULT_APP_URL}/extension/connect?extensionId=${chrome.runtime.id}`;
-      chrome.tabs.create({ url: connectUrl });
+    // Do NOT halt page inspection. We still want to extract the job.
+    // The user will be prompted to sign in when they try to Save.
+  } else {
+    connectionBadge.innerText = "● Connected";
+    connectionBadge.className = "badge badge-success";
+    disconnectBtn.classList.remove("hidden");
+    disconnectBtn.onclick = async () => {
+      await chrome.runtime.sendMessage({ type: "DISCONNECT" });
+      initUI();
     };
-    return;
   }
 
-  // Authenticated state
-  connectionBadge.innerText = "● Connected";
-  connectionBadge.className = "badge badge-success";
-  disconnectBtn.classList.remove("hidden");
-  disconnectBtn.onclick = async () => {
-    await chrome.runtime.sendMessage({ type: "DISCONNECT" });
-    initUI();
-  };
+
 
   // 3. Page Context & Extraction Inspection
   try {
     const isGmailTab = tab.url.includes("mail.google.com");
 
-    if (isGmailTab) {
-      await renderGmailState(tab);
-      return;
-    }
-
     const jobResult = await getJobDataFromTab(tab);
-
-    if (jobResult.context === "GMAIL_EMAIL" || jobResult.isGmail) {
-      await renderGmailState(tab, jobResult);
-      return;
-    }
 
     if (jobResult.status === "INJECTION_FAILED") {
       document.getElementById("injectionErrorMsg").innerText = "CareerPilot couldn't access this page tab.";
@@ -95,6 +84,17 @@ async function initUI() {
       document.getElementById("notJobMsg").innerText =
         jobResult?.reason || "This page doesn't appear to contain an active job posting.";
       showState(stateNotJob);
+      
+      const forceBtn = document.getElementById("forceManualCaptureBtn");
+      if (forceBtn) {
+        forceBtn.onclick = () => {
+          extractedPayload = jobResult?.data || {
+            source: "manual_override",
+            title: "", company: "", location: "", description: "", extractionConfidence: "LOW"
+          };
+          renderPreview(extractedPayload);
+        };
+      }
       return;
     }
 
@@ -118,7 +118,7 @@ async function renderGmailState(tab, initialResult = null) {
     try {
       emailData = await chrome.tabs.sendMessage(tab.id, { type: "GET_GMAIL_EVENT" });
     } catch (e) {
-      console.warn("[CareerPilot] Failed to query Gmail message from tab:", e);
+      // Silently ignore connection errors here as they are expected before injection
     }
   }
 
@@ -274,11 +274,40 @@ async function renderGmailState(tab, initialResult = null) {
 }
 
 async function getJobDataFromTab(tab) {
+  const timeoutMs = 2000; // 2 second timeout for content script handshake
+  
+  const sendMessageWithTimeout = (tabId, message) => {
+    return new Promise((resolve, reject) => {
+      let isResolved = false;
+      const timer = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          reject(new Error("CONTENT_SCRIPT_TIMEOUT"));
+        }
+      }, timeoutMs);
+      
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          if (chrome.runtime.lastError) {
+            reject(new Error("CONTENT_SCRIPT_MISSING"));
+          } else {
+            resolve(response);
+          }
+        }
+      });
+    });
+  };
+
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_JOB_DATA" });
+    const res = await sendMessageWithTimeout(tab.id, { type: "GET_JOB_DATA" });
     if (res && res.status) return res;
-  } catch (msgErr) {
-    console.warn("[CareerPilot] Content script listener not active on tab:", tab.id, msgErr?.message);
+  } catch (err) {
+    if (err.message === "CONTENT_SCRIPT_TIMEOUT") {
+      return { status: "INJECTION_FAILED", isJobPage: false, error: "The page is taking longer than expected to load." };
+    }
+    // CONTENT_SCRIPT_MISSING caught here, fall through to injection attempt
   }
 
   try {
@@ -293,9 +322,12 @@ async function getJobDataFromTab(tab) {
     });
 
     await new Promise((r) => setTimeout(r, 60));
-    const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_JOB_DATA" });
+    const res = await sendMessageWithTimeout(tab.id, { type: "GET_JOB_DATA" });
     return res || { status: "JOB_NOT_DETECTED", isJobPage: false, reason: "No response from content script." };
   } catch (injErr) {
+    if (injErr.message === "CONTENT_SCRIPT_TIMEOUT") {
+       return { status: "INJECTION_FAILED", isJobPage: false, error: "The page is taking longer than expected to load." };
+    }
     console.error("[CareerPilot] chrome.scripting.executeScript failed:", injErr);
     return {
       status: "INJECTION_FAILED",
@@ -308,7 +340,9 @@ async function getJobDataFromTab(tab) {
 function showState(targetState) {
   const states = [
     document.getElementById("stateLoading"),
+    document.getElementById("stateSaving"),
     document.getElementById("stateInjectionFailed"),
+    document.getElementById("stateNetworkError"),
     document.getElementById("stateNotJob"),
     document.getElementById("stateRestricted"),
     document.getElementById("statePreview"),
@@ -402,10 +436,12 @@ function attachStatusListeners(appId, containerSelector, currentStatus) {
 }
 
 async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
-  allButtons.forEach(b => b.disabled = true);
-  
-  const originalText = clickedBtn.dataset.originalText;
-  clickedBtn.innerText = "Updating...";
+  if (!window.isAuthenticated) {
+    showState(document.getElementById("stateAuth"));
+    return;
+  }
+
+  showState(document.getElementById("stateSaving"));
 
   const payload = {
     targetStatus: status,
@@ -424,24 +460,31 @@ async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
       extractedPayload.description = document.getElementById("editDescription").value;
     }
     Object.assign(payload, extractedPayload);
+    payload.source = "extension_manual_action"; // Ensure this is preserved!
     payload.jobUrl = payload.url;
     payload.role = payload.title;
   }
 
   try {
     const response = await chrome.runtime.sendMessage({
-      type: "UPDATE_APPLICATION_STATUS",
+      type: "CAPTURE_JOB_REQUEST",
       payload,
     });
 
     if (!response?.success) {
-      if (response?.error?.includes("SESSION_EXPIRED") || response?.error?.includes("AUTH_REQUIRED")) {
-        initUI();
+      if (response?.category === "AUTH" || response?.error === "AUTH_REQUIRED") {
+        window.isAuthenticated = false;
+        showState(document.getElementById("stateAuth"));
         return;
       }
-      alert(`Status update failed: ${response?.error || "Unknown error"}`);
-      allButtons.forEach(b => b.disabled = false);
-      clickedBtn.innerText = originalText;
+      
+      const errorMsgEl = document.getElementById("networkErrorMsg");
+      const retryBtn = document.getElementById("retryNetworkBtn");
+      
+      errorMsgEl.innerText = response?.userMessage || "CareerPilot couldn't complete the request.";
+      retryBtn.onclick = () => showState(document.getElementById("statePreview"));
+      
+      showState(document.getElementById("stateNetworkError"));
       return;
     }
 
@@ -450,12 +493,15 @@ async function handleOneClickStatus(status, appId, allButtons, clickedBtn) {
        data.application = data; 
     }
     
-    // Always render duplicate state after successful update, as it is now in the pipeline
-    renderDuplicateState(data);
+    if (data.isDuplicate || data.existing) {
+      renderDuplicateState(data);
+    } else {
+      renderSuccessState(data);
+    }
   } catch (err) {
-    alert(`Connection error: ${err.message}`);
-    allButtons.forEach(b => b.disabled = false);
-    clickedBtn.innerText = originalText;
+    document.getElementById("networkErrorMsg").innerText = "Failed to communicate with CareerPilot extension background worker.";
+    document.getElementById("retryNetworkBtn").onclick = () => showState(document.getElementById("statePreview"));
+    showState(document.getElementById("stateNetworkError"));
   }
 }
 
@@ -475,8 +521,6 @@ function renderDuplicateState(data) {
   } else {
     document.getElementById("dupMatchContainer").classList.add("hidden");
   }
-
-  attachStatusListeners(appId, ".duplicate-status-grid", currentStatus);
 
   document.getElementById("openAppBtn").onclick = () => {
     const url = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;
@@ -499,8 +543,6 @@ function renderSuccessState(data) {
   }
 
   document.getElementById("resResumeVersion").innerText = data.recommendedResume?.name || "Primary Resume";
-
-  attachStatusListeners(appId, ".success-status-grid", currentStatus);
 
   document.getElementById("viewAppWorkspaceBtn").onclick = () => {
     const targetUrl = appId ? `${DEFAULT_APP_URL}/applications/${appId}` : `${DEFAULT_APP_URL}/jobs/inbox`;

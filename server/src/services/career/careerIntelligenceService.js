@@ -336,7 +336,11 @@ function buildApplicationAdvice(application, matchResult, resumeContext) {
     return required.some((skill) => text.includes(skill));
   });
 
-  const missingKeywords = matchResult?.missingSkills || application.extractedJd?.requiredSkills || [];
+  // IMPORTANT: Only use actual match result missing skills.
+  // Do NOT fall back to all JD required skills when there is no match result —
+  // that would falsely report every JD skill as "missing" without comparing against the resume.
+  const hasMatchResult = !!matchResult;
+  const missingKeywords = hasMatchResult ? (matchResult.missingSkills || []) : [];
   const suitability = matchResult
     ? matchResult.overallScore >= 75
       ? "strong"
@@ -345,9 +349,19 @@ function buildApplicationAdvice(application, matchResult, resumeContext) {
         : "weak"
     : "unknown";
 
+  // Only provide improvement suggestions based on evidence-backed missing skills from the match engine.
+  // Never suggest skills as "missing" if no match has been run.
+  const resumeImprovementSuggestions = hasMatchResult
+    ? missingKeywords.slice(0, 5).map((skill) => ({
+        skill,
+        suggestion: `Only add ${skill} if you have real evidence. Otherwise, prepare a learning or project plan for it.`
+      }))
+    : [];
+
   return {
     suitability,
     matchPercentage: matchResult?.overallScore ?? null,
+    hasMatchResult,
     matchingSkills: matchResult?.matchedSkills || [],
     missingKeywords,
     importantMissingRequirements: (matchResult?.evidence || [])
@@ -355,11 +369,8 @@ function buildApplicationAdvice(application, matchResult, resumeContext) {
       .slice(0, 5)
       .map((item) => item.requirement),
     relevantProjects: relevantProjects.slice(0, 3),
-    resumeImprovementSuggestions: missingKeywords.slice(0, 5).map((skill) => ({
-      skill,
-      suggestion: `Only add ${skill} if you have real evidence. Otherwise, prepare a learning or project plan for it.`
-    })),
-    personalizedAdvice: matchResult
+    resumeImprovementSuggestions,
+    personalizedAdvice: hasMatchResult
       ? `This role is a ${suitability} fit based on the current resume/JD match evidence. Prioritize the missing requirements before applying or interviewing.`
       : "Run the semantic match engine with a selected resume to unlock evidence-based application advice.",
     coverLetterContext: {

@@ -2,6 +2,8 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { RoleProtectedRoute } from "./components/RoleProtectedRoute";
+import { MentorLayout } from "./components/MentorLayout";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { ApplicationDetailPage } from "./pages/ApplicationDetailPage";
 import { ApplicationsPage } from "./pages/ApplicationsPage";
@@ -33,7 +35,12 @@ import { PreparationPage } from "./pages/PreparationPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { MentorshipPage } from "./pages/MentorshipPage";
 import { MentorProfilePage } from "./pages/MentorProfilePage";
-import { MentorDashboardPage } from "./pages/MentorDashboardPage";
+import { MentorLoginPage } from "./pages/mentor/MentorLoginPage";
+import { MentorDashboardPage } from "./pages/mentor/MentorDashboardPage";
+import { MentorStudentsPage } from "./pages/mentor/MentorStudentsPage";
+import { MentorStudentDetailPage } from "./pages/mentor/MentorStudentDetailPage";
+import { MentorFeedbackPage } from "./pages/mentor/MentorFeedbackPage";
+import { MentorAnalyticsPage } from "./pages/mentor/MentorAnalyticsPage";
 import { BecomeAMentorPage } from "./pages/BecomeAMentorPage";
 import { MentorSessionRoomPage } from "./pages/MentorSessionRoomPage";
 import { AdminMentorModerationPage } from "./pages/AdminMentorModerationPage";
@@ -54,6 +61,19 @@ export function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        
+        {/* Isolated Mentor Portal */}
+        <Route path="/mentor/login" element={<MentorLoginPage />} />
+        <Route element={<RoleProtectedRoute role={["mentor", "admin"]} />}>
+          <Route element={<MentorLayout />}>
+            <Route path="/mentor/dashboard" element={<MentorDashboardPage />} />
+            <Route path="/mentor/students" element={<MentorStudentsPage />} />
+            <Route path="/mentor/students/:studentId" element={<MentorStudentDetailPage />} />
+            <Route path="/mentor/feedback" element={<MentorFeedbackPage />} />
+            <Route path="/mentor/analytics" element={<MentorAnalyticsPage />} />
+            <Route path="/mentor/profile" element={<MentorProfilePage />} />
+          </Route>
+        </Route>
 
         <Route element={<ProtectedRoute />}>
           {/* Extension Connect Page (Standalone layout) */}
@@ -139,10 +159,12 @@ export function App() {
             <Route path="/mentorship" element={<MentorshipPage />} />
             <Route path="/mentorship/profile/:mentorId" element={<MentorProfilePage />} />
             <Route path="/become-a-mentor" element={<BecomeAMentorPage />} />
-            <Route path="/mentor" element={<Navigate to="/mentor/dashboard" replace />} />
-            <Route path="/mentor/dashboard" element={<MentorDashboardPage />} />
             <Route path="/mentor/session/:sessionId" element={<MentorSessionRoomPage />} />
-            <Route path="/admin/mentors" element={<AdminMentorModerationPage />} />
+            
+            {/* Admin Protected Routes */}
+            <Route element={<RoleProtectedRoute role={["admin"]} />}>
+              <Route path="/admin/mentors" element={<AdminMentorModerationPage />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

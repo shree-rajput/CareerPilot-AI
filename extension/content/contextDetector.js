@@ -60,8 +60,19 @@
 
     if (isJobUrl) return true;
 
-    // Check DOM headings and description containers
-    const titleEl =
+    // Be more permissive: if there's a title and an apply button, it's likely a job page context.
+    // The extraction engine in content_script.js will make the final strict determination.
+    const titleEl = document.querySelector("h1") || document.querySelector("h2");
+    
+    const applyButtons = Array.from(document.querySelectorAll("button, a, input[type='submit']")).filter(el => {
+      const text = (el.value || el.textContent || "").trim().toLowerCase();
+      return /^(apply|apply now|easy apply|submit application|apply for this job|apply for this position|submit)$/i.test(text);
+    });
+
+    if (titleEl && applyButtons.length > 0) return true;
+
+    // Check DOM headings and description containers as fallback
+    const strictTitleEl =
       document.querySelector(".job-details-jobs-unified-top-card__job-title") ||
       document.querySelector(".jobs-unified-top-card__job-title") ||
       document.querySelector(".jobsearch-JobInfoHeader-title") ||
@@ -77,7 +88,7 @@
       document.querySelector("#job-description") ||
       document.querySelector(".job-description");
 
-    if (titleEl && descEl) return true;
+    if (strictTitleEl && descEl) return true;
 
     return false;
   }

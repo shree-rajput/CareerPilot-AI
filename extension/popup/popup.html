@@ -34,13 +34,28 @@
         <p class="state-loading-text">Detecting job intelligence...</p>
       </div>
 
-      <!-- Injection Failure State -->
+      <!-- Saving State -->
+      <div id="stateSaving" class="state-card hidden">
+        <div class="spinner"></div>
+        <p class="state-loading-text">Saving application...</p>
+      </div>
+
+      <!-- Injection Failure State (Page Access) -->
       <div id="stateInjectionFailed" class="state-card hidden">
         <div class="state-icon icon-warning">⚠️</div>
         <h3>Page Access Required</h3>
-        <p id="injectionErrorMsg">CareerPilot couldn't access this page tab.</p>
+        <p id="injectionErrorMsg">CareerPilot can't access this page.</p>
         <p class="hint" id="injectionErrorDetail"></p>
         <button id="retryInjectionBtn" class="btn btn-secondary mt-12">Retry Page Inspection</button>
+      </div>
+
+      <!-- Network Error State (Backend Down) -->
+      <div id="stateNetworkError" class="state-card hidden">
+        <div class="state-icon icon-warning">⚠️</div>
+        <h3>CareerPilot is temporarily unavailable</h3>
+        <p id="networkErrorMsg">Your job details are still safe.</p>
+        <p class="hint" id="networkErrorDetail"></p>
+        <button id="retryNetworkBtn" class="btn btn-secondary mt-12">Retry Save</button>
       </div>
 
       <!-- Not A Job Page State -->
@@ -49,6 +64,7 @@
         <h3>Page Not a Job Posting</h3>
         <p id="notJobMsg">This page doesn't appear to contain an active job posting.</p>
         <p class="hint">Open a job posting page on any career site (LinkedIn, Indeed, Greenhouse, Lever, Workday, etc.) to capture.</p>
+        <button id="forceManualCaptureBtn" class="btn btn-secondary mt-12">Force Manual Capture</button>
       </div>
 
       <!-- Restricted Page State -->
@@ -108,13 +124,9 @@
 
         <div class="status-control-panel mt-12">
           <p class="hint font-semibold mb-4">Set Status:</p>
-          <div class="status-grid preview-status-grid">
-            <button class="btn-status" data-status="saved">Saved</button>
-            <button class="btn-status" data-status="applied">Applied</button>
-            <button class="btn-status" data-status="oa">Assessment</button>
-            <button class="btn-status" data-status="interview">Interview</button>
-            <button class="btn-status" data-status="offer">Offer</button>
-            <button class="btn-status btn-danger" data-status="rejected">Rejected</button>
+          <div class="status-grid preview-status-grid" style="grid-template-columns: 1fr 1fr;">
+            <button class="btn-status" data-status="saved">Save</button>
+            <button class="btn-status" data-status="applied">Mark Applied</button>
           </div>
         </div>
 
@@ -133,18 +145,6 @@
           <p id="dupMatchContainer"><strong>Match Score:</strong> <span id="dupMatch">--%</span></p>
         </div>
         
-        <div class="status-control-panel mt-12">
-          <p class="hint font-semibold mb-4">Update Status:</p>
-          <div class="status-grid duplicate-status-grid">
-            <button class="btn-status" data-status="saved">Saved</button>
-            <button class="btn-status" data-status="applied">Applied</button>
-            <button class="btn-status" data-status="oa">Assessment</button>
-            <button class="btn-status" data-status="interview">Interview</button>
-            <button class="btn-status" data-status="offer">Offer</button>
-            <button class="btn-status btn-danger" data-status="rejected">Rejected</button>
-          </div>
-        </div>
-
         <div class="action-bar mt-8">
           <button id="openAppBtn" class="btn btn-primary">Open Workspace</button>
         </div>
@@ -157,28 +157,9 @@
           <h3>Saved to CareerPilot</h3>
         </div>
         
-        <div class="match-summary">
-          <div class="match-score-card">
-            <span class="match-val" id="resMatchScore">--%</span>
-            <span class="match-lbl">Match Score</span>
-          </div>
-          <div class="resume-rec-card">
-            <p class="rec-title">Recommended Resume:</p>
-            <p id="resResumeVersion" class="rec-name">Primary Resume</p>
-          </div>
         </div>
 
-        <div class="status-control-panel mt-12">
-          <p class="hint font-semibold mb-4">Update Status:</p>
-          <div class="status-grid success-status-grid">
-            <button class="btn-status" data-status="saved">Saved</button>
-            <button class="btn-status" data-status="applied">Applied</button>
-            <button class="btn-status" data-status="oa">Assessment</button>
-            <button class="btn-status" data-status="interview">Interview</button>
-            <button class="btn-status" data-status="offer">Offer</button>
-            <button class="btn-status btn-danger" data-status="rejected">Rejected</button>
-          </div>
-        </div>
+
 
         <div class="action-bar mt-8">
           <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Workspace</button>

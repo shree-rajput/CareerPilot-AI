@@ -119,6 +119,15 @@ const applicationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    extractionStatus: {
+      type: String,
+      enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+      default: "PENDING",
+    },
+    extractionError: {
+      type: String,
+      default: null,
+    },
     status: {
       type: String,
       enum: STATUS_VALUES,

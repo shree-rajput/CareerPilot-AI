@@ -41,7 +41,15 @@ function computeTokenOverlap(itemA, itemB) {
   }
 
   if (strA === strB) return 1.0;
-  if (strA.includes(strB) || strB.includes(strA)) return 0.85;
+
+  // Substring containment: only use if the shorter string is at least 70% as long as the longer.
+  // This prevents dangerous false positives like:
+  //   "Java" (4) in "JavaScript" (10) — ratio = 0.4, below threshold
+  //   "C" (1) in "C++" (3) — ratio = 0.33, below threshold
+  //   "React" (5) in "React Native" (12) — ratio = 0.42, below threshold
+  // But allows: "Node" (4) in "Node.js" (7) — ratio = 0.57 — OK (taxonomy would already catch this)
+  const lenRatio = Math.min(strA.length, strB.length) / Math.max(strA.length, strB.length);
+  if ((strA.includes(strB) || strB.includes(strA)) && lenRatio >= 0.7) return 0.85;
 
   const tokensA = new Set(strA.split(/\W+/).filter(t => t.length > 1));
   const tokensB = new Set(strB.split(/\W+/).filter(t => t.length > 1));
@@ -128,7 +136,7 @@ function extractJdRequirements(extractedJd) {
 
   return {
     technicalSkills: reqSkills,
-    projects: respList.length > 0 ? respList : reqSkills, 
+    projects: [], // Do not use reqSkills as a proxy for projects — they are different categories
     experience: reqSkills, 
     education: jd.educationRequirement ? [jd.educationRequirement] : [],
     responsibilities: respList,

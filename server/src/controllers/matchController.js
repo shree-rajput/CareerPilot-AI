@@ -9,13 +9,17 @@ import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
 import { env } from "../config/env.js";
 
-function hashText(text) {
+export function hashText(text) {
   return crypto
     .createHash("sha256")
     .update(text || "")
     .digest("hex")
     .slice(0, 16);
 }
+
+// Increment this version when the matching algorithm changes significantly.
+// Existing cached MatchResult records with a different version will not be served.
+export const MATCHING_ENGINE_VERSION = "2.0";
 
 /**
  * POST /api/match
@@ -67,6 +71,7 @@ export const runMatch = asyncHandler(async (req, res) => {
     resumeHash,
     jdHash,
     userId: req.user._id,
+    matchingEngineVersion: MATCHING_ENGINE_VERSION,
   }).lean();
 
   if (cached) {
@@ -136,6 +141,7 @@ export const runMatch = asyncHandler(async (req, res) => {
     resumeId,
     resumeHash,
     jdHash,
+    matchingEngineVersion: MATCHING_ENGINE_VERSION,
     overallScore: pipelineResult.overallScore,
     categoryScores: pipelineResult.categoryScores,
     fitBreakdown: pipelineResult.fitBreakdown,

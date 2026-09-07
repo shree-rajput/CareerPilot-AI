@@ -14,6 +14,7 @@ import { domainEvents, DOMAIN_EVENTS } from "../services/events/domainEvents.js"
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
+import { queueApplicationIntelligence } from "../services/intelligence/backgroundIntelligenceService.js";
 
 const createApplicationSchema = z.object({
   company: z.string().trim().min(1).max(150),
@@ -88,7 +89,15 @@ export const createApplication = asyncHandler(async (req, res) => {
     jobUrl: jobUrl || "",
     location: location || "",
     notes: notes || "",
-    statusHistory: [{ status: "saved" }]
+    statusHistory: [{ 
+      fromStatus: "",
+      toStatus: "saved",
+      changedBy: "manual",
+      source: "user_manual_update",
+      confidence: "high",
+      evidence: "User created application manually",
+      note: "Initial manual creation"
+    }]
   });
 
   return res.status(201).json({
@@ -110,6 +119,8 @@ export const externalCaptureSchema = z.object({
   notes: z.string().trim().max(2000).optional().default(""),
   status: z.enum(STATUS_VALUES).optional().default("applied"),
   confidence: z.preprocess((val) => (typeof val === "string" ? val.toLowerCase() : val), z.enum(["high", "medium", "low"])).optional().default("high"),
+  contextType: z.enum(["JOB_POSTING", "APPLICATION_PAGE", "CAREER_PAGE", "NON_JOB_PAGE", "UNKNOWN", "APPLICATION_EMAIL"]).optional().default("UNKNOWN"),
+  detectionScore: z.number().min(0).max(100).optional(),
   evidence: z.string().optional().default("Captured via Chrome Extension"),
   source: z.string().optional().default("extension")
 });
@@ -125,8 +136,16 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     throw new AppError(parsed.error.errors[0]?.message || "Invalid capture request.", 400, "VALIDATION_ERROR");
   }
 
-  const { company, role, jobDescription, jobUrl, location, notes, status: targetStatus, confidence, evidence, source } = parsed.data;
+  const { company, role, jobDescription, jobUrl, location, notes, status: targetStatus, confidence, contextType, detectionScore, evidence, source } = parsed.data;
   const userId = req.user._id || req.user.id;
+
+  // Generic Detection Backend Validation
+  const isManualAction = source === "extension_manual_action" || source === "manual_override";
+  
+  // NOTE: We no longer reject captures based on LOW confidence or missing semantic keywords here.
+  // The "CAPTURE FIRST, VALIDATE LATER" principle dictates that if the user explicitly clicked Save/Mark Applied,
+  // we persist the application and perform intelligence analysis (matching, etc.) asynchronously.
+
 
   // 1. Search for matching existing application by jobUrl or company/role pair
   let existingApp = null;
@@ -151,6 +170,9 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
   if (existingApp) {
     if (existingApp.status === targetStatus) {
       return res.status(200).json({
+        success: true,
+        created: false,
+        existing: true,
         message: `Matching application already exists at status '${targetStatus}'.`,
         application: existingApp,
         isDuplicate: true
@@ -169,8 +191,11 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     if (!transitionResult.success) {
       // If low confidence or forbidden, log suggestion rather than breaking
       return res.status(400).json({
-        message: transitionResult.reason || `Status transition from '${existingApp.status}' to '${targetStatus}' forbidden.`,
-        application: existingApp
+        success: false,
+        error: {
+          code: "FORBIDDEN_TRANSITION",
+          message: transitionResult.reason || `Status transition from '${existingApp.status}' to '${targetStatus}' forbidden.`
+        }
       });
     }
 
@@ -194,6 +219,9 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
+      created: false,
+      existing: true,
       message: `Existing application updated to '${targetStatus}' via extension.`,
       application: existingApp,
       updated: true
@@ -238,10 +266,17 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     }).catch(() => {});
   }
 
+  // Trigger AI Pipeline in background (Fire and Forget)
+  Promise.resolve().then(() => {
+    queueApplicationIntelligence(app._id.toString());
+  }).catch(err => console.error("Failed to start background intelligence pipeline:", err));
+
   return res.status(201).json({
+    success: true,
+    created: true,
+    existing: false,
     message: "New application captured & synchronized via extension.",
-    application: app,
-    created: true
+    application: app
   });
 });
 
@@ -286,6 +321,38 @@ export const getApplication = asyncHandler(async (req, res) => {
   }
 
   return res.json({ application: app });
+});
+
+/**
+ * POST /api/applications/:id/retry-intelligence
+ * Manually retries the JD extraction and matching pipeline.
+ */
+export const retryApplicationIntelligence = asyncHandler(async (req, res) => {
+  const application = await Application.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
+  });
+
+  if (!application) {
+    throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+  }
+
+  // Update status immediately so frontend knows it started
+  application.extractionStatus = "PROCESSING";
+  application.extractionError = null;
+  await application.save();
+
+  // Detached queueing
+  Promise.resolve().then(() => {
+    // If there's an existing match result/resume, attempt to re-match with it
+    queueApplicationIntelligence(application._id.toString(), application.resumeVersionId?.toString() || null);
+  }).catch(err => console.error("Failed to retry intelligence pipeline:", err));
+
+  return res.json({
+    success: true,
+    message: "Intelligence pipeline retried.",
+    extractionStatus: "PROCESSING"
+  });
 });
 
 /**

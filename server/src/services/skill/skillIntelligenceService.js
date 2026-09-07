@@ -60,7 +60,7 @@ const DEFAULT_SKILL_TAXONOMY = [
   {
     name: "React",
     canonicalName: "React",
-    aliases: ["react", "reactjs", "react.js", "react-js"],
+    aliases: ["react", "reactjs", "react.js", "react-js", "react js"],
     category: "framework",
     technologyType: "frontend",
     parentSkill: "JavaScript",
@@ -89,7 +89,7 @@ const DEFAULT_SKILL_TAXONOMY = [
   {
     name: "Node.js",
     canonicalName: "Node.js",
-    aliases: ["node.js", "nodejs", "node", "node-js"],
+    aliases: ["node.js", "nodejs", "node", "node-js", "node js", "node.js runtime"],
     category: "framework",
     technologyType: "backend",
     parentSkill: "JavaScript",
@@ -98,7 +98,7 @@ const DEFAULT_SKILL_TAXONOMY = [
   {
     name: "Express.js",
     canonicalName: "Express.js",
-    aliases: ["express", "expressjs", "express.js"],
+    aliases: ["express", "expressjs", "express.js", "express-js", "express js"],
     category: "framework",
     technologyType: "backend",
     parentSkill: "Node.js",

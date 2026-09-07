@@ -41,6 +41,7 @@
   "devDependencies": {
     "eslint": "^9.8.0",
     "globals": "^15.9.0",
+    "jsdom": "^30.0.1",
     "nodemon": "^3.1.4"
   }
 }

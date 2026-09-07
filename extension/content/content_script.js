@@ -581,123 +581,144 @@
     }
   }
 
-    // 7. Job Page Detection Engine
-  function detectJobPage() {
-    // Guardrail: Never run job posting detection on Gmail tabs
+  // 7. Generic Job Context Detection Engine (Evidence Collector)
+  function collectPageEvidence(doc = window.document, url = window.location.href) {
     if (window.__CAREERPILOT_CONTEXT_DETECTOR__?.isGmail() || window.location.hostname.includes("mail.google.com")) {
       return {
         isJobPage: false,
-        confidence: 0,
-        reason: "Gmail tab active - Gmail Email Detector pipeline activated",
+        isJobContext: false,
+        confidence: "LOW",
+        score: 0,
+        contextType: "APPLICATION_EMAIL",
         detectedPlatform: "gmail",
+        reason: "Gmail tab active - Email detection pipeline active",
+        evidence: [],
       };
     }
 
-    const url = window.location.href;
-    const host = window.location.hostname.toLowerCase();
-    const path = window.location.pathname.toLowerCase();
+    const urlObj = new URL(url);
+    const host = urlObj.hostname.toLowerCase();
+    const path = urlObj.pathname.toLowerCase();
 
-    let confidence = 0;
+    let score = 0;
+    const evidence = [];
     const reasons = [];
 
-    let jsonLdJob = null;
+    // --- 1. NEGATIVE & CONTRADICTORY SIGNALS (Subtractive) ---
+    if (doc.querySelector('textarea[placeholder*="message" i]') || doc.querySelector('textarea[placeholder*="chat" i]')) {
+      score -= 30;
+      reasons.push("Presence of conversational chat interface");
+    }
+
+    if (doc.querySelector("article") && doc.querySelector('meta[property="article:published_time"]')) {
+      score -= 40;
+      reasons.push("Page structure matches a published article/blog");
+    }
+
+    if (doc.querySelectorAll(".search-result, .g, .yuRUbf").length > 5) {
+      score -= 40;
+      reasons.push("Layout resembles a generic search engine result page");
+    }
+
+    if (doc.querySelector(".question-page") || doc.querySelector(".answercell")) {
+      score -= 50;
+      reasons.push("Forum / Q&A layout detected");
+    }
+
+    // --- 2. POSITIVE SIGNALS (Additive) ---
+    let hasJsonLd = false;
     try {
-      const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+      const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
       for (const script of scripts) {
         if (!script.textContent) continue;
         const data = JSON.parse(script.textContent);
         const items = Array.isArray(data) ? data : data["@graph"] ? data["@graph"] : [data];
         for (const item of items) {
           if (item && (item["@type"] === "JobPosting" || item.type === "JobPosting")) {
-            jsonLdJob = item;
+            hasJsonLd = true;
             break;
           }
         }
-        if (jsonLdJob) break;
+        if (hasJsonLd) break;
       }
     } catch (e) {}
 
-    if (jsonLdJob) {
-      confidence += 50;
-      reasons.push("JSON-LD JobPosting schema found");
+    if (hasJsonLd) {
+      score += 50;
+      evidence.push("Valid JSON-LD JobPosting schema found");
     }
 
-    const isJobUrl =
-      /\/jobs\/(view|collections|search-results)/.test(url) ||
-      /currentJobId=/.test(url) ||
-      /\/viewjob/.test(url) ||
-      /jk=/.test(url) ||
-      /\/job\//.test(path) ||
-      /\/careers?\//.test(path) ||
-      /\/position\//.test(path) ||
-      /\/vacancy\//.test(path) ||
-      /gh_jid=/.test(url) ||
-      /lever\.co/.test(host) ||
-      /greenhouse\.io/.test(host) ||
-      /workday\.com|myworkdayjobs\.com/.test(host) ||
-      /ashbyhq\.com/.test(host) ||
-      /smartrecruiters\.com/.test(host) ||
-      /naukri\.com\/job-listings/.test(url) ||
-      /wellfound\.com\/jobs/.test(url);
+    const applyButtons = Array.from(doc.querySelectorAll("button, a, input[type='submit']")).filter(el => {
+      const text = (el.value || el.textContent || "").trim().toLowerCase();
+      return /^(apply|apply now|easy apply|submit application|apply for this job|apply for this position|submit)$/i.test(text);
+    });
 
-    if (isJobUrl) {
-      confidence += 20;
-      reasons.push("URL matches job posting pattern");
+    if (applyButtons.length > 0) {
+      score += 20;
+      evidence.push("Prominent Application button found");
     }
 
-    const titleEl =
-      document.querySelector(".job-details-jobs-unified-top-card__job-title") ||
-      document.querySelector(".jobs-unified-top-card__job-title") ||
-      document.querySelector(".jobsearch-JobInfoHeader-title") ||
-      document.querySelector('[itemprop="title"]') ||
-      document.querySelector('[data-qa="job-title"]') ||
-      document.querySelector('[data-automation-id="jobPostingHeader"]') ||
-      document.querySelector(".ashby-job-posting-heading") ||
-      document.querySelector("#job-title") ||
-      document.querySelector(".job-title") ||
-      document.querySelector("h1");
-
-    const titleText = titleEl ? cleanText(titleEl.textContent) : "";
-    if (titleText && titleText.length >= 3 && titleText.length <= 140) {
-      confidence += 15;
-      reasons.push("Job title element detected");
+    if (/\/jobs?\//.test(path) || /\/careers?\//.test(path) || /\/vacanc(y|ies)\//.test(path) || /\/requisition\//.test(path) || /jk=|gh_jid=/.test(url)) {
+      score += 15;
+      evidence.push("URL structure contains career/job posting identifiers");
     }
 
-    const descEl =
-      document.querySelector("#job-details") ||
-      document.querySelector(".jobs-description__content") ||
-      document.querySelector("#jobDescriptionText") ||
-      document.querySelector('[itemprop="description"]') ||
-      document.querySelector('[data-automation-id="jobPostingDescription"]') ||
-      document.querySelector(".ashby-job-posting-description") ||
-      document.querySelector("#job-description") ||
-      document.querySelector(".job-description") ||
-      document.querySelector("article");
-
-    const descText = descEl ? cleanText(descEl.textContent) : "";
-    if (descText && descText.length >= 60) {
-      confidence += 15;
-      reasons.push("Job description content block detected");
+    const headers = Array.from(doc.querySelectorAll("h1, h2, h3, h4, strong, b")).map(el => (el.textContent || "").toLowerCase());
+    const hasReqs = headers.some(t => t.includes("requirements") || t.includes("qualifications") || t.includes("what you'll do") || t.includes("responsibilities"));
+    if (hasReqs) {
+      score += 15;
+      evidence.push("Job requirements/responsibilities section detected");
     }
 
-    let detectedPlatform = "generic";
-    if (host.includes("linkedin.com")) detectedPlatform = "linkedin";
-    else if (host.includes("indeed.com")) detectedPlatform = "indeed";
-    else if (host.includes("greenhouse.io")) detectedPlatform = "greenhouse";
-    else if (host.includes("lever.co")) detectedPlatform = "lever";
-    else if (host.includes("workday.com") || host.includes("myworkdayjobs.com")) detectedPlatform = "workday";
-    else if (host.includes("ashbyhq.com")) detectedPlatform = "ashby";
-    else if (host.includes("smartrecruiters.com")) detectedPlatform = "smartrecruiters";
+    if (doc.body && doc.body.textContent && /(\$|€|£)\s*\d{2,3},?\d{3}\s*(-\s*(\$|€|£)?\s*\d{2,3},?\d{3})?/.test(doc.body.textContent)) {
+      if (headers.some(t => t.includes("salary") || t.includes("compensation") || t.includes("pay"))) {
+        score += 10;
+        evidence.push("Compensation/Salary metadata detected");
+      }
+    }
 
-    const isJobPage = confidence >= 30 && Boolean(titleText) && Boolean(descText);
+    // --- 3. PLATFORM & CONTEXT DETERMINATION ---
+    let platform = "unknown";
+    if (host.includes("linkedin.com")) platform = "linkedin";
+    else if (host.includes("indeed.com")) platform = "indeed";
+    else if (host.includes("greenhouse.io") || url.includes("gh_jid")) platform = "greenhouse";
+    else if (host.includes("lever.co")) platform = "lever";
+    else if (host.includes("workday.com") || host.includes("myworkdayjobs.com")) platform = "workday";
+    else if (host.includes("ashbyhq.com")) platform = "ashby";
+    else if (host.includes("smartrecruiters.com")) platform = "smartrecruiters";
+    else if (host.includes("naukri.com")) platform = "naukri";
+    else if (host.includes("wellfound.com")) platform = "wellfound";
+    else platform = "generic";
 
+    let contextType = "UNKNOWN";
+    if (score >= 40) {
+      contextType = "JOB_POSTING";
+      if (path === "/careers" || path === "/jobs" || path === "/careers/") {
+        if (!hasJsonLd && applyButtons.length === 0) {
+          contextType = "CAREER_PAGE";
+          score -= 20;
+          reasons.push("Appears to be a general career landing page, not a specific job");
+        }
+      }
+    } else {
+      contextType = "NON_JOB_PAGE";
+      reasons.push("Insufficient job evidence");
+    }
+
+    let confidence = "LOW";
+    if (score >= 70) confidence = "HIGH";
+    else if (score >= 40) confidence = "MEDIUM";
+
+    // Never strictly reject, let the user override
     return {
-      isJobPage,
-      confidence: Math.min(100, confidence),
-      reason: reasons.join(", ") || "Insufficient job posting indicators on page",
-      detectedPlatform,
-      extractedTitle: titleText,
-      hasDescription: Boolean(descText),
+      isJobContext: true, // Always allow context to pass to extension
+      isJobPage: true, // Always allow UI to render (will show "Review & Capture" if low score)
+      confidence,
+      score: Math.max(0, Math.min(100, score)),
+      contextType,
+      detectedPlatform: platform,
+      evidence,
+      reason: reasons.length > 0 ? reasons.join(", ") : "Detected partial or sufficient job evidence."
     };
   }
 
@@ -722,70 +743,155 @@
     }
   }
 
+  // 7.5 Self-Verification Pipeline
+  function runSelfVerificationPipeline(evidence, initialJobData) {
+    let recoveredData = { ...initialJobData };
+    let verificationScore = evidence.score || 0;
+    let verificationSignals = [];
+
+    // 1. Visible Content Analysis
+    const textContext = document.body.innerText || "";
+    
+    const jobKeywords = ["responsibilities", "qualifications", "requirements", "what you'll do", "about the role", "who you are", "years of experience"];
+    let matchedKeywords = 0;
+    for (const kw of jobKeywords) {
+      if (textContext.toLowerCase().includes(kw)) {
+        matchedKeywords++;
+      }
+    }
+    
+    if (matchedKeywords >= 2) {
+      verificationScore += 30;
+      verificationSignals.push("Found multiple job description keywords");
+    }
+
+    // 2. Aggressive Title/Company Recovery
+    if (!recoveredData.title) {
+      const h1s = Array.from(document.querySelectorAll("h1"));
+      if (h1s.length > 0) {
+        recoveredData.title = cleanText(h1s[0].textContent);
+        verificationSignals.push("Recovered title from primary H1");
+      }
+    }
+
+    if (!recoveredData.company) {
+       const metaName = document.querySelector('meta[property="og:site_name"]');
+       if (metaName) {
+         recoveredData.company = cleanText(metaName.getAttribute("content"));
+         verificationSignals.push("Recovered company from OpenGraph");
+       } else {
+         const domainParts = window.location.hostname.split(".");
+         if (domainParts.length >= 2) {
+           let name = domainParts[domainParts.length - 2];
+           if (name.length > 2) {
+             recoveredData.company = name.charAt(0).toUpperCase() + name.slice(1);
+             verificationSignals.push("Recovered company from URL domain");
+           }
+         }
+       }
+    }
+
+    // 3. Apply Button Deep Search
+    const applyButtons = Array.from(document.querySelectorAll("button, a, div[role='button']")).filter(el => {
+      const text = (el.value || el.textContent || "").trim().toLowerCase();
+      return /^(apply|apply now|easy apply|submit application|apply for this job|submit)$/i.test(text);
+    });
+    
+    if (applyButtons.length > 0) {
+      verificationScore += 25;
+      verificationSignals.push("Found hidden or deep Apply button");
+    }
+
+    // Recalculate Final Confidence
+    if (recoveredData.title && recoveredData.title.length >= 3) verificationScore += 30;
+    if (recoveredData.company && recoveredData.company.length >= 2) verificationScore += 30;
+    
+    let recoveredConfidence = "LOW";
+    if (verificationScore >= 80) recoveredConfidence = "HIGH";
+    else if (verificationScore >= 40) recoveredConfidence = "MEDIUM";
+
+    return {
+      recoveredData,
+      recoveredConfidence,
+      verificationSignals
+    };
+  }
+
   function extractCurrentJob() {
     if (cachedExtractionResult && cachedUrl === window.location.href) {
       return cachedExtractionResult;
     }
 
-    const detection = detectJobPage();
+    const evidence = collectPageEvidence();
 
-    if (!detection.isJobPage) {
-      const genericAdapter = new GenericAdapter();
-      const fallbackPayload = genericAdapter.extract();
-
-      if (fallbackPayload.title && fallbackPayload.description && fallbackPayload.description.length >= 50) {
-        cachedUrl = window.location.href;
-        cachedExtractionResult = {
-          isJobPage: true,
-          status: "JOB_DETECTED",
-          data: fallbackPayload,
-          detection: { ...detection, isJobPage: true, detectedPlatform: "generic" },
-          diagnostics: {
-            stage: "extractionCompleted",
-            strategy: "generic_fallback",
-            confidence: fallbackPayload.extractionConfidence,
-          },
-        };
-        return cachedExtractionResult;
-      }
-
-      return {
-        isJobPage: false,
-        status: "JOB_NOT_DETECTED",
-        reason: detection.reason,
-        detection,
-        diagnostics: {
-          stage: "detectionFailed",
-          hostname: window.location.hostname,
-        },
-      };
-    }
-
-    const platformAdapter = getAdapter(detection.detectedPlatform);
+    const platformAdapter = getAdapter(evidence.detectedPlatform);
     let jobData = platformAdapter.extract();
 
     // Fallback: If platform adapter returned low confidence, try GenericAdapter
-    if (jobData.extractionConfidence === "LOW" && detection.detectedPlatform !== "generic") {
+    if (jobData.extractionConfidence === "LOW" && evidence.detectedPlatform !== "generic") {
       const genericAdapter = new GenericAdapter();
       const genericData = genericAdapter.extract();
       if (genericData.extractionConfidence !== "LOW" || (genericData.description && genericData.description.length > jobData.description.length)) {
         jobData = genericData;
       }
     }
+    
+    // Merge detection engine's output with jobData for backend validation
+    jobData.detectionConfidence = evidence.confidence;
+    jobData.contextType = evidence.contextType;
+    jobData.detectionScore = evidence.score;
 
-    cachedUrl = window.location.href;
-    cachedExtractionResult = {
-      isJobPage: true,
-      status: "JOB_DETECTED",
-      data: jobData,
-      detection,
-      diagnostics: {
-        stage: "extractionCompleted",
-        detectedPlatform: detection.detectedPlatform,
-        confidence: jobData.extractionConfidence,
-        source: jobData.source,
-      },
-    };
+    // Minimum Capture Contract: Must have Company and Role
+    const hasMinimumIdentity = !!(jobData.company && jobData.title);
+
+    // Dynamic Confidence
+    let finalScore = evidence.score; // Base score from page structure
+    if (jobData.title && jobData.title.length >= 3) finalScore += 30;
+    if (jobData.company && jobData.company.length >= 2) finalScore += 30;
+    if (jobData.description && jobData.description.length >= 80) finalScore += 20;
+    if (jobData.externalJobId) finalScore += 15;
+    if (jobData.salary) finalScore += 10;
+    if (jobData.location) finalScore += 10;
+    if (jobData.employmentType) finalScore += 5;
+    
+    let finalConfidence = "LOW";
+    if (finalScore >= 80) finalConfidence = "HIGH";
+    else if (finalScore >= 40) finalConfidence = "MEDIUM";
+
+    if (hasMinimumIdentity && (finalConfidence === "HIGH" || finalConfidence === "MEDIUM" || evidence.isJobPage)) {
+        cachedUrl = window.location.href;
+        cachedExtractionResult = {
+          isJobPage: true,
+          status: "JOB_DETECTED",
+          data: jobData,
+          detection: evidence,
+          diagnostics: {
+            stage: "extractionCompleted",
+            detectedPlatform: evidence.detectedPlatform,
+            confidence: finalConfidence,
+            source: jobData.source,
+          },
+        };
+    } else {
+        // Trigger Self-Verification Pipeline
+        const recoveryResult = runSelfVerificationPipeline(evidence, jobData);
+        
+        // Even if recovery is partial, we DO NOT reject. We allow "Review & Capture".
+        cachedUrl = window.location.href;
+        cachedExtractionResult = {
+          isJobPage: true,
+          status: "PARTIAL_EVIDENCE",
+          data: recoveryResult.recoveredData,
+          detection: evidence,
+          reason: evidence.reason || "Some job details are missing. Please review and capture.",
+          diagnostics: {
+            stage: "recoveryCompleted",
+            detectedPlatform: evidence.detectedPlatform,
+            confidence: recoveryResult.recoveredConfidence,
+            signals: recoveryResult.verificationSignals
+          }
+        };
+    }
 
     return cachedExtractionResult;
   }
@@ -859,7 +965,8 @@
     const isGmail = window.__CAREERPILOT_CONTEXT_DETECTOR__?.isGmail() || window.location.hostname.includes("mail.google.com");
 
     if (request.type === "GET_PAGE_CONTEXT") {
-      const context = isGmail ? "GMAIL_EMAIL" : detectJobPage().isJobPage ? "JOB_POSTING" : "OTHER";
+      const isJobPosting = window.__CAREERPILOT_CONTEXT_DETECTOR__?.isJobPostingPage ? window.__CAREERPILOT_CONTEXT_DETECTOR__.isJobPostingPage() : false;
+      const context = isGmail ? "GMAIL_EMAIL" : isJobPosting ? "JOB_POSTING" : "OTHER";
       sendResponse({ context });
     } else if (request.type === "GET_JOB_DATA") {
       if (isGmail) {

@@ -22,6 +22,9 @@ const ATS_DOMAINS = new Set([
   "recooty.com",
   "rippling.com",
   "breezy.hr",
+  "indeed.com",
+  "match.indeed.com",
+  "linkedin.com",
 ]);
 
 // False positive indicators (newsletters, job alerts, advice, promotional)
@@ -106,6 +109,7 @@ const OFFER_PHRASES = [
 const APPLIED_PHRASES = [
   "thank you for applying",
   "application received",
+  "has been received",
   "received your application",
   "we have received your application",
   "thank you for your interest in",
@@ -151,6 +155,7 @@ export function extractCompanyAndRoleFromEmail({
   subject = "",
   bodyText = "",
   senderName = "",
+  senderEmail = "",
   senderDomain = "",
   extractedCompanyHints = "",
   extractedRoleHints = "",
@@ -159,11 +164,40 @@ export function extractCompanyAndRoleFromEmail({
   let role = cleanString(extractedRoleHints);
 
   const fullText = `${subject} \n ${bodyText}`;
+  const actualDomain = senderDomain || (senderEmail ? senderEmail.split("@")[1] : "");
 
-  // 1. Search Body text for "for your <Role> application/position at <Company>" or "applying for <Role> position at <Company>"
+  // --- 1. INDEED ADAPTER ---
+  if (actualDomain.includes("indeed.com") || senderName.toLowerCase().includes("indeed")) {
+    const indeedMatch = subject.match(/(.*?)\s+[@|\-]\s+(.*?)$/i);
+    if (indeedMatch) {
+      if (!role) role = cleanString(indeedMatch[1]);
+      if (!company) company = cleanString(indeedMatch[2]);
+    }
+    if (!company || !role) {
+      const appliedMatch = subject.match(/received:\s+(.*?)\s+at\s+(.*?)$/i);
+      if (appliedMatch) {
+        if (!role) role = cleanString(appliedMatch[1]);
+        if (!company) company = cleanString(appliedMatch[2]);
+      }
+    }
+  }
+
+  // --- 2. LINKEDIN ADAPTER ---
+  if (actualDomain.includes("linkedin.com") || senderName.toLowerCase().includes("linkedin")) {
+    const liMatch = subject.match(/application for (.*?) at (.*?)$/i);
+    if (liMatch) {
+      if (!role) role = cleanString(liMatch[1]);
+      if (!company) company = cleanString(liMatch[2]);
+    }
+  }
+
+  // --- 3. GENERIC ADAPTER ---
+  const KNOWN_TOOLS = new Set(["hackerrank", "codesignal", "testgorilla", "karat", "greenhouse", "lever", "workday", "application received"]);
+  
+  // 3a. "<Role> at <Company>" in body (with optional position/role keyword)
   if (!company || !role) {
     const bodyMatch1 = fullText.match(
-      /(?:applying|applied|application|assessment)\s+for\s+(?:the\s+|your\s+)?(.+?)\s+(?:position|role|application)\s+at\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\s+if|\n|$)/i
+      /(?:applying|applied|application|assessment|withdrawn your application)\s+for\s+(?:the\s+|a\s+|your\s+)?(.+?)\s+(?:position\s+|role\s+|application\s+)?(?:at|with)\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\s+if|\n|$)/i
     );
     if (bodyMatch1) {
       if (!role) role = cleanString(bodyMatch1[1]);
@@ -171,10 +205,10 @@ export function extractCompanyAndRoleFromEmail({
     }
   }
 
-  // 2. Search Body text for "for the <Role> position at <Company>" or "<Role> at <Company>"
+  // 3b. "for the <Role> position at <Company>"
   if (!company || !role) {
     const bodyMatch2 = fullText.match(
-      /(?:for\s+the|for\s+a|for\s+your)\s+([A-Z][A-Za-z0-9\s\-]+?)\s+(?:position|role|application)\s+at\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\n|$)/i
+      /(?:for\s+the|for\s+a|for\s+your)\s+([A-Z][A-Za-z0-9\s\-]+?)\s+(?:position\s+|role\s+|application\s+)?(?:at|with)\s+([A-Z0-9\s&.\-]+?)(?:\.|\,|\s+and|\n|$)/i
     );
     if (bodyMatch2) {
       if (!role) role = cleanString(bodyMatch2[1]);
@@ -182,53 +216,82 @@ export function extractCompanyAndRoleFromEmail({
     }
   }
 
-  // 3. Search Subject pattern: "... for <Role> at <Company>"
-  if (!company || !role) {
-    const forAtMatch = subject.match(
-      /(?:for|to|position|role)?\s*([^-(]+?)\s+at\s+([A-Z0-9\s&.\-]+?)(?:\s+-\s+|\s+\(|\s*$)/i
-    );
-    if (forAtMatch) {
-      const rawRole = forAtMatch[1]
-        ?.replace(/update on your application/i, "")
-        ?.replace(/application/i, "")
-        ?.trim();
-      if (!role && rawRole) role = cleanString(rawRole);
-      if (!company && forAtMatch[2]?.trim()) company = cleanString(forAtMatch[2]);
+  // 3c. Extract Role if Company is missing but Role is explicit
+  if (!role) {
+    const roleMatch = fullText.match(/(?:for\s+|offer(?:ing)?\s+(?:you\s+)?)(?:the\s+|a\s+)?(.+?)\s+(?:role|position|opportunity)(?:\.|\,|\s|\n|$)/i);
+    if (roleMatch) {
+      role = cleanString(roleMatch[1]);
     }
   }
 
-  // 4. Search Subject pattern: "<Role> - <Company>" or "<Company> - <Role>"
-  const KNOWN_TOOLS = new Set(["hackerrank", "codesignal", "testgorilla", "karat", "greenhouse", "lever", "workday"]);
-  if ((!company || !role) && subject.includes(" - ")) {
-    const parts = subject.split(" - ");
-    if (parts.length >= 2) {
-      const p2 = cleanString(parts[1]);
-      if (!KNOWN_TOOLS.has(p2.toLowerCase())) {
-        if (!role) role = cleanString(parts[0]);
-        if (!company) company = p2;
+  // 3d. Search Subject pattern with generic separators (@, at, -, |)
+  if (!company || !role) {
+    const subjectMatch = subject.match(/^(?:update(?: on your application)?:\s*|application(?: received)?(?: -)?\s*|coding assessment invitation(?: -)?\s*|interview scheduling for\s*)?([^-(@|]+?)\s+(?:at|@|\||-)\s+([A-Z0-9\s&.\-]+?)(?:\s+-\s+|\s+\(|\s*$)/i);
+    if (subjectMatch) {
+      const rawRole = subjectMatch[1]?.trim();
+      const rawComp = subjectMatch[2]?.trim();
+      
+      if (KNOWN_TOOLS.has(rawRole.toLowerCase())) {
+        // e.g. "Application received - Data Engineer"
+        if (!role) role = cleanString(rawComp);
+      } else if (KNOWN_TOOLS.has(rawComp.toLowerCase())) {
+        // e.g. "Data Engineer - HackerRank"
+        if (!role) role = cleanString(rawRole);
       } else {
-        if (!role) role = cleanString(parts[0]).replace(/coding assessment invitation|interview invitation|assessment/gi, "").trim();
+        // "Role at Company" (using separator matching)
+        // If the separator is "-", it could be "Company - Role" or "Role - Company". We'll rely on the separator logic.
+        // Wait, if it matched `\s+-\s+`, let's just let it fall through to 3e if it's a hyphen, or we can trust the first part is role.
+        // We'll trust first part is role unless it's a hyphen, handled next.
+        if (subject.includes("-") && !subject.includes("@") && !subject.match(/\s+at\s+/i)) {
+          // let 3e handle it
+        } else {
+          if (!role && rawRole) role = cleanString(rawRole);
+          if (!company && rawComp) company = cleanString(rawComp);
+        }
       }
     }
   }
 
-  // 5. Sender Domain Fallback for Company
-  if ((!company || KNOWN_TOOLS.has(company.toLowerCase())) && senderDomain && !ATS_DOMAINS.has(senderDomain.toLowerCase())) {
-    const domainName = senderDomain.split(".")[0];
-    if (domainName && domainName.length > 2 && !["gmail", "yahoo", "hotmail", "outlook"].includes(domainName)) {
-      company = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+  // 3e. Search Subject for "Company - Role"
+  if ((!company || !role) && subject.includes(" - ")) {
+    const parts = subject.split(" - ");
+    if (parts.length >= 2) {
+      const p1 = cleanString(parts[0]);
+      const p2 = cleanString(parts[1]);
+      if (KNOWN_TOOLS.has(p1.toLowerCase())) {
+        if (!role) role = p2;
+      } else if (KNOWN_TOOLS.has(p2.toLowerCase())) {
+        if (!role) role = p1;
+      } else {
+        // Assume Company - Role
+        if (!company) company = p1;
+        if (!role) role = p2;
+      }
     }
   }
 
-  // 6. Sender Name Fallback
-  if ((!company || KNOWN_TOOLS.has(company.toLowerCase())) && senderName && !senderName.toLowerCase().includes("no-reply")) {
-    const cleanSender = senderName.replace(/careers|recruiting|team|jobs|hr|notifications/gi, "").trim();
-    if (cleanSender.length > 2) {
+  // 4. Sender Domain Fallback for Company
+  if ((!company || KNOWN_TOOLS.has(company.toLowerCase()) || company.toLowerCase() === "unknown") && actualDomain && !ATS_DOMAINS.has(actualDomain.toLowerCase())) {
+    const domainName = actualDomain.split(".")[0];
+    if (domainName && domainName.length > 2 && !["gmail", "yahoo", "hotmail", "outlook"].includes(domainName)) {
+      if (domainName !== "indeed" && domainName !== "linkedin") {
+        company = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+      }
+    }
+  }
+
+  // 5. Sender Name Fallback
+  if ((!company || KNOWN_TOOLS.has(company.toLowerCase()) || company.toLowerCase() === "unknown") && senderName && !senderName.toLowerCase().includes("no-reply") && !senderName.toLowerCase().includes("donotreply")) {
+    const cleanSender = senderName.replace(/careers|recruiting|team|jobs|hr|notifications|talent/gi, "").trim();
+    if (cleanSender.length > 2 && cleanSender.toLowerCase() !== "indeed" && cleanSender.toLowerCase() !== "linkedin") {
       company = cleanSender;
     }
   }
 
-  return { company, role };
+  return { 
+    company: company || "Unknown", 
+    role: role || "Unknown" 
+  };
 }
 
 function cleanString(str) {
@@ -308,6 +371,7 @@ export function classifyEmailEvent(emailData) {
   const relevance = classifyEmailRelevance(emailData);
 
   const {
+    senderEmail = "",
     senderDomain = "",
     senderName = "",
     subject = "",
@@ -336,6 +400,7 @@ export function classifyEmailEvent(emailData) {
     subject,
     bodyText,
     senderName,
+    senderEmail,
     senderDomain,
     extractedCompanyHints,
     extractedRoleHints,
