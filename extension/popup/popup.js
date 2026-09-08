@@ -425,6 +425,10 @@ function renderPreview(payload, tabContext = null) {
     confidenceBanner.innerText = "ℹ️ Prompt dismissed — Local context only";
     confidenceBanner.className = "banner banner-neutral mb-3";
     confidenceBanner.classList.remove("hidden");
+  } else if (!window.isAuthenticated) {
+    confidenceBanner.innerText = "🔐 Connect CareerPilot to save jobs & calculate match scores";
+    confidenceBanner.className = "banner banner-neutral mb-3";
+    confidenceBanner.classList.remove("hidden");
   }
 
   const workplaceBadge = document.getElementById("previewWorkplace");
