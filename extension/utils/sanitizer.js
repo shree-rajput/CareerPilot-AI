@@ -43,53 +43,64 @@ export function sanitizeJobUrl(rawUrl = "") {
   }
 }
 
-/**
- * Strips cookie notices, consent overlays, privacy disclosures, headers, footers, and navigation bars from job descriptions.
- */
 export function cleanJobDescriptionText(elementOrText, doc = typeof window !== "undefined" ? window.document : null) {
   let rawText = "";
 
-  if (typeof elementOrText === "string") {
-    rawText = elementOrText;
-  } else if (elementOrText && elementOrText.cloneNode) {
+  const EXCLUDED_SELECTORS = [
+    '#onetrust-consent-sdk',
+    '#onetrust-banner-sdk',
+    '.onetrust-pc-dark',
+    '[id*="cookie" i]',
+    '[class*="cookie" i]',
+    '[id*="consent" i]',
+    '[class*="consent" i]',
+    '[id*="privacy" i]',
+    '[class*="privacy" i]',
+    '[id*="banner" i]',
+    '[class*="banner" i]',
+    '[id*="modal" i]',
+    '[class*="modal" i]',
+    '[id*="overlay" i]',
+    '[class*="overlay" i]',
+    '[id*="footer" i]',
+    '[class*="footer" i]',
+    '[id*="header" i]',
+    '[class*="header" i]',
+    '[id*="nav" i]',
+    '[class*="nav" i]',
+    '[role="dialog"]',
+    '[role="banner"]',
+    '[role="navigation"]',
+    '[role="contentinfo"]',
+    "header",
+    "footer",
+    "nav",
+  ];
+
+  if (elementOrText && elementOrText.cloneNode) {
     const clone = elementOrText.cloneNode(true);
-
-    const EXCLUDED_SELECTORS = [
-      '[id*="cookie" i]',
-      '[class*="cookie" i]',
-      '[id*="consent" i]',
-      '[class*="consent" i]',
-      '[id*="privacy" i]',
-      '[class*="privacy" i]',
-      '[id*="banner" i]',
-      '[class*="banner" i]',
-      '[id*="modal" i]',
-      '[class*="modal" i]',
-      '[id*="overlay" i]',
-      '[class*="overlay" i]',
-      '[id*="footer" i]',
-      '[class*="footer" i]',
-      '[id*="header" i]',
-      '[class*="header" i]',
-      '[id*="nav" i]',
-      '[class*="nav" i]',
-      '[role="dialog"]',
-      '[role="banner"]',
-      '[role="navigation"]',
-      '[role="contentinfo"]',
-      "header",
-      "footer",
-      "nav",
-    ];
-
     EXCLUDED_SELECTORS.forEach((sel) => {
       try {
         const nodes = clone.querySelectorAll(sel);
         nodes.forEach((n) => n.remove());
       } catch (e) {}
     });
-
     rawText = clone.innerText || clone.textContent || "";
+  } else if (typeof elementOrText === "string") {
+    rawText = elementOrText;
+    if (typeof document !== "undefined" && elementOrText.includes("<")) {
+      try {
+        const tmp = document.createElement("div");
+        tmp.innerHTML = elementOrText;
+        EXCLUDED_SELECTORS.forEach((sel) => {
+          try {
+            const nodes = tmp.querySelectorAll(sel);
+            nodes.forEach((n) => n.remove());
+          } catch (e) {}
+        });
+        rawText = tmp.innerText || tmp.textContent || rawText;
+      } catch (e) {}
+    }
   }
 
   if (!rawText) return "";
@@ -99,9 +110,32 @@ export function cleanJobDescriptionText(elementOrText, doc = typeof window !== "
   const filteredLines = lines.filter((line) => {
     const l = line.trim().toLowerCase();
     if (!l) return false;
-    if (l.includes("uses cookies") || l.includes("cookie policy") || l.includes("privacy policy")) return false;
-    if (l.includes("accept all cookies") || l.includes("manage cookie preferences")) return false;
-    if (l.includes("terms of use") || l.includes("terms of service") || l.includes("all rights reserved")) return false;
+    if (
+      l.includes("uses cookies") ||
+      l.includes("use cookies") ||
+      l.includes("cookie policy") ||
+      l.includes("privacy policy") ||
+      l.includes("privacy notice") ||
+      l.includes("cookie settings") ||
+      l.includes("cookie preferences") ||
+      l.includes("careers portal uses")
+    ) return false;
+
+    if (
+      l.includes("accept all cookies") ||
+      l.includes("reject all cookies") ||
+      l.includes("manage cookies") ||
+      l.includes("cookie consent") ||
+      l.includes("manage cookie preferences")
+    ) return false;
+
+    if (
+      l.includes("terms of use") ||
+      l.includes("terms of service") ||
+      l.includes("all rights reserved") ||
+      l.includes("privacy statement")
+    ) return false;
+
     return true;
   });
 

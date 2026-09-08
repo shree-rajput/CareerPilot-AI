@@ -32,6 +32,10 @@
   }
 
   function removeOverlay() {
+    const hosts = document.querySelectorAll("#careerpilot-root, #careerpilot-intent-toast-host");
+    hosts.forEach((h) => {
+      if (h.parentNode) h.parentNode.removeChild(h);
+    });
     if (hostElement && hostElement.parentNode) {
       hostElement.parentNode.removeChild(hostElement);
     }

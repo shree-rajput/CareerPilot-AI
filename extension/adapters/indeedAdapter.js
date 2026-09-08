@@ -72,7 +72,8 @@
 
     extractDescription(doc = window.document) {
       const el = doc.querySelector("#jobDescriptionText, .jobsearch-jobDescriptionText");
-      return el ? (el.innerText || el.textContent).trim() : "";
+      const raw = el ? (el.innerText || el.textContent) : "";
+      return typeof cleanJobDescriptionText === "function" ? cleanJobDescriptionText(el || raw) : raw.trim();
     }
 
     extractSalary(doc = window.document) {
@@ -81,7 +82,10 @@
     }
 
     getApplyButton(doc = window.document) {
-      return doc.querySelector("#indeedApplyButton, button[aria-label*='Apply'], a[href*='apply']");
+      if (typeof safeFindApplyButton === "function") {
+        return safeFindApplyButton(doc, ["#indeedApplyButton", "button[aria-label*='Apply']", "a[href*='apply']"]);
+      }
+      return typeof safeQuerySelector === "function" ? safeQuerySelector(doc, "#indeedApplyButton, button[aria-label*='Apply'], a[href*='apply']") : null;
     }
 
     detectSubmissionConfirmation(doc = window.document) {

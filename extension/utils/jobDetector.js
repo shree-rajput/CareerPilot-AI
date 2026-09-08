@@ -84,8 +84,8 @@ export function detectJobPage() {
     document.querySelector(".jobsearch-jobDescriptionText") ||
     document.querySelector("article");
 
-  const descText = descEl ? cleanText(descEl.textContent) : "";
-  if (descText && descText.length >= 100) {
+  const descText = descEl ? (typeof cleanJobDescriptionText === "function" ? cleanJobDescriptionText(descEl) : cleanText(descEl.textContent)) : "";
+  if (descText && descText.length >= 80) {
     confidence += 15;
     reasons.push("Job description content block detected");
   }

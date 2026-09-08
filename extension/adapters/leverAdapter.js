@@ -73,7 +73,8 @@
 
     extractDescription(doc = window.document) {
       const el = doc.querySelector(".section.page-centered, .posting-page");
-      return el ? (el.innerText || el.textContent).trim() : "";
+      const raw = el ? (el.innerText || el.textContent) : "";
+      return typeof cleanJobDescriptionText === "function" ? cleanJobDescriptionText(el || raw) : raw.trim();
     }
 
     extractSalary() {
@@ -81,7 +82,10 @@
     }
 
     getApplyButton(doc = window.document) {
-      return doc.querySelector(".postings-btn, button[type='submit'], input[type='submit']");
+      if (typeof safeFindApplyButton === "function") {
+        return safeFindApplyButton(doc, [".postings-btn", "button[type='submit']", "input[type='submit']"]);
+      }
+      return typeof safeQuerySelector === "function" ? safeQuerySelector(doc, ".postings-btn, button[type='submit'], input[type='submit']") : null;
     }
 
     detectSubmissionConfirmation(doc = window.document) {

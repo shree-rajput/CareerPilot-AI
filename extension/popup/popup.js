@@ -47,6 +47,13 @@ async function initUI() {
 
   window.isAuthenticated = authRes.isAuthenticated;
 
+  const connectAppBtn = document.getElementById("connectAppBtn");
+  if (connectAppBtn) {
+    connectAppBtn.onclick = () => {
+      chrome.tabs.create({ url: DEFAULT_APP_URL });
+    };
+  }
+
   if (!authRes.isAuthenticated) {
     connectionBadge.innerText = "● Disconnected";
     connectionBadge.className = "badge badge-neutral";

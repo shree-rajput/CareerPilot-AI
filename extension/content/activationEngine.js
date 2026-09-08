@@ -152,14 +152,17 @@
 
       // 6. CONFIDENCE THRESHOLD CHECK
       const threshold = isManualInspect ? 40 : CONFIDENCE_ACTIVATION_THRESHOLD;
-      if (score >= threshold && extracted.title && extracted.company) {
+      const isNonGenericTitle = extracted.title && extracted.title.length >= 3 && !/^(home|login|search|jobs|careers|welcome|index|untitled role)$/i.test(extracted.title);
+      const isNonGenericCompany = extracted.company && extracted.company.length >= 2 && !/^(unknown|company)$/i.test(extracted.company);
+
+      if (score >= threshold && isNonGenericTitle && isNonGenericCompany) {
         diagnostics.shouldActivate = true;
         diagnostics.decision = "ACTIVATE";
         diagnostics.reason = `Confidence score ${score} meets threshold (>= ${threshold})`;
       } else {
         diagnostics.shouldActivate = false;
         diagnostics.decision = "SKIP";
-        diagnostics.reason = `Confidence score ${score} below threshold (${threshold}) — Fail Closed`;
+        diagnostics.reason = `Confidence score ${score} below threshold (${threshold}) or metadata missing — Fail Closed`;
       }
 
       logDebugInfo(diagnostics);

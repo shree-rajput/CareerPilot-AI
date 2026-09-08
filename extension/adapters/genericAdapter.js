@@ -83,13 +83,15 @@
         const descEl = doc.querySelector('[itemprop="description"], #job-description, .job-description, .posting-description, #content, article');
 
         const titleText = titleEl ? titleEl.textContent.trim() : "";
-        const descText = descEl ? (descEl.innerText || descEl.textContent).trim() : "";
+        const descText = descEl ? (typeof cleanJobDescriptionText === "function" ? cleanJobDescriptionText(descEl) : (descEl.innerText || descEl.textContent).trim()) : "";
 
-        const hasJobContent = titleText.length >= 3 && descText.length >= 80;
+        const isNonGenericTitle = titleText.length >= 3 && !/^(home|careers|jobs|welcome|login|search|index)$/i.test(titleText);
+        const hasJobContent = isNonGenericTitle && descText.length >= 80;
 
         if (hasJobId && hasJobContent) return true;
         if (isJobPath && hasJobContent) return true;
-        if (hasJobContent && (doc.querySelector("button[type='submit'], input[type='submit'], a[href*='apply']"))) return true;
+        const applyBtn = typeof safeFindApplyButton === "function" ? safeFindApplyButton(doc) : null;
+        if (hasJobContent && applyBtn) return true;
 
         return false;
       } catch (e) {
@@ -154,7 +156,12 @@
         doc.querySelector(".posting-description") ||
         doc.querySelector("#content") ||
         doc.querySelector("article");
-      return el ? (el.innerText || el.textContent).trim() : "";
+
+      const raw = el ? (el.innerText || el.textContent) : "";
+      if (typeof cleanJobDescriptionText === "function") {
+        return cleanJobDescriptionText(el || raw);
+      }
+      return raw.trim();
     }
 
     extractSalary() {
@@ -165,7 +172,7 @@
       if (typeof safeFindApplyButton === "function") {
         return safeFindApplyButton(doc, ["button[type='submit']", "input[type='submit']", "a[href*='apply']"]);
       }
-      return doc.querySelector("button[type='submit'], input[type='submit'], a[href*='apply']");
+      return null;
     }
 
     detectSubmissionConfirmation(doc = window.document) {
