@@ -23,10 +23,16 @@ const matchResultSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job",
+      default: null,
+      index: true
+    },
     applicationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Application",
-      required: true
+      default: null
     },
     resumeId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -80,7 +86,7 @@ const matchResultSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-
 matchResultSchema.index({ resumeHash: 1, jdHash: 1 });
+matchResultSchema.index({ userId: 1, jobId: 1 });
 
 export const MatchResult = mongoose.model("MatchResult", matchResultSchema);

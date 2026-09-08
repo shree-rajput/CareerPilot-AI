@@ -14,6 +14,11 @@ const mentorFeedbackSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    sessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MentorshipSession",
+      default: null
+    },
     category: {
       type: String,
       enum: [
@@ -28,6 +33,25 @@ const mentorFeedbackSchema = new mongoose.Schema(
       ],
       default: "General",
       index: true
+    },
+    problemSolved: {
+      type: String,
+      enum: ["yes", "partially", "no"],
+      default: "yes"
+    },
+    wasRelevant: {
+      type: Boolean,
+      default: true
+    },
+    wouldBookAgain: {
+      type: Boolean,
+      default: true
+    },
+    rating: {
+      type: Number,
+      default: 5,
+      min: 1,
+      max: 5
     },
     content: {
       type: String,

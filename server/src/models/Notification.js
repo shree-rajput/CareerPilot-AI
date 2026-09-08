@@ -22,6 +22,7 @@ const notificationSchema = new mongoose.Schema(
         "MENTOR_SESSION_REMINDER",
         "SKILL_GAP",
         "APPLICATION_STATUS",
+        "APPLICATION_REMINDER",
         "SYSTEM",
         "deadline",
         "reminder",

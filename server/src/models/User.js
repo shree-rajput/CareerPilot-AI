@@ -241,8 +241,26 @@ const userSchema = new mongoose.Schema(
 
     mentorStatus: {
       type: String,
-      enum: ["none", "pending", "under_review", "approved", "verified", "rejected", "suspended"],
+      enum: [
+        "none",
+        "application",
+        "pending",
+        "under_review",
+        "pending_capability",
+        "probation",
+        "approved",
+        "verified",
+        "trusted",
+        "restricted",
+        "suspended",
+        "rejected"
+      ],
       default: "none"
+    },
+    capabilityStatus: {
+      type: String,
+      enum: ["not_started", "in_progress", "passed", "failed"],
+      default: "not_started"
     },
     mentorProfile: {
       role: { type: String, trim: true, default: "" },

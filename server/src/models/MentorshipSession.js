@@ -17,6 +17,18 @@ const ratingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const sessionNotesSchema = new mongoose.Schema(
+  {
+    topic: { type: String, trim: true, default: "" },
+    studentLevel: { type: String, trim: true, default: "Intermediate" },
+    problemsDiscussed: { type: String, trim: true, default: "" },
+    studentStruggles: { type: String, trim: true, default: "" },
+    recommendedPractice: { type: String, trim: true, default: "" },
+    nextSteps: { type: String, trim: true, default: "" }
+  },
+  { _id: false }
+);
+
 const mentorshipSessionSchema = new mongoose.Schema(
   {
     studentId: {
@@ -33,7 +45,7 @@ const mentorshipSessionSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["requested", "scheduled", "completed", "cancelled"],
+      enum: ["requested", "accepted", "scheduled", "reschedule_proposed", "completed", "cancelled", "missed"],
       default: "requested"
     },
     topic: {
@@ -53,6 +65,26 @@ const mentorshipSessionSchema = new mongoose.Schema(
       type: Date,
       required: true
     },
+    proposedRescheduleAt: {
+      type: Date
+    },
+    rescheduledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    cancellationReason: {
+      type: String,
+      default: ""
+    },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    isNoShow: {
+      type: String,
+      enum: ["none", "student", "mentor", "both"],
+      default: "none"
+    },
     meetingUrl: {
       type: String,
       default: ""
@@ -68,6 +100,10 @@ const mentorshipSessionSchema = new mongoose.Schema(
     mentorFeedback: {
       type: String,
       default: "" // Text feedback notes from the mentor
+    },
+    sessionNotes: {
+      type: sessionNotesSchema,
+      default: () => ({})
     },
     actionItems: {
       type: [actionItemSchema],

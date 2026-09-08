@@ -6,6 +6,7 @@ export const STATUS_VALUES = [
   "saved",
   "preparing",
   "ready_to_apply",
+  "apply_started",
   "applied",
   "shortlisted",
   "screening",
@@ -181,6 +182,28 @@ const applicationSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+    },
+    canonicalUrl: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    externalIds: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    applyingStartedAt: {
+      type: Date,
+      default: null,
+    },
+    nextActionAt: {
+      type: Date,
+      default: null,
+    },
+    reminderState: {
+      type: String,
+      enum: ["none", "follow_up_pending", "follow_up_sent", "oa_reminded", "interview_reminded"],
+      default: "none",
     },
   },
   { timestamps: true }

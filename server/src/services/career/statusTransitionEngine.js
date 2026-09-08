@@ -9,6 +9,7 @@ const STAGE_RANK = {
   saved: 1,
   preparing: 2,
   ready_to_apply: 2,
+  apply_started: 2,
   applied: 3,
   shortlisted: 4,
   screening: 4,

@@ -1,7 +1,6 @@
 /**
  * CareerPilot AI Gmail Notification Overlay
- * Renders non-intrusive floating card in Gmail for detected application lifecycle events,
- * including AUTOMATIC_UPDATE, SUGGESTION_CREATED, and UNTRACKED_APPLICATION (Forgot-To-Save recovery).
+ * Renders non-intrusive floating card in Gmail for detected application lifecycle events.
  */
 
 (function () {
@@ -12,6 +11,15 @@
       existingOverlay.remove();
       existingOverlay = null;
     }
+  }
+
+  function getAssetUrl(path) {
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL) {
+        return chrome.runtime.getURL(path);
+      }
+    } catch (e) {}
+    return "";
   }
 
   function renderGmailOverlay({ response, onConfirm, onUndo, onIgnore, onAddUntracked }) {
@@ -25,27 +33,30 @@
     container.id = "careerpilot-gmail-overlay";
     container.style.cssText = `
       position: fixed;
-      top: 70px;
+      top: 80px;
       right: 24px;
       z-index: 99999;
-      width: 320px;
-      background: #ffffff;
-      color: #0f172a;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      width: 340px;
+      background: radial-gradient(circle at top left, rgba(2, 132, 199, 0.15), transparent 70%), #0b0f19;
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
-      padding: 14px;
-      transition: all 0.2s ease-in-out;
+      padding: 16px;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(16px);
     `;
 
+    const logoUrl = getAssetUrl("assets/logo.png");
+
     const statusColors = {
-      interview: { bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe" },
-      oa: { bg: "#fefce8", text: "#a16207", border: "#fef08a" },
-      offer: { bg: "#f0fdf4", text: "#15803d", border: "#bbf7d0" },
-      rejected: { bg: "#fef2f2", text: "#b91c1c", border: "#fecaca" },
-      applied: { bg: "#f8fafc", text: "#475569", border: "#e2e8f0" },
+      interview: { bg: "rgba(37, 99, 235, 0.2)", text: "#60a5fa", border: "rgba(59, 130, 246, 0.4)" },
+      oa: { bg: "rgba(245, 158, 11, 0.2)", text: "#fbbf24", border: "rgba(245, 158, 11, 0.4)" },
+      offer: { bg: "rgba(16, 185, 129, 0.2)", text: "#34d399", border: "rgba(16, 185, 129, 0.4)" },
+      rejected: { bg: "rgba(244, 63, 94, 0.2)", text: "#f87171", border: "rgba(244, 63, 94, 0.4)" },
+      applied: { bg: "rgba(2, 132, 199, 0.2)", text: "#38bdf8", border: "rgba(56, 189, 248, 0.4)" },
     };
 
     const status = response.classified?.detectedStatus || "applied";
@@ -53,69 +64,73 @@
     const app = response.application;
     const classified = response.classified;
 
+    const iconUrl = getAssetUrl("assets/icon48.png") || getAssetUrl("assets/icon128.png");
+
+    const headerMarkup = `
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${iconUrl ? `<img src="${iconUrl}" width="22" height="22" alt="CareerPilot Logo" style="object-fit: contain; border-radius: 6px;" />` : `<div style="color: #38bdf8;">⚡</div>`}
+          <span style="font-weight: 800; color: #38bdf8; font-size: 13px;">CareerPilot AI</span>
+          <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #38bdf8; background: rgba(2, 132, 199, 0.2); padding: 2px 6px; border-radius: 4px;">Gmail Sync</span>
+        </div>
+        <button id="cp-close-overlay" style="background: none; border: none; cursor: pointer; color: #64748b; font-size: 14px; padding: 2px 6px;">✕</button>
+      </div>
+    `;
+
     let contentHtml = "";
 
     if (response.status === "AUTOMATIC_UPDATE") {
       contentHtml = `
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #2563eb; background: #eff6ff; padding: 2px 6px; border-radius: 4px;">CareerPilot Updated Application</span>
-          <button id="cp-close-overlay" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px;">✕</button>
-        </div>
-        <h4 style="margin: 0 0 2px 0; font-size: 14px; font-weight: 700; color: #0f172a;">${app?.company || classified?.detectedCompany || "Job Application"}</h4>
-        <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">${app?.role || classified?.detectedRole || "Software Position"}</p>
+        ${headerMarkup}
+        <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 700; color: #f8fafc;">${app?.company || classified?.detectedCompany || "Job Application"}</h4>
+        <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">${app?.role || classified?.detectedRole || "Software Position"}</p>
         
-        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">
+        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 10px;">
           Detected Stage: ${status.toUpperCase()}
         </div>
 
-        <p style="font-size: 11px; color: #475569; margin: 0 0 10px 0; font-style: italic; line-clamp: 2;">"${classified?.evidenceSnippet || "Email event detected"}"</p>
+        <p style="font-size: 11px; color: #cbd5e1; margin: 0 0 12px 0; font-style: italic; line-clamp: 2;">"${classified?.evidenceSnippet || "Email event detected"}"</p>
 
         <div style="display: flex; gap: 8px;">
-          <button id="cp-undo-btn" style="flex: 1; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Undo Update</button>
+          <button id="cp-undo-btn" style="flex: 1; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Undo Update</button>
         </div>
       `;
     } else if (response.status === "UNTRACKED_APPLICATION" || response.status === "NO_MATCHING_APPLICATION") {
       contentHtml = `
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #7c3aed; background: #f3e8ff; padding: 2px 6px; border-radius: 4px;">Application Found</span>
-          <button id="cp-close-overlay" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px;">✕</button>
-        </div>
-        <h4 style="margin: 0 0 2px 0; font-size: 14px; font-weight: 700; color: #0f172a;">${classified?.detectedCompany || "Job Application"}</h4>
-        <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">${classified?.detectedRole || "Position"}</p>
+        ${headerMarkup}
+        <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 700; color: #f8fafc;">${classified?.detectedCompany || "Job Application"}</h4>
+        <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">${classified?.detectedRole || "Position"}</p>
         
-        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">
-          Detected Stage: ${status.toUpperCase()} (Gmail)
+        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 10px;">
+          Discovered Stage: ${status.toUpperCase()}
         </div>
 
-        <p style="font-size: 11px; color: #475569; margin: 0 0 10px 0; font-style: italic;">"${classified?.evidenceSnippet || "Email event detected"}"</p>
+        <p style="font-size: 11px; color: #cbd5e1; margin: 0 0 12px 0; font-style: italic;">"${classified?.evidenceSnippet || "Email event detected"}"</p>
 
         <div style="display: flex; gap: 8px;">
-          <button id="cp-add-untracked-btn" style="flex: 1; background: #7c3aed; color: #ffffff; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Add to CareerPilot</button>
-          <button id="cp-ignore-untracked-btn" style="flex: 1; background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Ignore</button>
+          <button id="cp-add-untracked-btn" style="flex: 1; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 11px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">Add to Workspace</button>
+          <button id="cp-ignore-untracked-btn" style="flex: 1; background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Ignore</button>
         </div>
       `;
     } else if (response.status === "SUGGESTION_CREATED") {
       contentHtml = `
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #d97706; background: #fffbeb; padding: 2px 6px; border-radius: 4px;">Action Suggested</span>
-          <button id="cp-close-overlay" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px;">✕</button>
-        </div>
-        <h4 style="margin: 0 0 2px 0; font-size: 14px; font-weight: 700; color: #0f172a;">${app?.company || "Job Application"}</h4>
-        <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">${app?.role || "Software Position"}</p>
+        ${headerMarkup}
+        <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 700; color: #f8fafc;">${app?.company || "Job Application"}</h4>
+        <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">${app?.role || "Software Position"}</p>
         
-        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">
+        <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 10px;">
           Suggested Stage: ${status.toUpperCase()}
         </div>
 
         <div style="display: flex; gap: 8px; margin-top: 10px;">
-          <button id="cp-confirm-btn" style="flex: 1; background: #2563eb; color: #ffffff; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Confirm Update</button>
-          <button id="cp-ignore-btn" style="flex: 1; background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 11px;">Ignore</button>
+          <button id="cp-confirm-btn" style="flex: 1; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 11px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">Confirm Update</button>
+          <button id="cp-ignore-btn" style="flex: 1; background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Ignore</button>
         </div>
       `;
     } else if (response.status === "ALREADY_PROCESSED") {
       contentHtml = `
         <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span style="font-size: 11px; font-weight: 600; color: #166534; background: #f0fdf4; padding: 4px 8px; border-radius: 6px; border: 1px solid #bbf7d0;">✓ Recorded in CareerPilot Timeline</span>
+          <span style="font-size: 11px; font-weight: 600; color: #34d399; background: rgba(16, 185, 129, 0.15); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.3);">✓ Recorded in CareerPilot Timeline</span>
           <button id="cp-close-overlay" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px;">✕</button>
         </div>
       `;

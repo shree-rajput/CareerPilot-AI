@@ -32,6 +32,7 @@ import codingRouter from "./routes/codingRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import { reminderRouter } from "./routes/reminderRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -89,6 +90,7 @@ export function createApp() {
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/messages", messageRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/reminders", reminderRouter);
   app.use("/api/applications", applicationRouter);
   app.use("/api/match", matchRouter);
   app.use("/api/tailor", tailoringRouter);

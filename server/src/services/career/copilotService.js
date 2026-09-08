@@ -142,27 +142,50 @@ function budgetContextData(contextData, maxChars = 3000) {
  * Normalizes any LLM response structure into a clean content string, sections array, and suggested actions.
  */
 function normalizeCopilotResponse(response) {
+  if (typeof response === "string" && response.trim().startsWith('{') && response.trim().endsWith('}')) {
+    try {
+      response = JSON.parse(response.trim());
+    } catch {
+      // ignore
+    }
+  }
+
   if (typeof response === "string") {
     return {
       content: response.trim(),
+      responseType: "DIRECT_ANSWER",
+      summary: "",
+      keyPoints: [],
+      expandableSections: [],
       sections: [],
-      suggestedActions: []
+      suggestedActions: [],
+      structuredData: null
     };
   }
 
   if (!response || typeof response !== "object") {
     return {
       content: "",
+      responseType: "DIRECT_ANSWER",
+      summary: "",
+      keyPoints: [],
+      expandableSections: [],
       sections: [],
-      suggestedActions: []
+      suggestedActions: [],
+      structuredData: null
     };
   }
 
   let content = (response.reply || response.content || response.text || response.message || response.answer || response.response || "").trim();
+  let responseType = response.responseType || "DIRECT_ANSWER";
+  let summary = response.summary || response.directAnswer || response.tldr || "";
+  let keyPoints = Array.isArray(response.keyPoints) ? response.keyPoints : [];
+  let expandableSections = Array.isArray(response.expandableSections) ? response.expandableSections : [];
   let sections = Array.isArray(response.sections) ? response.sections : [];
   let suggestedActions = Array.isArray(response.suggestedActions)
     ? response.suggestedActions.map(a => (typeof a === "string" ? a : a?.label || a?.text || a?.title || String(a || ""))).filter(Boolean)
     : [];
+  let structuredData = response.structuredData || response.data || null;
 
   // If top-level reply/content is empty but UI sections exist, synthesize full markdown content
   if (!content && sections.length > 0) {
@@ -186,8 +209,13 @@ function normalizeCopilotResponse(response) {
 
   return {
     content,
+    responseType,
+    summary,
+    keyPoints,
+    expandableSections,
     sections,
-    suggestedActions
+    suggestedActions,
+    structuredData
   };
 }
 
@@ -224,7 +252,7 @@ export async function sendMessage(userId, conversationId, query) {
 
   // 3. Build Evidence (Retrieve Relevant Data)
   const rawContext = await buildEvidence(plan, userId);
-  
+
   // Clean null/empty keys
   const cleanContext = JSON.parse(JSON.stringify(rawContext, (key, value) => {
     if (value === null || value === undefined || value === "") return undefined;
@@ -239,6 +267,7 @@ export async function sendMessage(userId, conversationId, query) {
   let suggestedActions = [];
   let isFallback = false;
   let wasCorrected = false;
+  let normalizedRes = null;
 
   try {
     const history = conv.messages.slice(0, -1).slice(-4).map(m => ({
@@ -253,7 +282,7 @@ export async function sendMessage(userId, conversationId, query) {
       contextData: budgetedContextStr
     });
 
-    let normalized = normalizeCopilotResponse(response);
+    normalizedRes = normalizeCopilotResponse(response);
 
     // 5. Response Relevance Check if structured object
     if (typeof response !== "string") {
@@ -271,13 +300,13 @@ export async function sendMessage(userId, conversationId, query) {
           contextData: budgetedContextStr
         });
 
-        normalized = normalizeCopilotResponse(response);
+        normalizedRes = normalizeCopilotResponse(response);
       }
     }
 
-    normalizedContent = normalized.content;
-    normalizedSections = normalized.sections;
-    suggestedActions = normalized.suggestedActions;
+    normalizedContent = normalizedRes.content;
+    normalizedSections = normalizedRes.sections;
+    suggestedActions = normalizedRes.suggestedActions;
 
     if (!normalizedContent) {
       console.error("[CopilotService] Normalized content is empty after primary AI call!");
@@ -290,7 +319,7 @@ export async function sendMessage(userId, conversationId, query) {
 
     try {
       const minimalContext = {
-        candidateProfile: rawContext.profile || { name: "Candidate" }
+        candidateProfile: rawContext?.profile || { name: "Candidate" }
       };
 
       const fallbackResponse = await executeAiTask("COPILOT_CHAT", {
@@ -299,13 +328,13 @@ export async function sendMessage(userId, conversationId, query) {
         contextData: JSON.stringify(minimalContext)
       });
 
-      const normalized = normalizeCopilotResponse(fallbackResponse);
-      normalizedContent = normalized.content || "I couldn't generate the answer right now. Please try again.";
-      normalizedSections = normalized.sections;
-      suggestedActions = normalized.suggestedActions;
+      normalizedRes = normalizeCopilotResponse(fallbackResponse);
+      normalizedContent = normalizedRes.content || "I couldn't generate the answer right now. Please try again.";
+      normalizedSections = normalizedRes.sections;
+      suggestedActions = normalizedRes.suggestedActions;
     } catch (fallbackErr) {
       console.error("[CopilotService] AI Copilot fallback also failed:", fallbackErr?.message || fallbackErr);
-      
+
       const errCode = fallbackErr?.code || fallbackErr?.errorCode || "AI_UNAVAILABLE";
       if (errCode === "AI_RATE_LIMITED" || fallbackErr?.statusCode === 429) {
         normalizedContent = "AI usage limit reached. Please wait a few seconds and try again.";
@@ -318,17 +347,42 @@ export async function sendMessage(userId, conversationId, query) {
       } else {
         normalizedContent = `CareerPilot AI encountered an error (${fallbackErr?.message || "service unavailable"}). Please try asking your question again.`;
       }
-      
+
       suggestedActions = ["Retry question", "Explore Job Board", "View Preparation Plan"];
     }
   }
 
-  // 6. Save AI Message in Conversation with Content & Sections
-  conv.messages.push({
+  // Final Safety Guarantee: Ensure normalizedContent is NEVER a raw JSON string
+  if (typeof normalizedContent === "string" && (normalizedContent.trim().startsWith("{") || normalizedContent.includes('"responseType":'))) {
+    const extReply = extractFieldFromRawJson(normalizedContent, "reply") || extractFieldFromRawJson(normalizedContent, "content") || extractFieldFromRawJson(normalizedContent, "summary");
+    if (extReply) {
+      normalizedContent = extReply;
+    } else {
+      normalizedContent = normalizedContent
+        .replace(/^{\s*"responseType":\s*"[^"]*",?/i, "")
+        .replace(/"summary":\s*"([^"]*)",?/gi, "$1\n")
+        .replace(/"keyPoints":\s*\[[\s\S]*?\],?/gi, "")
+        .replace(/"reply":\s*"/i, "")
+        .replace(/"expandableSections":\s*\[[\s\S]*$/i, "")
+        .replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .trim();
+    }
+  }
+
+  // 6. Save AI Message in Conversation with Content & Rich Attributes
+  const assistantMessageDoc = {
     role: "assistant",
     content: normalizedContent,
-    sections: normalizedSections
-  });
+    responseType: (normalizedRes && normalizedRes.responseType) || "DIRECT_ANSWER",
+    summary: (normalizedRes && normalizedRes.summary) || "",
+    keyPoints: (normalizedRes && normalizedRes.keyPoints) || [],
+    expandableSections: (normalizedRes && normalizedRes.expandableSections) || [],
+    sections: normalizedSections,
+    structuredData: (normalizedRes && normalizedRes.structuredData) || null
+  };
+
+  conv.messages.push(assistantMessageDoc);
   await conv.save();
 
   // 7. Server-Side Detailed Debug Logging
@@ -338,8 +392,11 @@ export async function sendMessage(userId, conversationId, query) {
 query: "${query}"
 intent: ${intent}
 mode: ${mode}
+responseType: ${assistantMessageDoc.responseType}
 contextSize: ${budgetedContextStr?.length || 0}
 responseLength: ${normalizedContent.length}
+keyPointsCount: ${assistantMessageDoc.keyPoints.length}
+expandableSectionsCount: ${assistantMessageDoc.expandableSections.length}
 sectionsCount: ${normalizedSections.length}
 suggestedActionsCount: ${suggestedActions.length}
 fallbackTriggered: ${isFallback}
@@ -360,11 +417,13 @@ wasCorrected: ${wasCorrected}
   return {
     success: true,
     reply: normalizedContent,
-    message: {
-      role: "assistant",
-      content: normalizedContent,
-      sections: normalizedSections
-    },
+    responseType: assistantMessageDoc.responseType,
+    summary: assistantMessageDoc.summary,
+    keyPoints: assistantMessageDoc.keyPoints,
+    expandableSections: assistantMessageDoc.expandableSections,
+    sections: normalizedSections,
+    structuredData: assistantMessageDoc.structuredData,
+    message: assistantMessageDoc,
     suggestedActions,
     intent,
     mode,

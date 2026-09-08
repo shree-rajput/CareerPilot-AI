@@ -68,6 +68,12 @@ const jobSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User"
     }],
+
+    // Users who viewed/captured this job in Inbox
+    viewedBy: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    }],
     
     // Extracted Intelligence
     responsibilities: [{ type: String }],
@@ -118,6 +124,7 @@ jobSchema.index({ canonicalUrl: 1 });
 jobSchema.index({ externalJobId: 1 });
 jobSchema.index({ company: 1, normalizedTitle: 1 });
 jobSchema.index({ savedBy: 1 });
+jobSchema.index({ viewedBy: 1 });
 jobSchema.index({ createdAt: -1 });
 
 export const Job = mongoose.model("Job", jobSchema);

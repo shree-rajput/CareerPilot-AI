@@ -89,9 +89,6 @@ export function ResumePage() {
 
   async function handleDelete(id, event) {
     event.stopPropagation();
-    const confirmed = window.confirm("Are you sure you want to delete this resume?");
-    if (!confirmed) return;
-
     try {
       setError("");
       setNotice("");

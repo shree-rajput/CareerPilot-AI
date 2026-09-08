@@ -72,17 +72,30 @@ chrome.runtime.onStartup?.addListener(() => processOutboxQueue());
 
 const storageArea = chrome.storage?.session || chrome.storage?.local;
 
+const TAB_CONTEXT_TTL_MS = 30 * 60 * 1000;
+
 async function setTabJobContext(tabId, jobContext) {
-  if (!tabId) return;
+  if (!tabId || !jobContext) return;
   const key = `tab_job_context_${tabId}`;
-  await storageArea.set({ [key]: jobContext });
+  const contextData = {
+    ...jobContext,
+    originatingTabId: tabId,
+    startedAt: jobContext.startedAt || Date.now(),
+    expiresAt: Date.now() + TAB_CONTEXT_TTL_MS
+  };
+  await storageArea.set({ [key]: contextData });
 }
 
 async function getTabJobContext(tabId) {
   if (!tabId) return null;
   const key = `tab_job_context_${tabId}`;
   const res = await storageArea.get(key);
-  return res[key] || null;
+  const context = res[key] || null;
+  if (context && context.expiresAt && context.expiresAt < Date.now()) {
+    await removeTabJobContext(tabId);
+    return null;
+  }
+  return context;
 }
 
 async function removeTabJobContext(tabId) {
@@ -122,6 +135,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
       sendResponse({ success: true });
     });
+    return true;
+  }
+
+  if (request.type === "ANALYZE_JOB") {
+    handleJobAnalysis(request.payload)
+      .then((res) => sendResponse({ success: true, data: res }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
@@ -365,3 +385,166 @@ async function handleEmailEventProcessing(emailPayload) {
 
   return resData;
 }
+
+// -----------------------------------------------------------------------------
+// Job Analysis & API Request Deduplication
+// -----------------------------------------------------------------------------
+const inFlightAnalysisMap = new Map();
+
+async function triggerJobNotification({ title, message, priority = 0 }) {
+  // Only create desktop notifications for HIGH priority events (priority >= 2)
+  if (priority < 2) return;
+
+  if (typeof chrome !== "undefined" && chrome.notifications && typeof chrome.notifications.create === "function") {
+    try {
+      const iconUrl = chrome.runtime?.getURL ? chrome.runtime.getURL("assets/icon48.png") : "assets/icon48.png";
+      chrome.notifications.create(
+        `notif_${Date.now()}`,
+        {
+          type: "basic",
+          iconUrl: iconUrl,
+          title: title || "CareerPilot AI",
+          message: message || "Job update",
+          priority: 1,
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.warn("[CareerPilot Service Worker] Notification suppressed:", chrome.runtime.lastError.message);
+          }
+        }
+      );
+    } catch (e) {
+      console.warn("[CareerPilot Service Worker] Notification error:", e);
+    }
+  }
+}
+
+async function handleJobAnalysis(jobPayload) {
+  const authStatus = await checkAuthStatus();
+  if (!authStatus.isAuthenticated) {
+    return { isAuthenticated: false };
+  }
+
+  const { company, title, role, url, externalJobId } = jobPayload || {};
+  const companyName = company || "";
+  const roleName = title || role || "";
+  const cleanUrl = url || "";
+  const lockKey = `${companyName.toLowerCase()}_${roleName.toLowerCase()}_${externalJobId || cleanUrl}`;
+
+  if (inFlightAnalysisMap.has(lockKey)) {
+    return inFlightAnalysisMap.get(lockKey);
+  }
+
+  const analysisPromise = (async () => {
+    try {
+      let existingApp = null;
+      if (companyName || roleName) {
+        const searchRes = await apiRequest(`/applications?search=${encodeURIComponent(companyName || roleName)}`);
+        if (searchRes.success && Array.isArray(searchRes.data?.applications)) {
+          const apps = searchRes.data.applications;
+          function extractJobIdentityKey(u = "") {
+            try {
+              const parsed = new URL(u);
+              return (
+                parsed.searchParams.get("jk") ||
+                parsed.searchParams.get("vjk") ||
+                parsed.searchParams.get("vjs") ||
+                parsed.searchParams.get("currentJobId") ||
+                parsed.searchParams.get("gh_jid") ||
+                ""
+              );
+            } catch {
+              return "";
+            }
+          }
+
+          const currentJk = extractJobIdentityKey(cleanUrl);
+          const isSpecificName = (s) => s && s.trim().length >= 2 && !/^(company|unknown company|job|position|untitled role)$/i.test(s.trim());
+
+          existingApp = apps.find((app) => {
+            if (currentJk && app.jobUrl && app.jobUrl.includes(currentJk)) return true;
+            if (cleanUrl && app.jobUrl && app.jobUrl === cleanUrl) return true;
+            if (
+              isSpecificName(companyName) &&
+              isSpecificName(roleName) &&
+              app.company?.toLowerCase() === companyName.toLowerCase() &&
+              app.role?.toLowerCase() === roleName.toLowerCase()
+            ) {
+              return true;
+            }
+            return false;
+          });
+        }
+      }
+
+      if (existingApp) {
+        return {
+          isAuthenticated: true,
+          existing: true,
+          application: existingApp,
+          overallScore: existingApp.matchResultId?.overallScore || null,
+        };
+      }
+
+      return {
+        isAuthenticated: true,
+        existing: false,
+        overallScore: null,
+        matchedSkills: [],
+        missingSkills: [],
+      };
+    } finally {
+      inFlightAnalysisMap.delete(lockKey);
+    }
+  })();
+
+  inFlightAnalysisMap.set(lockKey, analysisPromise);
+  return analysisPromise;
+}
+
+// -----------------------------------------------------------------------------
+// Periodic Reminder Check via chrome.alarms (every 30 minutes)
+// -----------------------------------------------------------------------------
+async function checkDueReminders() {
+  try {
+    const auth = await checkAuthStatus();
+    if (!auth.isAuthenticated) return;
+
+    const res = await apiRequest("/reminders/due");
+    if (!res.success || !Array.isArray(res.reminders)) return;
+
+    const { notifiedReminderIds = [] } = await chrome.storage.local.get("notifiedReminderIds");
+    const newNotified = [...notifiedReminderIds];
+
+    for (const rem of res.reminders) {
+      if (newNotified.includes(rem.reminderId)) continue;
+      if (["HIGH", "URGENT"].includes(rem.priority)) {
+        const company = rem.applicationId?.company || rem.metadata?.company || "Company";
+        const role = rem.applicationId?.role || rem.metadata?.role || "Role";
+
+        chrome.notifications?.create(rem.reminderId, {
+          type: "basic",
+          iconUrl: "../icons/icon128.png",
+          title: rem.metadata?.title || `CareerPilot Reminder: ${role} at ${company}`,
+          message: rem.reason || `Action required for ${role} at ${company}`,
+          priority: rem.priority === "URGENT" ? 2 : 1,
+        });
+
+        newNotified.push(rem.reminderId);
+      }
+    }
+
+    const trimmedNotified = newNotified.slice(-100);
+    await chrome.storage.local.set({ notifiedReminderIds: trimmedNotified });
+  } catch (e) {
+    console.warn("[CareerPilot Service Worker] Reminder polling check failed:", e);
+  }
+}
+
+chrome.alarms?.create("CHECK_DUE_REMINDERS", { periodInMinutes: 30 });
+chrome.alarms?.onAlarm?.addListener((alarm) => {
+  if (alarm.name === "CHECK_DUE_REMINDERS") {
+    checkDueReminders();
+  }
+});
+

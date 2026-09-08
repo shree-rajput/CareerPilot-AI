@@ -42,6 +42,9 @@ import { MentorStudentDetailPage } from "./pages/mentor/MentorStudentDetailPage"
 import { MentorFeedbackPage } from "./pages/mentor/MentorFeedbackPage";
 import { MentorAnalyticsPage } from "./pages/mentor/MentorAnalyticsPage";
 import { BecomeAMentorPage } from "./pages/BecomeAMentorPage";
+import { MentorOnboardingPage } from "./pages/mentor/MentorOnboardingPage";
+import { MentorReputationView } from "./pages/mentor/MentorReputationView";
+import { MentorAppealsPage } from "./pages/mentor/MentorAppealsPage";
 import { MentorSessionRoomPage } from "./pages/MentorSessionRoomPage";
 import { AdminMentorModerationPage } from "./pages/AdminMentorModerationPage";
 import { CodingPracticePage } from "./pages/CodingPracticePage";
@@ -156,9 +159,13 @@ export function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/coding" element={<Navigate to="/preparation" replace />} />
             <Route path="/coding/:id" element={<Navigate to="/preparation" replace />} />
+            <Route path="/mentors" element={<MentorshipPage />} />
             <Route path="/mentorship" element={<MentorshipPage />} />
             <Route path="/mentorship/profile/:mentorId" element={<MentorProfilePage />} />
-            <Route path="/become-a-mentor" element={<BecomeAMentorPage />} />
+            <Route path="/become-a-mentor" element={<MentorOnboardingPage />} />
+            <Route path="/mentor/onboarding" element={<MentorOnboardingPage />} />
+            <Route path="/mentor/reputation" element={<MentorReputationView />} />
+            <Route path="/mentor/appeals" element={<MentorAppealsPage />} />
             <Route path="/mentor/session/:sessionId" element={<MentorSessionRoomPage />} />
             
             {/* Admin Protected Routes */}

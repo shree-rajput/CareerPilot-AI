@@ -167,14 +167,14 @@ export function MentorshipPage() {
             </Link>
           )}
 
-          {currentUser?.mentorStatus === "approved" || currentUser?.role === "mentor" ? (
+          {["approved", "verified", "trusted", "probation"].includes(currentUser?.mentorStatus) || currentUser?.role === "mentor" ? (
             <Link to="/mentor/dashboard">
               <button className="py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-colors bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1 shadow-sm">
                 Mentor Portal →
               </button>
             </Link>
           ) : (
-            <Link to="/become-a-mentor">
+            <Link to="/mentor/onboarding">
               <button className="py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-colors hover:bg-border text-text-secondary">
                 Become a Mentor
               </button>

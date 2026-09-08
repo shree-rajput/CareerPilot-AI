@@ -751,3 +751,212 @@ export const getMentorshipMessages = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Gets practical capability challenge for mentor onboarding step.
+ */
+export const getCapabilityChallengeController = async (req, res, next) => {
+  try {
+    const { track } = req.query;
+    const { getCapabilityChallenge } = await import("../services/career/capabilityAssessmentService.js");
+    const challenge = await getCapabilityChallenge(track || "technical");
+
+    res.status(200).json({
+      success: true,
+      data: challenge
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Submits capability challenge for transparent rubric evaluation and state transition.
+ */
+export const submitCapabilityAssessmentController = async (req, res, next) => {
+  try {
+    const mentorId = req.user._id || req.user.id;
+    const { track, challengeId, submissionContent } = req.body;
+
+    const { evaluateCapabilitySubmission } = await import("../services/career/capabilityAssessmentService.js");
+    const result = await evaluateCapabilitySubmission({
+      mentorId,
+      track: track || "technical",
+      challengeId,
+      submissionContent
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: result.passed
+        ? "Congratulations! Capability assessment passed. Your account is now in Probationary Mentor state."
+        : "Assessment evaluated. Review notes for improvement areas."
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Fetches multi-dimensional reputation and trust progression for logged-in mentor.
+ */
+export const getMentorReputationController = async (req, res, next) => {
+  try {
+    const mentorId = req.user._id || req.user.id;
+    const { updateMentorReputation } = await import("../services/career/mentorReputationEngine.js");
+    const reputation = await updateMentorReputation(mentorId);
+
+    res.status(200).json({
+      success: true,
+      data: reputation
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Logs structured session notes and syncs actionable items into candidate PreparationPlan.
+ */
+export const saveSessionNotesController = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+    const { topic, studentLevel, problemsDiscussed, studentStruggles, recommendedPractice, nextSteps, actionItems } = req.body;
+    const userId = (req.user._id || req.user.id).toString();
+
+    const session = await MentorshipSession.findById(sessionId);
+    if (!session) return next(createError(404, "Mentorship session not found."));
+
+    if (session.mentorId.toString() !== userId) {
+      return next(createError(403, "Only the assigned mentor can write session notes."));
+    }
+
+    session.sessionNotes = {
+      topic: topic || session.topic,
+      studentLevel: studentLevel || "Intermediate",
+      problemsDiscussed: problemsDiscussed || "",
+      studentStruggles: studentStruggles || "",
+      recommendedPractice: recommendedPractice || "",
+      nextSteps: nextSteps || ""
+    };
+
+    if (Array.isArray(actionItems) && actionItems.length > 0) {
+      session.actionItems = actionItems.map(item =>
+        typeof item === "string" ? { title: item, status: "pending" } : item
+      );
+
+      // Sync to candidate PreparationPlan
+      try {
+        const { PreparationPlan } = await import("../models/PreparationPlan.js");
+        const planItems = actionItems.map(item => ({
+          title: `Mentor Task: ${typeof item === "string" ? item : item.title}`,
+          reason: `Assigned during session on "${session.topic}"`,
+          priority: "HIGH",
+          estimatedTimeMinutes: 45,
+          status: "pending",
+          source: "mentorship_session"
+        }));
+
+        await PreparationPlan.findOneAndUpdate(
+          { userId: session.studentId, isActive: true },
+          { $push: { actionItems: { $each: planItems } } },
+          { upsert: true }
+        );
+      } catch (pErr) {
+        console.warn("[PreparationPlan Sync Warning]:", pErr.message);
+      }
+    }
+
+    await session.save();
+
+    res.status(200).json({
+      success: true,
+      data: session,
+      message: "Structured session notes saved and synced to student preparation plan."
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Proposes or responds to session rescheduling.
+ */
+export const proposeRescheduleSessionController = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+    const { proposedRescheduleAt, action } = req.body; // action: 'propose' | 'accept_reschedule' | 'decline_reschedule'
+    const userId = (req.user._id || req.user.id).toString();
+
+    const session = await MentorshipSession.findById(sessionId);
+    if (!session) return next(createError(404, "Session not found."));
+
+    const isStudent = session.studentId.toString() === userId;
+    const isMentor = session.mentorId.toString() === userId;
+
+    if (!isStudent && !isMentor) {
+      return next(createError(403, "Unauthorized session rescheduling request."));
+    }
+
+    if (action === "propose") {
+      if (!proposedRescheduleAt) return next(createError(400, "Proposed date/time required."));
+      session.status = "reschedule_proposed";
+      session.proposedRescheduleAt = new Date(proposedRescheduleAt);
+      session.rescheduledBy = req.user._id;
+    } else if (action === "accept_reschedule" && session.proposedRescheduleAt) {
+      session.scheduledAt = session.proposedRescheduleAt;
+      session.status = "scheduled";
+      session.proposedRescheduleAt = undefined;
+      session.rescheduledBy = undefined;
+    } else if (action === "decline_reschedule") {
+      session.status = "scheduled";
+      session.proposedRescheduleAt = undefined;
+      session.rescheduledBy = undefined;
+    }
+
+    await session.save();
+
+    res.status(200).json({
+      success: true,
+      data: session,
+      message: `Session reschedule status updated to ${session.status}.`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Submits an appeal against account restriction or suspension.
+ */
+export const submitMentorAppealController = async (req, res, next) => {
+  try {
+    const mentorId = req.user._id || req.user.id;
+    const { restrictionReason, policyInvolved, appealStatement, supportingLinks } = req.body;
+
+    if (!appealStatement || appealStatement.trim().length < 20) {
+      return next(createError(400, "Appeal statement must be at least 20 characters detailing your appeal rationale."));
+    }
+
+    const { MentorAppeal } = await import("../models/MentorAppeal.js");
+
+    const appeal = await MentorAppeal.create({
+      mentorId,
+      restrictionReason: restrictionReason || "Account Restriction / Suspension",
+      policyInvolved: policyInvolved || "Mentor Code of Conduct",
+      appealStatement: appealStatement.trim(),
+      supportingLinks: Array.isArray(supportingLinks) ? supportingLinks : [],
+      status: "pending"
+    });
+
+    res.status(201).json({
+      success: true,
+      data: appeal,
+      message: "Your appeal has been submitted to the Admin Exception Queue for formal review."
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

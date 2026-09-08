@@ -1,4 +1,5 @@
 import { User } from "../../models/User.js";
+import { ReminderRecord } from "../../models/ReminderRecord.js";
 import { getCanonicalCareerState } from "./careerStateService.js";
 import { updateUserReadinessScore } from "./readinessService.js";
 
@@ -26,6 +27,35 @@ export async function getNextBestActions(userId) {
 
   const dismissedIds = user.dismissedActions || [];
   const rawActions = [];
+
+  // 0. Reminder-Driven Action Cards (Highest Priority Lifecycle Tasks)
+  const dueReminders = await ReminderRecord.find({
+    userId,
+    status: { $in: ["delivered", "scheduled"] }
+  }).populate("applicationId", "company role status");
+
+  for (const rem of dueReminders) {
+    const app = rem.applicationId;
+    const company = app?.company || rem.metadata?.company || "Company";
+    const role = app?.role || rem.metadata?.role || "Role";
+
+    rawActions.push({
+      id: `reminder_${rem.reminderId}`,
+      title: `${rem.reminderType.replace(/_/g, " ")}: ${role} at ${company}`,
+      description: rem.reason || `Action required for ${role} at ${company}`,
+      action: rem.metadata?.actionLabel || "Review Application",
+      reason: rem.reason,
+      evidence: [`Reminder trigger: ${rem.reminderType}`],
+      priority: rem.priority === "URGENT" ? "HIGH" : rem.priority,
+      estimatedEffort: "10 mins",
+      expectedImpact: "Lifecycle Progress",
+      sourceEntities: [`ReminderRecord:${rem._id}`],
+      ctaText: rem.metadata?.actionLabel || "Take Action",
+      ctaUrl: rem.metadata?.actionRoute || `/applications/${app?._id || ""}`,
+      type: "reminder",
+      pointsPotential: 25
+    });
+  }
 
   const { profile, resume, skills, projects, applications, interviews, preparation, coding } = careerState;
 

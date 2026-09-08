@@ -110,7 +110,20 @@ function FilterSidebar({ filters, onChange, onAddJob }) {
 }
 
 function JobCard({ job, onSelect, onSave, onDelete }) {
-  const normScore = job.matchScore != null ? normalizeScore(job.matchScore) : null;
+  const normScore = job.matchScore != null ? normalizeScore(job.matchScore) : (job.match?.score != null ? normalizeScore(job.match.score) : null);
+
+  const getSkillsLabel = () => {
+    const reqCount = job.skills?.required?.length ?? (Array.isArray(job.requiredSkills) ? job.requiredSkills.length : 0);
+    if (reqCount > 0) {
+      return `${reqCount} skill${reqCount > 1 ? "s" : ""} required`;
+    }
+    if (job.skills?.status === "PENDING") {
+      return "Pending skill extraction";
+    }
+    return "Skills not detected";
+  };
+
+  const isSaved = job.isSaved ?? job.userState?.isSaved ?? false;
 
   return (
     <div
@@ -154,15 +167,15 @@ function JobCard({ job, onSelect, onSave, onDelete }) {
       </div>
 
       <div className="flex items-center justify-between pt-2.5 border-t border-border/50 text-[11px] text-text-muted mt-2">
-        <span>{job.requiredSkills?.length || 0} skills required</span>
+        <span className="font-medium">{getSkillsLabel()}</span>
 
         <div className="flex items-center gap-1">
           <button
-            onClick={e => { e.stopPropagation(); onSave(job._id); }}
-            title={job.isSaved ? "Saved" : "Save Job"}
-            className={`p-1.5 rounded-md transition-colors ${job.isSaved ? "text-primary bg-primary-bg" : "text-text-muted hover:text-text hover:bg-bg-secondary"}`}
+            onClick={e => { e.stopPropagation(); onSave(job._id || job.id); }}
+            title={isSaved ? "Saved" : "Save Job"}
+            className={`p-1.5 rounded-md transition-colors ${isSaved ? "text-primary bg-primary-bg" : "text-text-muted hover:text-text hover:bg-bg-secondary"}`}
           >
-            {job.isSaved ? <Bookmark size={13} fill="currentColor" /> : <BookmarkPlus size={13} />}
+            {isSaved ? <Bookmark size={13} fill="currentColor" /> : <BookmarkPlus size={13} />}
           </button>
           
           <button

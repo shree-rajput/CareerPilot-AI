@@ -6,7 +6,8 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "http://*/*",
@@ -38,19 +39,65 @@
   "content_scripts": [
     {
       "matches": [
-        "http://*/*",
-        "https://*/*"
+        "*://*.linkedin.com/*",
+        "*://*.indeed.com/*",
+        "*://*.naukri.com/*",
+        "*://*.wellfound.com/*",
+        "*://*.glassdoor.com/*",
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://*.workday.com/*",
+        "*://*.ashbyhq.com/*",
+        "*://*.smartrecruiters.com/*",
+        "*://*.icims.com/*",
+        "*://*.taleo.net/*",
+        "*://*.jobvite.com/*",
+        "*://*.bamboohr.com/*",
+        "*://mail.google.com/*"
       ],
       "js": [
+        "utils/logger.js",
+        "utils/siteBlocklist.js",
+        "utils/circuitBreaker.js",
+        "utils/contextEngine.js",
+        "utils/domUtils.js",
+        "adapters/portalRegistry.js",
+        "adapters/linkedinAdapter.js",
+        "adapters/indeedAdapter.js",
+        "adapters/naukriAdapter.js",
+        "adapters/wellfoundAdapter.js",
+        "adapters/glassdoorAdapter.js",
+        "adapters/greenhouseAdapter.js",
+        "adapters/leverAdapter.js",
+        "adapters/workdayAdapter.js",
+        "adapters/ashbyAdapter.js",
+        "adapters/smartrecruitersAdapter.js",
+        "adapters/icimsAdapter.js",
+        "adapters/taleoAdapter.js",
+        "adapters/jobviteAdapter.js",
+        "adapters/bamboohrAdapter.js",
+        "adapters/genericAdapter.js",
+        "adapters/collegePortalAdapter.js",
         "content/contextDetector.js",
         "content/intentDetector.js",
         "content/intentOverlay.js",
         "content/gmailExtractor.js",
         "content/gmailOverlay.js",
+        "content/activationEngine.js",
         "content/content_script.js"
       ],
-      "type": "module",
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "options_page": "options/options.html"

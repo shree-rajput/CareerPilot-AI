@@ -155,21 +155,9 @@ export async function calculateDeterministicMatch(candidateId, mentorProfile) {
 
 /**
  * Recalculates and updates the aggregate rating and review count for a mentor.
+ * Calls updateMentorReputation for confidence-weighted Bayesian recalculation and trust progression.
  */
 export async function recalculateMentorRating(mentorUserId) {
-  const reviews = await MentorshipReview.find({ mentorId: mentorUserId }).lean();
-  if (reviews.length === 0) return;
-
-  const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);
-  const avgRating = Number((totalRating / reviews.length).toFixed(1));
-
-  await MentorProfile.findOneAndUpdate(
-    { userId: mentorUserId },
-    { rating: avgRating, reviewsCount: reviews.length }
-  );
-
-  await User.findByIdAndUpdate(mentorUserId, {
-    "mentorProfile.rating": avgRating,
-    "mentorProfile.reviewsCount": reviews.length
-  });
+  const { updateMentorReputation } = await import("./mentorReputationEngine.js");
+  return await updateMentorReputation(mentorUserId);
 }

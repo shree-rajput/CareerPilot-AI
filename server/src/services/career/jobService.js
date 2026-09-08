@@ -207,6 +207,105 @@ export async function toggleSaveJob(jobId, userId) {
 }
 
 /**
+ * Formats a canonical Job model and user-specific intelligence into a unified DTO.
+ * Guarantees that Job Board, Job Inbox, Extension, and Job Detail consume 100% consistent fields.
+ */
+export async function formatJobDTO(job, userId) {
+  if (!job) return null;
+  const { Application } = await import("../../models/Application.js");
+  const { MatchResult } = await import("../../models/MatchResult.js");
+  const { Resume } = await import("../../models/Resume.js");
+
+  const userIdStr = String(userId);
+  const rawJobObj = typeof job.toObject === "function" ? job.toObject() : job;
+  const jobId = rawJobObj._id || rawJobObj.id;
+
+  // 1. Fetch user-specific Application, MatchResult, and Resume recommendation in parallel
+  const [application, matchResult, resume] = await Promise.all([
+    Application.findOne({ userId, jobId }).lean(),
+    MatchResult.findOne({ userId, jobId }).sort({ createdAt: -1 }).lean(),
+    Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }).lean()
+  ]);
+
+  // Determine skill extraction status
+  const requiredList = (rawJobObj.requiredSkills || []).map(s => typeof s === "string" ? s : s.skillName || s.name || "").filter(Boolean);
+  const preferredList = (rawJobObj.preferredSkills || []).map(s => typeof s === "string" ? s : s.skillName || s.name || "").filter(Boolean);
+  const softList = (rawJobObj.softSkills || []).map(s => typeof s === "string" ? s : s.skillName || s.name || "").filter(Boolean);
+
+  let skillsStatus = "COMPLETED";
+  if (requiredList.length === 0 && preferredList.length === 0 && softList.length === 0) {
+    if ((rawJobObj.description || "").length < 20) {
+      skillsStatus = "PENDING";
+    } else {
+      skillsStatus = "NONE_DETECTED";
+    }
+  }
+
+  const isSaved = (rawJobObj.savedBy || []).some(id => String(id) === userIdStr);
+  const isViewed = (rawJobObj.viewedBy || []).some(id => String(id) === userIdStr);
+
+  return {
+    id: String(rawJobObj._id),
+    _id: String(rawJobObj._id),
+    title: rawJobObj.title || "Untitled Position",
+    company: rawJobObj.company || "Unknown Company",
+    location: rawJobObj.location || "",
+    remoteStatus: rawJobObj.remoteStatus || "",
+    employmentType: rawJobObj.employmentType || "",
+    salaryDisplay: rawJobObj.salaryDisplay || "",
+    description: rawJobObj.description || "",
+    source: rawJobObj.source || "manual",
+    sourceType: rawJobObj.sourceType || "manual",
+    sourceUrl: rawJobObj.url || rawJobObj.canonicalUrl || "",
+    canonicalUrl: rawJobObj.canonicalUrl || "",
+    externalJobId: rawJobObj.externalJobId || "",
+    createdAt: rawJobObj.createdAt,
+    updatedAt: rawJobObj.updatedAt,
+    isSaved,
+    isViewed,
+
+    requiredSkills: rawJobObj.requiredSkills || [],
+    preferredSkills: rawJobObj.preferredSkills || [],
+    softSkills: rawJobObj.softSkills || [],
+
+    skills: {
+      status: skillsStatus,
+      required: requiredList,
+      preferred: preferredList,
+      soft: softList
+    },
+
+    matchScore: matchResult?.overallScore != null ? matchResult.overallScore : null,
+    match: matchResult ? {
+      score: matchResult.overallScore,
+      matchedSkills: matchResult.matchedSkills || [],
+      missingSkills: matchResult.missingSkills || [],
+      partialSkills: matchResult.partialSkills || [],
+      categoryScores: matchResult.categoryScores || {},
+      analyzedAt: matchResult.createdAt
+    } : null,
+
+    recommendedResume: resume ? {
+      id: String(resume._id),
+      name: resume.name || `Version ${resume.version || 1}`,
+      version: resume.version || 1
+    } : null,
+
+    application: application ? {
+      id: String(application._id),
+      applicationId: String(application._id),
+      status: application.status,
+      appliedAt: application.dateApplied || application.createdAt
+    } : null,
+
+    userState: {
+      isSaved,
+      isViewed
+    }
+  };
+}
+
+/**
  * Run the match pipeline between a job and the user's latest resume
  * WITHOUT requiring an application to exist first.
  *
@@ -217,6 +316,7 @@ export async function matchJobToProfile(jobId, userId) {
   const { User } = await import("../../models/User.js");
   const { UserSkill } = await import("../../models/UserSkill.js");
   const { Project } = await import("../../models/Project.js");
+  const { MatchResult } = await import("../../models/MatchResult.js");
   const { runMatchPipeline } = await import("../matching/matchEngine.js");
   const { AppError } = await import("../../utils/errors.js");
 
@@ -256,13 +356,40 @@ export async function matchJobToProfile(jobId, userId) {
     experienceYears: null
   };
 
-  const matchResult = await runMatchPipeline(resume?.structuredData || {}, extractedJd, candidateContext);
+  const matchPipelineResult = await runMatchPipeline(resume?.structuredData || {}, extractedJd, candidateContext);
+
+  // Persist MatchResult directly with jobId and userId
+  if (resume) {
+    try {
+      await MatchResult.findOneAndUpdate(
+        { userId, jobId: job._id },
+        {
+          userId,
+          jobId: job._id,
+          resumeId: resume._id,
+          resumeHash: `res_${resume._id}`,
+          jdHash: `job_${job._id}`,
+          overallScore: matchPipelineResult.overallScore,
+          categoryScores: matchPipelineResult.categoryScores || {},
+          fitBreakdown: matchPipelineResult.fitBreakdown || {},
+          matchedSkills: matchPipelineResult.matchedSkills || [],
+          partialSkills: matchPipelineResult.partialSkills || [],
+          missingSkills: matchPipelineResult.missingSkills || [],
+          criticalGaps: matchPipelineResult.criticalGaps || [],
+          explanation: matchPipelineResult.explanation || ""
+        },
+        { upsert: true, new: true }
+      );
+    } catch (e) {
+      console.error("[jobService] Failed to persist MatchResult:", e.message);
+    }
+  }
 
   return {
     hasResume: !!resume,
     resumeId: resume?._id || null,
     resumeName: resume?.name || "Career Profile",
-    ...matchResult
+    ...matchPipelineResult
   };
 }
 

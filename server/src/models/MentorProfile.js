@@ -22,6 +22,17 @@ const mentorProfileSchema = new mongoose.Schema(
     portfolioUrl: { type: String, trim: true, default: "" },
     githubUrl: { type: String, trim: true, default: "" },
     linkedinUrl: { type: String, trim: true, default: "" },
+    preferredStudentLevels: { type: [String], default: ["Beginner", "Intermediate"] },
+    education: { type: String, trim: true, default: "" },
+    certifications: { type: [String], default: [] },
+    previousExperience: { type: String, trim: true, default: "" },
+    profileCompletion: { type: Number, default: 80, min: 0, max: 100 },
+    reputationStatus: {
+      type: String,
+      enum: ["probation", "verified", "trusted", "restricted"],
+      default: "probation"
+    },
+    maxWeeklySessions: { type: Number, default: 5, min: 1, max: 50 },
     rating: { type: Number, default: 5.0, min: 1.0, max: 5.0 },
     reviewsCount: { type: Number, default: 0, min: 0 },
     completedSessionsCount: { type: Number, default: 0, min: 0 },

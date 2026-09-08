@@ -66,6 +66,18 @@ async function initUI() {
 
 
 
+async function getJobDataFromTab(tab) {
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_JOB_DATA" });
+    if (!res) {
+      return { status: "CONTENT_SCRIPT_UNAVAILABLE", isJobPage: false, reason: "Content script unavailable." };
+    }
+    return res;
+  } catch (err) {
+    return { status: "INJECTION_FAILED", isJobPage: false, error: err.message || "Could not communicate with tab." };
+  }
+}
+
   // 3. Page Context & Extraction Inspection
   try {
     const isGmailTab = tab.url.includes("mail.google.com");
@@ -280,8 +292,8 @@ async function renderGmailState(tab, initialResult = null) {
   }
 }
 
-async function getJobDataFromTab(tab) {
-  const timeoutMs = 2000; // 2 second timeout for content script handshake
+async function getJobDataFromTab(tab, isManualInspect = false) {
+  const timeoutMs = 2500;
   
   const sendMessageWithTimeout = (tabId, message) => {
     return new Promise((resolve, reject) => {
@@ -307,39 +319,61 @@ async function getJobDataFromTab(tab) {
     });
   };
 
+  const messageType = isManualInspect ? "ON_DEMAND_INSPECT" : "GET_JOB_DATA";
+
   try {
-    const res = await sendMessageWithTimeout(tab.id, { type: "GET_JOB_DATA" });
+    const res = await sendMessageWithTimeout(tab.id, { type: messageType });
     if (res && res.status) return res;
   } catch (err) {
     if (err.message === "CONTENT_SCRIPT_TIMEOUT") {
-      return { status: "INJECTION_FAILED", isJobPage: false, error: "The page is taking longer than expected to load." };
+      return { status: "INSPECTION_FAILED", isJobPage: false, reason: "CareerPilot could not inspect this page in time." };
     }
-    // CONTENT_SCRIPT_MISSING caught here, fall through to injection attempt
   }
 
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: [
+        "utils/logger.js",
+        "utils/siteBlocklist.js",
+        "utils/circuitBreaker.js",
+        "utils/contextEngine.js",
+        "adapters/portalRegistry.js",
+        "adapters/linkedinAdapter.js",
+        "adapters/indeedAdapter.js",
+        "adapters/naukriAdapter.js",
+        "adapters/wellfoundAdapter.js",
+        "adapters/glassdoorAdapter.js",
+        "adapters/greenhouseAdapter.js",
+        "adapters/leverAdapter.js",
+        "adapters/workdayAdapter.js",
+        "adapters/ashbyAdapter.js",
+        "adapters/smartrecruitersAdapter.js",
+        "adapters/icimsAdapter.js",
+        "adapters/taleoAdapter.js",
+        "adapters/jobviteAdapter.js",
+        "adapters/bamboohrAdapter.js",
+        "adapters/genericAdapter.js",
+        "adapters/collegePortalAdapter.js",
         "content/contextDetector.js",
+        "content/intentDetector.js",
+        "content/intentOverlay.js",
         "content/gmailExtractor.js",
         "content/gmailOverlay.js",
+        "content/activationEngine.js",
         "content/content_script.js",
       ],
     });
 
-    await new Promise((r) => setTimeout(r, 60));
-    const res = await sendMessageWithTimeout(tab.id, { type: "GET_JOB_DATA" });
+    await new Promise((r) => setTimeout(r, 80));
+    const res = await sendMessageWithTimeout(tab.id, { type: messageType });
     return res || { status: "JOB_NOT_DETECTED", isJobPage: false, reason: "No response from content script." };
   } catch (injErr) {
-    if (injErr.message === "CONTENT_SCRIPT_TIMEOUT") {
-       return { status: "INJECTION_FAILED", isJobPage: false, error: "The page is taking longer than expected to load." };
-    }
-    console.error("[CareerPilot] chrome.scripting.executeScript failed:", injErr);
+    console.warn("[CareerPilot] chrome.scripting.executeScript fallback:", injErr.message);
     return {
       status: "INJECTION_FAILED",
       isJobPage: false,
-      error: injErr.message || "Failed to execute script on tab.",
+      error: injErr.message || "Failed to execute inspection script on tab.",
     };
   }
 }
@@ -483,7 +517,7 @@ async function handleApply() {
     jobUrl: extractedPayload.url,
     location: extractedPayload.location,
     jobDescription: extractedPayload.description,
-    targetStatus: "applied",
+    targetStatus: "saved",
     source: "extension_manual_action",
     evidence: "User clicked Apply in Chrome Extension",
   };

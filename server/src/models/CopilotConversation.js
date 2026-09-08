@@ -10,9 +10,29 @@ const messageSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  responseType: {
+    type: String,
+    default: "DIRECT_ANSWER"
+  },
+  summary: {
+    type: String,
+    default: ""
+  },
+  keyPoints: {
+    type: Array,
+    default: []
+  },
+  expandableSections: {
+    type: Array,
+    default: []
+  },
   sections: {
     type: Array,
     default: []
+  },
+  structuredData: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   }
 }, { _id: true, timestamps: { createdAt: 'timestamp', updatedAt: false } });
 

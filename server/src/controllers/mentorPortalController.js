@@ -19,33 +19,85 @@ const verifyAssignment = async (mentorId, studentId) => {
 
 export const getDashboardStats = async (req, res, next) => {
   try {
-    const mentorId = req.user._id;
+    const mentorId = req.user._id || req.user.id;
+    const user = await User.findById(mentorId).lean();
 
-    // Get all active mentees
+    const { MentorProfile } = await import("../models/MentorProfile.js");
+    const { MentorshipSession } = await import("../models/MentorshipSession.js");
+    const { MentorReputation } = await import("../models/MentorReputation.js");
+
+    const profile = await MentorProfile.findOne({ userId: mentorId }).lean() || {};
+    const reputation = await MentorReputation.findOne({ mentorId }).lean() || {};
+
+    // 1. Get Today's Schedule
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const { default: MentorshipSessionModel } = await import("../models/MentorshipSession.js");
+    const todaySessions = await MentorshipSessionModel.find({
+      mentorId,
+      status: { $in: ["scheduled", "accepted"] },
+      scheduledAt: { $gte: startOfToday, $lte: endOfToday }
+    })
+      .populate("studentId", "name email avatar targetRoles")
+      .sort({ scheduledAt: 1 })
+      .lean();
+
+    // 2. Get Pending Requests
+    const pendingRequests = await MentorshipSessionModel.find({
+      mentorId,
+      status: "requested"
+    })
+      .populate("studentId", "name email avatar targetRoles readinessScore")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 3. Active Mentees
     const assignments = await MentorStudentAssignment.find({ mentorId, status: "active" }).select("studentId");
     const studentIds = assignments.map(a => a.studentId);
-
-    // Get basic stats
-    const totalMentees = studentIds.length;
-    
-    // Recent applications across all mentees (last 7 days)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentApplications = await Application.countDocuments({
-      userId: { $in: studentIds },
-      createdAt: { $gte: sevenDaysAgo }
-    });
-
-    const upcomingInterviews = await InterviewSession.countDocuments({
-      userId: { $in: studentIds },
-      scheduledAt: { $gte: new Date() }
-    });
 
     res.status(200).json({
       success: true,
       data: {
-        totalMentees,
-        recentApplications,
-        upcomingInterviews
+        mentorStatus: user?.mentorStatus || "none",
+        capabilityStatus: user?.capabilityStatus || "not_started",
+        reputationStatus: profile.reputationStatus || "probation",
+        maxWeeklySessions: profile.maxWeeklySessions || 5,
+        rating: profile.rating || 5.0,
+        reviewsCount: profile.reviewsCount || 0,
+        completedSessionsCount: profile.completedSessionsCount || 0,
+        totalMentees: studentIds.length,
+        todaySchedule: todaySessions.map(s => ({
+          id: s._id,
+          topic: s.topic,
+          duration: s.duration,
+          scheduledAt: s.scheduledAt,
+          meetingUrl: s.meetingUrl || `/mentor/session/${s._id}`,
+          studentName: s.studentId?.name || "Student Candidate",
+          studentAvatar: s.studentId?.avatar,
+          studentTargetRole: s.studentId?.targetRoles?.[0]?.title || "Software Engineer"
+        })),
+        pendingRequests: pendingRequests.map(r => ({
+          id: r._id,
+          topic: r.topic,
+          description: r.description,
+          duration: r.duration,
+          scheduledAt: r.scheduledAt,
+          submittedAt: r.createdAt,
+          studentId: r.studentId?._id,
+          studentName: r.studentId?.name || "Student Candidate",
+          studentAvatar: r.studentId?.avatar,
+          studentReadinessScore: r.studentId?.readinessScore || 70,
+          studentTargetRole: r.studentId?.targetRoles?.[0]?.title || "Software Engineer"
+        })),
+        reputation: {
+          reliabilityScore: reputation.reliabilityScore || 100,
+          problemResolutionRate: reputation.problemResolutionRate || 100,
+          rebookingRate: reputation.rebookingRate || 100,
+          repeatStudentsCount: reputation.repeatStudentsCount || 0
+        }
       }
     });
   } catch (error) {

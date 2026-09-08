@@ -142,9 +142,7 @@ export function AppLayout() {
     <div className="flex flex-col h-full">
       {/* Brand Header */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-border/60 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-sm shadow-2xs">
-          C
-        </div>
+        <img src="/favicon.png" alt="CareerPilot AI" className="w-8 h-8 rounded-lg object-contain shadow-2xs" />
         <div className="flex flex-col">
           <span className="text-sm font-bold text-text leading-tight tracking-tight">CareerPilot AI</span>
           <span className="text-[10px] font-semibold text-text-muted tracking-wider uppercase">Career Operating System</span>

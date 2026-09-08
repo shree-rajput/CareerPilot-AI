@@ -22,7 +22,7 @@
 
     <!-- Sub-header bar -->
     <div class="supported-bar">
-      <span id="userStatusText">Universal Capture: <strong>LinkedIn, Indeed &amp; Any Career Site</strong></span>
+      <span id="userStatusText">⚡ <strong>Indeed, LinkedIn &amp; 100+ Career Sites</strong></span>
       <button id="disconnectBtn" class="btn-link hidden">Disconnect</button>
     </div>
 
@@ -31,20 +31,20 @@
       <!-- Loading State -->
       <div id="stateLoading" class="state-card">
         <div class="spinner"></div>
-        <p class="state-loading-text">Detecting job intelligence...</p>
+        <p class="state-loading-text">Inspecting page intelligence...</p>
       </div>
 
       <!-- Saving State -->
       <div id="stateSaving" class="state-card hidden">
         <div class="spinner"></div>
-        <p class="state-loading-text">Applying...</p>
+        <p class="state-loading-text">Tracking application to workspace...</p>
       </div>
 
       <!-- Injection Failure State (Page Access) -->
       <div id="stateInjectionFailed" class="state-card hidden">
         <div class="state-icon icon-warning">⚠️</div>
         <h3>Page Access Required</h3>
-        <p id="injectionErrorMsg">CareerPilot can't access this page.</p>
+        <p id="injectionErrorMsg">CareerPilot can't access this page tab.</p>
         <p class="hint" id="injectionErrorDetail"></p>
         <button id="retryInjectionBtn" class="btn btn-secondary mt-12">Retry Page Inspection</button>
       </div>
@@ -52,7 +52,7 @@
       <!-- Network Error State (Backend Down) -->
       <div id="stateNetworkError" class="state-card hidden">
         <div class="state-icon icon-warning">⚠️</div>
-        <h3>We couldn't track this application right now</h3>
+        <h3>Unable to Connect</h3>
         <p id="networkErrorMsg">Your job details are safe.</p>
         <p class="hint" id="networkErrorDetail"></p>
         <button id="retryNetworkBtn" class="btn btn-secondary mt-12">Retry</button>
@@ -63,7 +63,7 @@
         <div class="state-icon icon-info">ℹ️</div>
         <h3>Page Not a Job Posting</h3>
         <p id="notJobMsg">This page doesn't appear to contain an active job posting.</p>
-        <p class="hint">Open a job posting page on any career site (LinkedIn, Indeed, Greenhouse, Lever, Workday, etc.) to capture.</p>
+        <p class="hint">Open a job posting page on Indeed, LinkedIn, Greenhouse, Lever, Workday, etc.</p>
         <button id="forceManualCaptureBtn" class="btn btn-secondary mt-12">Force Manual Capture</button>
       </div>
 
@@ -75,26 +75,26 @@
         <p class="hint">Open a regular job website tab to capture opportunities.</p>
       </div>
 
-      <!-- Unauthenticated State (1-Click Connect, NO manual tokens!) -->
+      <!-- Unauthenticated State -->
       <div id="stateAuth" class="state-card hidden">
         <div class="state-icon icon-lock">🔐</div>
-        <h3>Connect CareerPilot</h3>
-        <p class="state-desc">Connect your account with 1-click to save jobs directly into your pipeline and calculate instant match scores.</p>
-        <button id="connectAppBtn" class="btn btn-primary mt-12">Connect CareerPilot</button>
+        <h3>Connect CareerPilot AI</h3>
+        <p class="state-desc">Connect your workspace with 1-click to save jobs directly into your pipeline and calculate instant match scores.</p>
+        <button id="connectAppBtn" class="btn btn-primary mt-12">⚡ Connect CareerPilot</button>
       </div>
 
-      <!-- Preview State (High / Medium / Low Confidence) -->
+      <!-- Preview State -->
       <div id="statePreview" class="state-card hidden">
         <div class="job-card">
           <div class="job-card-header">
-            <span class="job-source-badge" id="previewSource">LINKEDIN</span>
+            <span class="job-source-badge" id="previewSource">INDEED</span>
             <span class="workplace-badge hidden" id="previewWorkplace">Remote</span>
           </div>
           <h2 id="previewTitle" class="job-title">Software Developer</h2>
-          <p id="previewCompany" class="job-company">Soranova Technologies</p>
+          <p id="previewCompany" class="job-company">Company</p>
           <div class="meta-row">
-            <span id="previewLocation" class="job-location">Remote · Indore</span>
-            <span id="previewSalary" class="job-salary hidden">₹4L–₹7L/year</span>
+            <span id="previewLocation" class="job-location">📍 Location not specified</span>
+            <span id="previewSalary" class="job-salary hidden">💰 Salary N/A</span>
           </div>
         </div>
 
@@ -102,7 +102,7 @@
           <span>⚠️ Low extraction confidence. Please review job details below.</span>
         </div>
 
-        <!-- Editable Form (Visible if Low Confidence or User Clicks Edit) -->
+        <!-- Editable Form -->
         <form id="reviewForm" class="review-form hidden">
           <div class="form-group">
             <label for="editTitle">Job Title</label>
@@ -123,23 +123,23 @@
         </form>
 
         <div class="action-bar mt-12">
-          <button id="applyBtn" class="btn btn-primary">Apply</button>
+          <button id="applyBtn" class="btn btn-primary">⚡ Track Application</button>
           <button id="toggleEditBtn" class="btn btn-ghost">Edit Details</button>
         </div>
       </div>
 
       <!-- Duplicate / Already Saved State -->
       <div id="stateDuplicate" class="state-card hidden">
-        <div class="status-badge badge-info">Already in Pipeline</div>
+        <div class="status-badge badge-info">✓ Tracked in Workspace</div>
         <h3 id="dupTitle" class="job-title mt-8">Software Engineer</h3>
-        <p id="dupCompany" class="job-company">Meta</p>
-        <div class="dup-details">
+        <p id="dupCompany" class="job-company">Company</p>
+        <div class="dup-details mt-8">
           <p><strong>Pipeline Status:</strong> <span id="dupStatus" class="status-pill">APPLIED</span></p>
-          <p id="dupMatchContainer"><strong>Match Score:</strong> <span id="dupMatch">--%</span></p>
+          <p id="dupMatchContainer" class="mt-4"><strong>Match Score:</strong> <span id="dupMatch">--%</span></p>
         </div>
         
-        <div class="action-bar mt-8">
-          <button id="openAppBtn" class="btn btn-primary">Open Workspace</button>
+        <div class="action-bar mt-12">
+          <button id="openAppBtn" class="btn btn-primary">Open Workspace ↗</button>
         </div>
       </div>
 
@@ -147,7 +147,7 @@
       <div id="stateSuccess" class="state-card hidden">
         <div class="success-header">
           <div class="check-icon">✓</div>
-          <h3>Application tracked</h3>
+          <h3>Application Tracked</h3>
         </div>
         
         <div class="job-card mt-8">
@@ -157,14 +157,14 @@
         </div>
 
         <div class="action-bar mt-12">
-          <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Workspace</button>
+          <button id="viewAppWorkspaceBtn" class="btn btn-primary">Open Workspace ↗</button>
         </div>
       </div>
 
       <!-- Gmail Email Lifecycle State -->
       <div id="stateGmailEmail" class="state-card hidden">
         <div class="email-header-badge">
-          <span class="badge badge-success">✉️ Application Email Detected</span>
+          <span class="badge badge-success">✉️ Application Email</span>
           <span id="gmailConfidenceBadge" class="badge badge-primary">High Confidence</span>
         </div>
 
@@ -178,10 +178,10 @@
               <span id="gmailEventType" class="meta-value font-semibold">Application Received</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">CareerPilot Status:</span>
+              <span class="meta-label">Status:</span>
               <span id="gmailTargetStatus" class="status-pill">APPLIED</span>
             </div>
-            <div class="meta-item full-width">
+            <div class="meta-item full-width mt-4">
               <span class="meta-label">Sender:</span>
               <span id="gmailSenderText" class="meta-value text-muted">notifications@recooty.com</span>
             </div>
@@ -193,7 +193,7 @@
 
           <!-- Ambiguous Match Selector -->
           <div id="gmailAmbiguousSelector" class="ambiguous-selector hidden mt-12">
-            <p class="hint font-semibold text-warning">Multiple applications match this company. Select one:</p>
+            <p class="hint font-semibold text-warning">Multiple applications match. Select target:</p>
             <select id="gmailAppSelect" class="input mt-8"></select>
           </div>
         </div>

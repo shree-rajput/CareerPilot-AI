@@ -436,14 +436,12 @@ export function InterviewSessionPage() {
   // End session
   // ────────────────────────────────────────────────────────
   const handleEndSession = async () => {
-    if (window.confirm("Are you sure you want to end this interview?")) {
-      try {
-        await interviewApi.completeSession(sessionId);
-        navigate(`/interview/${sessionId}/report`);
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to complete session.");
-      }
+    try {
+      await interviewApi.completeSession(sessionId);
+      navigate(`/interview/${sessionId}/report`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to complete session.");
     }
   };
 

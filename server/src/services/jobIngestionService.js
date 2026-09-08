@@ -10,12 +10,28 @@ import { AppError } from "../utils/errors.js";
  * @param {string} rawUrl
  * @returns {string}
  */
+/**
+ * Clean and canonicalize URLs by removing common tracking parameters.
+ * @param {string} rawUrl
+ * @returns {string}
+ */
 export function sanitizeUrl(rawUrl = "") {
   if (!rawUrl || typeof rawUrl !== "string") return "";
   try {
     const parsed = new URL(rawUrl);
-    // Remove UTM & tracking query parameters
-    const paramsToClean = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "refId", "trackingId", "trk"];
+
+    // Indeed special normalization: canonicalize viewjob URLs with jk
+    const jk = parsed.searchParams.get("jk") || parsed.searchParams.get("vjk") || parsed.searchParams.get("vjs");
+    if (parsed.hostname.includes("indeed") && jk) {
+      return `https://www.indeed.com/viewjob?jk=${jk}`;
+    }
+
+    // Remove tracking & session query parameters
+    const paramsToClean = [
+      "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", 
+      "refId", "trackingId", "trk", "vjk", "vjs", "qd", "rd", "from", "spa", 
+      "tk", "bb", "advn", "ad", "gclid", "fbclid", "cmp"
+    ];
     paramsToClean.forEach((p) => parsed.searchParams.delete(p));
     return parsed.toString();
   } catch {
@@ -45,7 +61,7 @@ export function normalizeJobTitle(title = "") {
  *
  * @param {Object} payload Ingestion parameters
  * @param {string} userId Authenticated User ID
- * @returns {Promise<Object>} Ingestion result with Job, Application, Match, & Resume Recommendation
+ * @returns {Promise<Object>} Ingestion result with Job, Match, & Resume Recommendation (Applications decoupled)
  */
 export async function ingestJobOpportunity(payload = {}, userId) {
   const rawJob = payload.rawJobData || payload;
@@ -123,11 +139,11 @@ export async function ingestJobOpportunity(payload = {}, userId) {
 
   // 1. Deduplication Check
   let existingJob = null;
-  if (canonicalUrl) {
-    existingJob = await Job.findOne({ canonicalUrl, isActive: true });
-  }
-  if (!existingJob && externalJobId) {
+  if (externalJobId) {
     existingJob = await Job.findOne({ externalJobId, isActive: true });
+  }
+  if (!existingJob && canonicalUrl) {
+    existingJob = await Job.findOne({ canonicalUrl, isActive: true });
   }
   if (!existingJob && company && normTitle) {
     existingJob = await Job.findOne({
@@ -142,9 +158,21 @@ export async function ingestJobOpportunity(payload = {}, userId) {
 
   if (job) {
     isDuplicate = true;
-    // Ensure user is in savedBy array
+    let modified = false;
+
+    // Ensure user is in viewedBy and savedBy arrays
+    if (!job.viewedBy) job.viewedBy = [];
+    if (!job.viewedBy.some((id) => String(id) === String(userId))) {
+      job.viewedBy.push(userId);
+      modified = true;
+    }
+    if (!job.savedBy) job.savedBy = [];
     if (!job.savedBy.some((id) => String(id) === String(userId))) {
       job.savedBy.push(userId);
+      modified = true;
+    }
+
+    if (modified) {
       await job.save();
     }
   } else {
@@ -178,7 +206,7 @@ export async function ingestJobOpportunity(payload = {}, userId) {
       }
     }
 
-    // 3. Create Job
+    // 3. Create Canonical Job
     job = new Job({
       title,
       company,
@@ -195,6 +223,7 @@ export async function ingestJobOpportunity(payload = {}, userId) {
       salaryDisplay,
       extractionConfidence: numConfidence,
       savedBy: [userId],
+      viewedBy: [userId],
       responsibilities: extractedData.responsibilities,
       qualifications: extractedData.qualifications,
       technologies: extractedData.technologies,
@@ -237,55 +266,13 @@ export async function ingestJobOpportunity(payload = {}, userId) {
     recommendedResume = allResumes[0];
   }
 
-  // 5. Auto-Draft Application Creation
-  let application = await Application.findOne({ userId, jobId: job._id });
-
-  const extractedJdObject = {
-    title: job.title,
-    company: job.company,
-    requiredSkills: job.requiredSkills.map((s) => s.skillName),
-    preferredSkills: job.preferredSkills.map((s) => s.skillName),
-    responsibilities: job.responsibilities || [],
-    educationRequirement: job.educationRequirement || "",
-    experienceRequirement: job.experienceRequirement || "",
-  };
-
-  if (!application) {
-    const safeCompany = job.company.substring(0, 150);
-    const safeRole = job.title.substring(0, 150);
-
-    application = new Application({
-      userId,
-      jobId: job._id,
-      company: safeCompany,
-      role: safeRole,
-      position: safeRole,
-      jobDescription: job.description,
-      extractedJd: extractedJdObject,
-      status: "saved", // Default initial state "saved/discovered"
-      source: sourceType === "extension" ? "extension_capture" : sourceType,
-      location: job.location,
-      jobUrl: job.url || canonicalUrl,
-      resumeVersionId: recommendedResume?._id || null,
-      statusHistory: [
-        {
-          fromStatus: "",
-          toStatus: "saved",
-          changedBy: sourceType === "extension" ? "extension_capture" : "manual",
-          source: sourceType === "extension" ? "extension_capture" : "manual_upload",
-          confidence: numConfidence >= 80 ? "high" : numConfidence >= 50 ? "medium" : "low",
-          evidence: `Captured from ${job.company} - ${job.title}`,
-          note: `Captured via ${sourceType === "extension" ? "Chrome Extension" : sourceType === "pdf" ? "JD PDF Upload" : sourceType}`,
-        },
-      ],
-    });
-    await application.save();
-  }
+  // 5. Existing Application check (DECOUPLED — do NOT auto-create application)
+  const application = await Application.findOne({ userId, jobId: job._id });
 
   return {
     isDuplicate,
     job,
-    application,
+    application: application || null,
     matchResult: matchResult || { overallScore: 0, matchedSkills: [], missingSkills: [], partialSkills: [] },
     recommendedResume: recommendedResume
       ? {

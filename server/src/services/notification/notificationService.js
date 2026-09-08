@@ -64,33 +64,10 @@ export async function createNotification({
     const notification = new Notification(notifData);
     await notification.save();
 
-    // Trigger async email notification without blocking
-    User.findById(userId)
-      .lean()
-      .then(async (user) => {
-        if (user) {
-          const sent = await sendEmailNotification({
-            user,
-            type,
-            title: title || "CareerPilot Notification",
-            message,
-            actionUrl: notifData.action.route || actionUrl,
-            entityType: notifData.source.entityType || entityType
-          });
-
-          if (sent) {
-            await Notification.findByIdAndUpdate(notification._id, {
-              emailSent: true,
-              emailSentAt: new Date()
-            });
-          } else {
-            await Notification.findByIdAndUpdate(notification._id, {
-              emailFailedAt: new Date()
-            });
-          }
-        }
-      })
-      .catch((err) => console.error("[NotificationService] Async email dispatch error:", err.message));
+    // Multi-Channel Dispatcher (Browser, Email, Future WhatsApp)
+    dispatchMultiChannelNotification(notification, notifData).catch((err) =>
+      console.error("[NotificationService] Multi-channel dispatch error:", err.message)
+    );
 
     return notification;
   } catch (error) {
@@ -155,4 +132,41 @@ export async function markAllAsRead(userId) {
 export async function deleteNotification(notificationId, userId) {
   const res = await Notification.deleteOne({ _id: notificationId, userId });
   return res.deletedCount > 0;
+}
+
+/**
+ * Multi-Channel Notification Dispatcher Architecture
+ * Decouples channel-specific delivery logic (Browser, Email, Future WhatsApp) from application event producers.
+ */
+export async function dispatchMultiChannelNotification(notification, notifData) {
+  const user = await User.findById(notification.userId).lean();
+  if (!user) return;
+
+  // Channel 1: Email Channel
+  if (user.notificationPreferences?.emailEnabled !== false) {
+    const sent = await sendEmailNotification({
+      user,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      actionUrl: notifData.action?.route || notification.actionUrl,
+      entityType: notifData.source?.entityType || notification.entityType
+    }).catch(() => false);
+
+    if (sent) {
+      await Notification.findByIdAndUpdate(notification._id, {
+        emailSent: true,
+        emailSentAt: new Date()
+      });
+    } else {
+      await Notification.findByIdAndUpdate(notification._id, {
+        emailFailedAt: new Date()
+      });
+    }
+  }
+
+  // Channel 2: WhatsApp Channel (Future Channel Adapter Hook)
+  if (user.notificationPreferences?.whatsAppEnabled) {
+    // Extensible WhatsApp channel dispatcher interface stub
+  }
 }

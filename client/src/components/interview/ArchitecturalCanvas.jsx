@@ -401,10 +401,8 @@ export default function ArchitecturalCanvas({ socket, yjsProvider = null, initia
   };
 
   const handleClearCanvas = () => {
-    if (window.confirm("Clear architectural canvas?")) {
-      broadcastElements([]);
-      setSelectedId(null);
-    }
+    broadcastElements([]);
+    setSelectedId(null);
   };
 
   const handleExportPNG = () => {

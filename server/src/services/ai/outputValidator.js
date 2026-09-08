@@ -10,6 +10,25 @@ export function buildInsufficientDataResponse(message = "I don't have enough ver
   };
 }
 
+export function extractFieldFromRawJson(jsonStr, fieldName) {
+  if (!jsonStr || typeof jsonStr !== "string") return "";
+  try {
+    const regex = new RegExp(`"${fieldName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, "i");
+    const match = regex.exec(jsonStr);
+    if (match && match[1]) {
+      return match[1]
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
 /**
  * Extracts JSON from a raw string that might contain markdown fences or extra text.
  */
@@ -17,8 +36,13 @@ export function extractJson(rawText) {
   if (!rawText || typeof rawText !== "string") return null;
 
   try {
-    const startObj = rawText.indexOf("{");
-    const startArr = rawText.indexOf("[");
+    let cleanText = rawText.trim();
+    if (cleanText.startsWith("```")) {
+      cleanText = cleanText.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?\s*```$/, "").trim();
+    }
+
+    const startObj = cleanText.indexOf("{");
+    const startArr = cleanText.indexOf("[");
 
     let startIndex = -1;
     if (startObj !== -1 && startArr !== -1) {
@@ -34,8 +58,8 @@ export function extractJson(rawText) {
     let escapeNext = false;
     let endIndex = -1;
 
-    for (let i = startIndex; i < rawText.length; i++) {
-      const char = rawText[i];
+    for (let i = startIndex; i < cleanText.length; i++) {
+      const char = cleanText[i];
 
       if (escapeNext) {
         escapeNext = false;
@@ -64,10 +88,26 @@ export function extractJson(rawText) {
     }
 
     if (endIndex !== -1) {
-      const jsonStr = rawText.substring(startIndex, endIndex + 1);
+      const jsonStr = cleanText.substring(startIndex, endIndex + 1);
       return JSON.parse(jsonStr);
     }
   } catch {
+    // Regex fallback if strict open/close brace iteration or JSON.parse failed
+    const extReply = extractFieldFromRawJson(rawText, "reply") || extractFieldFromRawJson(rawText, "content") || extractFieldFromRawJson(rawText, "answer");
+    const extSummary = extractFieldFromRawJson(rawText, "summary");
+    const extType = extractFieldFromRawJson(rawText, "responseType");
+
+    if (extReply || extSummary) {
+      return {
+        responseType: extType || "EXPLANATION",
+        summary: extSummary || "",
+        reply: extReply || extSummary || "",
+        content: extReply || extSummary || "",
+        keyPoints: [],
+        expandableSections: [],
+        suggestedActions: []
+      };
+    }
     return null;
   }
   return null;
@@ -80,10 +120,32 @@ export function extractJson(rawText) {
 export function validateOutput(parsedJson, schema, rawText = "") {
   if (!parsedJson) {
     if (rawText && typeof rawText === "string" && rawText.trim()) {
-      // If LLM returned clean plain text, wrap into copilotChat style object
+      let cleanContent = rawText.trim();
+      if (cleanContent.startsWith("```")) {
+        cleanContent = cleanContent.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?\s*```$/, "").trim();
+      }
+
+      // If rawText is a stringified JSON object that failed parsing, extract readable text
+      if (cleanContent.startsWith("{") || cleanContent.includes('"responseType":') || cleanContent.includes('"reply":')) {
+        const extReply = extractFieldFromRawJson(cleanContent, "reply") || extractFieldFromRawJson(cleanContent, "content") || extractFieldFromRawJson(cleanContent, "summary") || extractFieldFromRawJson(cleanContent, "answer");
+        if (extReply) {
+          cleanContent = extReply;
+        } else {
+          cleanContent = cleanContent
+            .replace(/^{\s*"responseType":\s*"[^"]*",?/i, "")
+            .replace(/"summary":\s*"([^"]*)",?/gi, "$1\n")
+            .replace(/"keyPoints":\s*\[[\s\S]*?\],?/gi, "")
+            .replace(/"reply":\s*"/i, "")
+            .replace(/"expandableSections":\s*\[[\s\S]*$/i, "")
+            .replace(/\\n/g, "\n")
+            .replace(/\\"/g, '"')
+            .trim();
+        }
+      }
+
       return {
-        answer: rawText.trim(),
-        reply: rawText.trim(),
+        answer: cleanContent,
+        reply: cleanContent,
         suggestedActions: [],
         keyPoints: [],
         actionItems: [],

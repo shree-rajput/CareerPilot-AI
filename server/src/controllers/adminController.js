@@ -334,3 +334,248 @@ export async function triggerAutoStaleCheck(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * Gets high-level platform statistics for Admin Dashboard header cards.
+ */
+export async function getAdminMentorOverview(req, res, next) {
+  try {
+    const totalStudents = await User.countDocuments({ role: "student" });
+    const totalMentors = await User.countDocuments({ role: "mentor" });
+    const probationaryMentors = await User.countDocuments({ mentorStatus: "probation" });
+    const verifiedMentors = await User.countDocuments({ mentorStatus: "verified" });
+    const trustedMentors = await User.countDocuments({ mentorStatus: "trusted" });
+    const activeMentors = await MentorProfile.countDocuments({ isActive: true });
+    const completedSessions = await MentorshipSession.countDocuments({ status: "completed" });
+    const pendingAppealsCount = await (async () => {
+      try {
+        const { MentorAppeal } = await import("../models/MentorAppeal.js");
+        return await MentorAppeal.countDocuments({ status: "pending" });
+      } catch {
+        return 0;
+      }
+    })();
+
+    const pendingReportsCount = await MentorReport.countDocuments({ status: "pending" });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalStudents,
+        totalMentors,
+        probationaryMentors,
+        verifiedMentors,
+        trustedMentors,
+        activeMentors,
+        completedSessions,
+        exceptionQueueCount: pendingAppealsCount + pendingReportsCount
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Gets Exception Queue items (high-risk applications, unresolved verifications, serious reports, appeals, safety flags).
+ */
+export async function getAdminExceptionQueue(req, res, next) {
+  try {
+    // 1. Pending Applications
+    const pendingApps = await MentorApplication.find({
+      status: { $in: ["pending", "under_review", "more_info_required"] }
+    })
+      .populate("userId", "name email avatar createdAt")
+      .sort({ submittedAt: -1 })
+      .lean();
+
+    // 2. Pending Student Reports
+    const pendingReports = await MentorReport.find({ status: { $in: ["pending", "under_investigation"] } })
+      .populate("reporterId", "name email")
+      .populate("mentorId", "name email mentorStatus")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 3. Pending Mentor Appeals
+    let pendingAppeals = [];
+    try {
+      const { MentorAppeal } = await import("../models/MentorAppeal.js");
+      pendingAppeals = await MentorAppeal.find({ status: { $in: ["pending", "under_review"] } })
+        .populate("mentorId", "name email mentorStatus")
+        .sort({ createdAt: -1 })
+        .lean();
+    } catch (aErr) {
+      console.warn("[AdminExceptionQueue] Appeal fetch skipped:", aErr.message);
+    }
+
+    // 4. Restricted / Suspended Mentors needing review
+    const restrictedMentors = await User.find({
+      role: "mentor",
+      mentorStatus: { $in: ["restricted", "suspended"] }
+    })
+      .select("name email mentorStatus mentorProfile capabilityStatus createdAt")
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        applications: pendingApps,
+        reports: pendingReports,
+        appeals: pendingAppeals,
+        restrictedMentors,
+        totalExceptions: pendingApps.length + pendingReports.length + pendingAppeals.length + restrictedMentors.length
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Admin resolves a mentor appeal (approves or rejects).
+ */
+export async function resolveMentorAppeal(req, res, next) {
+  try {
+    const { appealId } = req.params;
+    const { action, notes } = req.body; // action: 'approve' | 'reject'
+    const adminId = req.user._id || req.user.id;
+
+    const { MentorAppeal } = await import("../models/MentorAppeal.js");
+    const appeal = await MentorAppeal.findById(appealId);
+    if (!appeal) return next(createError(404, "Appeal not found."));
+
+    const mentorUser = await User.findById(appeal.mentorId);
+    if (!mentorUser) return next(createError(404, "Associated mentor user not found."));
+
+    if (action === "approve") {
+      appeal.status = "approved";
+      appeal.adminNotes = notes || "Appeal approved after review";
+      appeal.reviewedBy = adminId;
+      appeal.resolvedAt = new Date();
+      await appeal.save();
+
+      mentorUser.mentorStatus = "probation";
+      await mentorUser.save();
+
+      await MentorProfile.findOneAndUpdate(
+        { userId: mentorUser._id },
+        { reputationStatus: "probation", isActive: true }
+      );
+
+      await ModerationAction.create({
+        adminId,
+        targetUserId: mentorUser._id,
+        actionType: "reactivate_mentor",
+        reason: notes || "Appeal approved by admin",
+        metadata: { appealId }
+      });
+
+      await createNotification({
+        userId: mentorUser._id,
+        type: "SYSTEM",
+        title: "Appeal Approved! 🎉",
+        message: "Your appeal has been reviewed and approved. Your mentor account has been restored to Probation status.",
+        actionUrl: "/mentor/dashboard"
+      }).catch(() => {});
+    } else {
+      appeal.status = "rejected";
+      appeal.adminNotes = notes || "Appeal rejected after review";
+      appeal.reviewedBy = adminId;
+      appeal.resolvedAt = new Date();
+      await appeal.save();
+
+      await ModerationAction.create({
+        adminId,
+        targetUserId: mentorUser._id,
+        actionType: "suspend_mentor",
+        reason: notes || "Appeal rejected by admin",
+        metadata: { appealId }
+      });
+
+      await createNotification({
+        userId: mentorUser._id,
+        type: "SYSTEM",
+        title: "Appeal Status Update",
+        message: `Your appeal status has been updated to rejected. Notes: ${notes || "Original restriction decision upheld."}`,
+        actionUrl: "/mentor/appeals"
+      }).catch(() => {});
+    }
+
+    res.status(200).json({
+      success: true,
+      data: appeal,
+      message: `Mentor appeal ${appeal.status} successfully.`
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Places temporary restriction on a mentor with rationale.
+ */
+export async function restrictMentorController(req, res, next) {
+  try {
+    const { mentorId } = req.params;
+    const { reason } = req.body;
+    const adminId = req.user._id || req.user.id;
+
+    if (!reason) return next(createError(400, "Reason for restriction is required."));
+
+    const mentorUser = await User.findById(mentorId);
+    if (!mentorUser) return next(createError(404, "Mentor user not found."));
+
+    mentorUser.mentorStatus = "restricted";
+    await mentorUser.save();
+
+    await MentorProfile.findOneAndUpdate(
+      { userId: mentorId },
+      { reputationStatus: "restricted" }
+    );
+
+    await ModerationAction.create({
+      adminId,
+      targetUserId: mentorId,
+      actionType: "suspend_mentor",
+      reason: `Account restricted: ${reason}`,
+      metadata: { status: "restricted" }
+    });
+
+    await createNotification({
+      userId: mentorId,
+      type: "SYSTEM",
+      title: "Account Status: Restricted ⚠️",
+      message: `Your mentor status has been restricted. Reason: ${reason}`,
+      actionUrl: "/mentor/appeals"
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: "Mentor account status set to restricted."
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Fetches Moderation Action audit logs.
+ */
+export async function getAdminAuditLogs(req, res, next) {
+  try {
+    const logs = await ModerationAction.find()
+      .populate("adminId", "name email")
+      .populate("targetUserId", "name email role")
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: logs
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

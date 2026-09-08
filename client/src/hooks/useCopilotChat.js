@@ -162,6 +162,87 @@ export function useCopilotChat({ initialConversationId = null } = {}) {
     }
   }, [activeConversation, isLoading, loadConversations]);
 
+  const [pinnedIds, setPinnedIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('copilot_pinned_convs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const togglePinConversation = useCallback((id) => {
+    if (!id) return;
+    setPinnedIds(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      try {
+        localStorage.setItem('copilot_pinned_convs', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const exportConversation = useCallback(async (id) => {
+    const conv = conversations.find(c => c._id === id) || activeConversation;
+    const title = conv?.title || "CareerPilot Chat";
+    let exportMsgs = messages;
+
+    if (id && activeConversation?._id !== id) {
+      try {
+        const res = await copilotApi.getConversation(id);
+        const data = res?.data || res;
+        exportMsgs = normalizeConversationMessages(data?.messages || []);
+      } catch {
+        // fallback to current messages
+      }
+    }
+
+    let md = `# CareerPilot Copilot: ${title}\n*Exported on ${new Date().toLocaleDateString()}*\n\n---\n\n`;
+    exportMsgs.forEach(m => {
+      if (m.role === 'user') {
+        md += `### 👤 User:\n${m.content}\n\n`;
+      } else {
+        md += `### 🤖 CareerPilot:\n`;
+        if (m.summary) md += `**Summary**: ${m.summary}\n\n`;
+        if (m.content) md += `${m.content}\n\n`;
+        if (m.keyPoints?.length) {
+          md += `**Key Points**:\n${m.keyPoints.map(k => `- ${k}`).join('\n')}\n\n`;
+        }
+      }
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [conversations, activeConversation, messages]);
+
+  const editAndResendMessage = useCallback((msgIndex, newText) => {
+    if (msgIndex < 0 || !newText.trim() || isLoading) return;
+    setMessages(prev => prev.slice(0, msgIndex));
+    sendMessage(newText);
+  }, [isLoading, sendMessage]);
+
+  const clearAllConversations = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      await Promise.all((conversations || []).map(c => copilotApi.deleteConversation(c._id).catch(() => {})));
+      startNewChat();
+      loadConversations();
+    } catch (err) {
+      console.error("[useCopilotChat] Failed to clear all conversations:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [conversations, startNewChat, loadConversations]);
+
   return {
     conversations,
     activeConversation,
@@ -169,10 +250,15 @@ export function useCopilotChat({ initialConversationId = null } = {}) {
     suggestedActions,
     isLoading,
     error,
+    pinnedIds,
     sendMessage,
     retryLastMessage,
     startNewChat,
     selectConversation,
-    loadConversations
+    loadConversations,
+    togglePinConversation,
+    exportConversation,
+    editAndResendMessage,
+    clearAllConversations
   };
 }

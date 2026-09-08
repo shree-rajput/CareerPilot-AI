@@ -5,6 +5,7 @@ import { Application } from "../../models/Application.js";
 import { PreparationPlan } from "../../models/PreparationPlan.js";
 import { createNotification } from "../notification/notificationService.js";
 import { runNotificationEngine } from "../notification/notificationEngine.js";
+import { runSmartApplicationReminders } from "./reminderEngine.js";
 
 /**
  * Acquires an idempotent cron execution lock to ensure safe multi-instance deployment.
@@ -138,6 +139,9 @@ export async function runDailyCareerReminders() {
 
         sentCount++;
       }
+
+      // Run smart application reminders for user
+      await runSmartApplicationReminders(user._id).catch(() => {});
     }
 
     console.log(`[Daily Reminder Scheduler] Processed ${activeUsers.length} users. Dispatched ${sentCount} daily reminders.`);
@@ -173,5 +177,11 @@ export function initCronScheduler() {
     runDailyCareerReminders();
   });
 
-  console.log("[Cron Scheduler] Active schedules: Auto-Stale (02:00 AM), Notifications (Hourly), Daily Reminders (08:00 AM).");
+  // 4. Hourly Application Reminder Engine Scan (for time-sensitive OA/interview reminders)
+  cron.schedule("30 * * * *", async () => {
+    console.log("[Cron Scheduler] Triggering hourly smart application reminder engine...");
+    await runSmartApplicationReminders(null).catch((err) => console.error("[Reminder Engine Hourly Error]:", err));
+  });
+
+  console.log("[Cron Scheduler] Active schedules: Auto-Stale (02:00 AM), Notifications (Hourly), Daily Reminders (08:00 AM), Application Reminders (Hourly :30).");
 }

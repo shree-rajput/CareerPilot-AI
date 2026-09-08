@@ -178,63 +178,74 @@ export function JobInboxPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredItems.map((item) => (
-            <div
-              key={item.applicationId}
-              className="bg-surface p-5 rounded-2xl border border-border hover:border-border-hover transition-all flex flex-col justify-between space-y-4 shadow-2xs group"
-            >
-              <div className="space-y-3">
-                {/* Header line: Source badge & match pill */}
-                <div className="flex items-center justify-between gap-2">
-                  {getSourceBadge(item.sourceType)}
-                  {item.matchScore > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/15 text-primary text-[11px] font-bold border border-primary/20">
-                      <Sparkles size={11} /> {item.matchScore}% match
-                    </span>
+          {filteredItems.map((item) => {
+            const jobId = item.id || item._id;
+            const matchScore = item.matchScore ?? item.match?.score ?? null;
+            const normScore = matchScore != null ? Math.round(matchScore > 1 ? matchScore : matchScore * 100) : null;
+
+            return (
+              <div
+                key={jobId}
+                className="bg-surface p-5 rounded-2xl border border-border hover:border-border-hover transition-all flex flex-col justify-between space-y-4 shadow-2xs group cursor-pointer"
+                onClick={() => navigate(`/jobs/${jobId}`)}
+              >
+                <div className="space-y-3">
+                  {/* Header line: Source badge & match pill */}
+                  <div className="flex items-center justify-between gap-2">
+                    {getSourceBadge(item.sourceType)}
+                    {normScore != null && normScore > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/15 text-primary text-[11px] font-bold border border-primary/20">
+                        <Sparkles size={11} /> {normScore}% match
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Role & Company */}
+                  <div>
+                    <h3 className="text-base font-bold text-text group-hover:text-primary transition-colors leading-snug">
+                      {item.title}
+                    </h3>
+                    <div className="text-xs font-semibold text-text-muted mt-0.5">
+                      {item.company} {item.location ? `• ${item.location}` : ""}
+                    </div>
+                  </div>
+
+                  {/* Recommended Resume */}
+                  {item.recommendedResume && (
+                    <div className="p-2.5 rounded-xl bg-bg-secondary border border-border text-xs flex items-center justify-between">
+                      <span className="text-[11px] text-text-muted font-medium">Recommended Resume:</span>
+                      <span className="font-bold text-text text-[11px]">{item.recommendedResume.name}</span>
+                    </div>
                   )}
                 </div>
 
-                {/* Role & Company */}
-                <div>
-                  <h3 className="text-base font-bold text-text group-hover:text-primary transition-colors leading-snug">
-                    {item.title}
-                  </h3>
-                  <div className="text-xs font-semibold text-text-muted mt-0.5">
-                    {item.company} {item.location ? `• ${item.location}` : ""}
-                  </div>
-                </div>
-
-                {/* Recommended Resume */}
-                {item.recommendedResume && (
-                  <div className="p-2.5 rounded-xl bg-bg-secondary border border-border text-xs flex items-center justify-between">
-                    <span className="text-[11px] text-text-muted font-medium">Recommended Resume:</span>
-                    <span className="font-bold text-text text-[11px]">{item.recommendedResume.name}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Toolbar */}
-              <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
-                <button
-                  onClick={() => navigate(`/applications/${item.applicationId}`)}
-                  className="px-3 py-1.5 rounded-lg bg-bg-secondary hover:bg-primary hover:text-white text-text-secondary text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  Analyze Fit <ArrowRight size={13} />
-                </button>
-                {item.sourceUrl && (
-                  <a
-                    href={item.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 text-text-muted hover:text-text rounded-lg hover:bg-bg-secondary"
-                    title="View Original Job Page"
+                {/* Action Toolbar */}
+                <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/jobs/${jobId}`);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-bg-secondary hover:bg-primary hover:text-white text-text-secondary text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <ExternalLink size={15} />
-                  </a>
-                )}
+                    Analyze Fit <ArrowRight size={13} />
+                  </button>
+                  {item.sourceUrl && (
+                    <a
+                      href={item.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 text-text-muted hover:text-text rounded-lg hover:bg-bg-secondary"
+                      title="View Original Job Page"
+                    >
+                      <ExternalLink size={15} />
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

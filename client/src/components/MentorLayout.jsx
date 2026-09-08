@@ -26,9 +26,7 @@ export function MentorLayout() {
     <div className="flex flex-col h-full bg-[#0a0a0a] text-white">
       {/* Brand Header */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-white/10 shrink-0">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-lg shadow-lg">
-          M
-        </div>
+        <img src="/favicon.png" alt="CareerPilot AI" className="w-9 h-9 rounded-xl object-contain shadow-lg" />
         <div className="flex flex-col">
           <span className="text-base font-bold leading-tight tracking-tight text-white">Mentor Portal</span>
           <span className="text-[10px] font-semibold text-white/50 tracking-wider uppercase">CareerPilot AI</span>

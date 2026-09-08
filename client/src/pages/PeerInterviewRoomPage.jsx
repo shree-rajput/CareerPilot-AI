@@ -444,10 +444,6 @@ export default function PeerInterviewRoomPage() {
   };
 
   const handleEndInterview = async () => {
-    if (!window.confirm("Are you sure you want to end this interview? A final report will be generated.")) {
-      return;
-    }
-
     try {
       setLoading(true);
       await import("../api/http").then(({ http }) => http.post(`/interview-rooms/${roomId}/end`));

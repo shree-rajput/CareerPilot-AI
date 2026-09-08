@@ -20,12 +20,12 @@ export function CopilotChat() {
       {/* Floating Widget Trigger Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 w-12 h-12 bg-primary text-white rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all z-[100] flex items-center justify-center cursor-pointer ${
+        className={`fixed bottom-6 right-6 w-12 h-12 bg-surface text-primary border border-primary/30 rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all z-[100] flex items-center justify-center cursor-pointer p-2.5 ${
           isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'
         }`}
         aria-label="Open CareerPilot Copilot"
       >
-        <MessageSquare size={20} />
+        <img src="/favicon.png" alt="CareerPilot Logo" className="w-full h-full object-contain" />
       </button>
 
       {/* Floating Chat Drawer */}

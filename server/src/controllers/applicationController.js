@@ -15,6 +15,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
 import { queueApplicationIntelligence } from "../services/intelligence/backgroundIntelligenceService.js";
+import { ingestJobOpportunity } from "../services/jobIngestionService.js";
+import { normalizeAndRecordEvent } from "../services/career/applicationEventService.js";
 
 const createApplicationSchema = z.object({
   company: z.string().trim().min(1).max(150),
@@ -147,22 +149,36 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
   // we persist the application and perform intelligence analysis (matching, etc.) asynchronously.
 
 
-  // 1. Search for matching existing application by jobUrl or company/role pair
+  // 1. Search for matching existing application by exact job identity or company/role pair
+  function extractJobIdentityParam(urlStr = "") {
+    try {
+      const parsed = new URL(urlStr);
+      const jk = parsed.searchParams.get("jk") || parsed.searchParams.get("vjk") || parsed.searchParams.get("vjs") || parsed.searchParams.get("currentJobId") || parsed.searchParams.get("gh_jid");
+      if (jk) return jk;
+      const trackingParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "refId", "trackingId", "trk", "fbclid", "gclid"];
+      trackingParams.forEach((p) => parsed.searchParams.delete(p));
+      return parsed.toString();
+    } catch {
+      return urlStr.trim();
+    }
+  }
+
   let existingApp = null;
   if (jobUrl && jobUrl.length > 5) {
-    // Strip query tracking params for clean URL matching
-    const cleanUrl = jobUrl.split("?")[0];
+    const jobIdentity = extractJobIdentityParam(jobUrl);
     existingApp = await Application.findOne({
       userId,
-      jobUrl: { $regex: cleanUrl.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&"), $options: "i" }
+      jobUrl: { $regex: jobIdentity.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&"), $options: "i" }
     });
   }
 
-  if (!existingApp) {
+  const isGenericString = (str) => !str || str.trim().length < 2 || /^(company|unknown company|job|position|untitled role)$/i.test(str.trim());
+
+  if (!existingApp && !isGenericString(company) && !isGenericString(role)) {
     existingApp = await Application.findOne({
       userId,
-      company: new RegExp(`^${company.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
-      role: new RegExp(`^${role.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i")
+      company: new RegExp(`^${company.trim().replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
+      role: new RegExp(`^${role.trim().replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i")
     });
   }
 
@@ -203,6 +219,29 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     if (location && !existingApp.location) existingApp.location = location;
 
     await existingApp.save();
+
+    // Record normalized ApplicationEvent
+    const eventTypeMap = {
+      saved: "JOB_SAVED",
+      apply_started: "APPLY_STARTED",
+      applied: "APPLICATION_SUBMITTED",
+      screening: "SCREENING_INVITED",
+      oa: "OA_INVITED",
+      interview: "INTERVIEW_SCHEDULED",
+      offer: "OFFER_RECEIVED",
+      rejected: "APPLICATION_REJECTED",
+      withdrawn: "APPLICATION_WITHDRAWN"
+    };
+
+    await normalizeAndRecordEvent({
+      userId,
+      applicationId: existingApp._id,
+      type: eventTypeMap[targetStatus] || "STATUS_UPDATED",
+      source: source || "extension_auto_overlay",
+      confidence: confidence === "high" ? 1.0 : confidence === "medium" ? 0.7 : 0.4,
+      evidence: evidence || "Captured via Chrome Extension",
+      metadata: { targetStatus, url: jobUrl }
+    }).catch(() => {});
 
     // Trigger notification if major milestone
     if (["applied", "interview", "screening", "oa", "offer"].includes(targetStatus)) {
@@ -253,6 +292,28 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     ]
   });
 
+  const eventTypeMap = {
+    saved: "JOB_SAVED",
+    apply_started: "APPLY_STARTED",
+    applied: "APPLICATION_SUBMITTED",
+    screening: "SCREENING_INVITED",
+    oa: "OA_INVITED",
+    interview: "INTERVIEW_SCHEDULED",
+    offer: "OFFER_RECEIVED",
+    rejected: "APPLICATION_REJECTED",
+    withdrawn: "APPLICATION_WITHDRAWN"
+  };
+
+  await normalizeAndRecordEvent({
+    userId,
+    applicationId: app._id,
+    type: eventTypeMap[targetStatus] || "JOB_SAVED",
+    source: source || "extension_auto_overlay",
+    confidence: confidence === "high" ? 1.0 : confidence === "medium" ? 0.7 : 0.4,
+    evidence: evidence || "Captured via Chrome Extension",
+    metadata: { targetStatus, url: jobUrl }
+  }).catch(() => {});
+
   if (["applied", "interview", "screening", "oa", "offer"].includes(targetStatus)) {
     await Notification.create({
       userId,
@@ -266,10 +327,18 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     }).catch(() => {});
   }
 
-  // Trigger AI Pipeline in background (Fire and Forget)
-  Promise.resolve().then(() => {
+  // Trigger AI Pipeline and Job Ingestion in background (Fire and Forget)
+  Promise.resolve().then(async () => {
     queueApplicationIntelligence(app._id.toString());
-  }).catch(err => console.error("Failed to start background intelligence pipeline:", err));
+    await ingestJobOpportunity({
+      title: role,
+      company,
+      description: jobDescription || "",
+      url: jobUrl || "",
+      location: location || "",
+      source: source || "extension"
+    }, userId).catch(err => console.error("Failed to ingest job opportunity during capture:", err));
+  }).catch(err => console.error("Failed to start background intelligence/ingestion pipeline:", err));
 
   return res.status(201).json({
     success: true,

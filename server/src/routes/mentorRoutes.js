@@ -15,7 +15,13 @@ import {
   getSessions,
   reportMentor,
   getMentorshipMessages,
-  onboardMentor
+  onboardMentor,
+  getCapabilityChallengeController,
+  submitCapabilityAssessmentController,
+  getMentorReputationController,
+  saveSessionNotesController,
+  proposeRescheduleSessionController,
+  submitMentorAppealController
 } from "../controllers/mentorController.js";
 
 const router = Router();
@@ -26,6 +32,13 @@ router.use(requireAuth);
 // Mentor application & onboarding
 router.post("/apply", applyToBecomeMentor);
 router.post("/onboard", onboardMentor);
+
+// Capability Assessment
+router.get("/assessment/challenge", getCapabilityChallengeController);
+router.post("/assessment/submit", submitCapabilityAssessmentController);
+
+// Reputation & Trust Progression
+router.get("/me/reputation", getMentorReputationController);
 
 // Mentor discovery & public profile
 router.get("/discover", discoverMentors);
@@ -41,6 +54,8 @@ router.post("/availability", requireRole("mentor", "admin"), configureMentorAvai
 router.post("/sessions", requestMentorshipSession);
 router.get("/sessions", getSessions);
 router.patch("/sessions/:sessionId/respond", respondToMentorshipRequest);
+router.post("/sessions/:sessionId/reschedule", proposeRescheduleSessionController);
+router.post("/sessions/:sessionId/notes", requireRole("mentor", "admin"), saveSessionNotesController);
 
 // Real-time Zoom-like WebRTC room & chat
 router.post("/sessions/:sessionId/livekit-token", getLiveKitTokenController);
@@ -50,6 +65,9 @@ router.get("/sessions/:sessionId/messages", getMentorshipMessages);
 router.post("/sessions/:sessionId/complete", requireRole("mentor", "admin"), completeMentorshipSession);
 router.post("/sessions/:sessionId/rate", rateMentorshipSession);
 router.post("/report", reportMentor);
+
+// Appeals
+router.post("/appeals", submitMentorAppealController);
 
 export const mentorRouter = router;
 export default router;

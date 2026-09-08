@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Sparkles, Share2 } from 'lucide-react';
+import { Menu, Sparkles, Share2, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ConversationSidebar } from './ConversationSidebar';
 import { ChatMessageList } from './ChatMessageList';
@@ -13,6 +13,7 @@ export function CopilotShell({
   error = null,
   input = '',
   setInput,
+  pinnedIds = [],
   onSendMessage,
   onRetry,
   onSelectPrompt,
@@ -21,6 +22,10 @@ export function CopilotShell({
   onRename,
   onDelete,
   onShare,
+  onTogglePin,
+  onExportChat,
+  onClearAll,
+  onEditUserPrompt,
   isSharedView = false
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -37,16 +42,20 @@ export function CopilotShell({
   };
 
   return (
-    <div className="flex h-screen w-full bg-surface overflow-hidden">
+    <div className="flex h-screen w-full bg-surface overflow-hidden font-sans text-text">
       {/* Sidebar */}
       <ConversationSidebar
         conversations={conversations}
         activeConversation={activeConversation}
+        pinnedIds={pinnedIds}
         onSelectConversation={onSelectConversation}
         onNewChat={onNewChat}
         onRename={onRename}
         onDelete={onDelete}
         onShare={onShare}
+        onTogglePin={onTogglePin}
+        onExportChat={onExportChat}
+        onClearAll={onClearAll}
         sidebarOpen={sidebarOpen}
         toggleSidebar={toggleSidebar}
         isSharedView={isSharedView}
@@ -55,12 +64,12 @@ export function CopilotShell({
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full bg-surface relative min-w-0">
         {/* Top Header */}
-        <header className="h-14 shrink-0 border-b border-border flex items-center px-4 justify-between bg-surface z-10">
-          <div className="flex items-center gap-2">
+        <header className="h-14 shrink-0 border-b border-border flex items-center px-4 justify-between bg-bg-secondary/40 backdrop-blur-md z-10">
+          <div className="flex items-center gap-2.5">
             {!sidebarOpen && !isSharedView && (
               <button
                 onClick={toggleSidebar}
-                className="p-1.5 text-text-secondary hover:text-text rounded-lg mr-1 cursor-pointer"
+                className="p-1.5 text-text-secondary hover:text-text rounded-lg mr-1 cursor-pointer transition-colors"
                 title="Expand sidebar"
               >
                 <Menu size={16} />
@@ -68,26 +77,41 @@ export function CopilotShell({
             )}
 
             <div className="flex items-center gap-2.5">
-              <div className="bg-primary/10 text-primary p-1.5 rounded-xl border border-primary/20">
-                <Sparkles size={16} />
+              <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center p-1 shadow-2xs">
+                <img src="/favicon.png" alt="CareerPilot AI" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="font-bold text-text text-sm m-0 leading-tight">CareerPilot Copilot</h1>
-                <span className="text-[10px] text-text-secondary font-medium">Personal Placement & Career Coach</span>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-extrabold text-text text-sm m-0 leading-tight tracking-tight">CareerPilot Copilot</h1>
+                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold tracking-wide">
+                    Live AI
+                  </span>
+                </div>
+                <span className="text-[10px] text-text-muted font-medium">Personal Placement & Career Coach</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {!isSharedView && activeConversation && (
-              <Button
-                onClick={() => onShare && onShare(activeConversation._id)}
-                variant="outline"
-                size="xs"
-                className="rounded-xl"
-              >
-                <Share2 size={13} className="mr-1.5" /> Share
-              </Button>
+              <>
+                <Button
+                  onClick={() => onExportChat && onExportChat(activeConversation._id)}
+                  variant="outline"
+                  size="xs"
+                  className="rounded-xl border-border/80 hover:border-primary/40 transition-all text-xs font-semibold"
+                >
+                  <Download size={13} className="mr-1.5 text-primary" /> Export .md
+                </Button>
+                <Button
+                  onClick={() => onShare && onShare(activeConversation._id)}
+                  variant="outline"
+                  size="xs"
+                  className="rounded-xl border-border/80 hover:border-primary/40 transition-all text-xs font-semibold"
+                >
+                  <Share2 size={13} className="mr-1.5 text-primary" /> Share Chat
+                </Button>
+              </>
             )}
           </div>
         </header>
@@ -98,6 +122,7 @@ export function CopilotShell({
           isLoading={isLoading}
           onRetry={onRetry}
           onSelectPrompt={onSelectPrompt}
+          onEditUserPrompt={onEditUserPrompt}
         />
 
         {/* Fixed Input Composer */}

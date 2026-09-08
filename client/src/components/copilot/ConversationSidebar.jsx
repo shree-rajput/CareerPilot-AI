@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { Plus, Menu, MessageSquare, MoreVertical, Edit2, Trash2, Share2, Search, X } from 'lucide-react';
+import { Plus, Menu, MessageSquare, MoreVertical, Edit2, Trash2, Share2, Search, X, Pin, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { toast } from '../../context/ToastContext';
 
 export function ConversationSidebar({
   conversations = [],
   activeConversation = null,
+  pinnedIds = [],
   onSelectConversation,
   onNewChat,
   onRename,
   onDelete,
   onShare,
+  onTogglePin,
+  onExportChat,
+  onClearAll,
   sidebarOpen = true,
   toggleSidebar,
   isSharedView = false
@@ -23,12 +26,15 @@ export function ConversationSidebar({
     (c.title || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const pinnedList = filteredConversations.filter(c => pinnedIds.includes(c._id));
+  const unpinnedList = filteredConversations.filter(c => !pinnedIds.includes(c._id));
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  const grouped = filteredConversations.reduce((acc, conv) => {
+  const grouped = unpinnedList.reduce((acc, conv) => {
     const date = new Date(conv.updatedAt || conv.createdAt || Date.now());
     if (date >= today) acc.today.push(conv);
     else if (date >= yesterday) acc.yesterday.push(conv);
@@ -40,10 +46,14 @@ export function ConversationSidebar({
     if (!group.length) return null;
     return (
       <div className="mb-4">
-        <h3 className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5 px-2">{title}</h3>
+        <h3 className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5 px-2 flex items-center gap-1">
+          {title === "Pinned" && <Pin size={10} className="text-primary" />}
+          <span>{title}</span>
+        </h3>
         <div className="space-y-0.5">
           {group.map(conv => {
             const isActive = activeConversation?._id === conv._id;
+            const isPinned = pinnedIds.includes(conv._id);
 
             return (
               <div
@@ -73,7 +83,30 @@ export function ConversationSidebar({
                     </button>
 
                     {menuOpenId === conv._id && (
-                      <div className="absolute right-0 top-full mt-1 w-32 bg-surface border border-border rounded-xl shadow-lg py-1 z-50 text-text text-xs">
+                      <div className="absolute right-0 top-full mt-1 w-36 bg-surface border border-border rounded-xl shadow-lg py-1 z-50 text-text text-xs">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId(null);
+                            onTogglePin && onTogglePin(conv._id);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-bg-secondary flex items-center gap-1.5 cursor-pointer font-medium"
+                        >
+                          <Pin size={12} className={isPinned ? 'text-primary fill-primary' : ''} />
+                          <span>{isPinned ? 'Unpin' : 'Pin to Top'}</span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId(null);
+                            onExportChat && onExportChat(conv._id);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-bg-secondary flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download size={12} /> Export Chat
+                        </button>
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -102,7 +135,7 @@ export function ConversationSidebar({
                             setMenuOpenId(null);
                             onDelete && onDelete(conv._id);
                           }}
-                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 text-rose-600 flex items-center gap-1.5 cursor-pointer font-medium"
+                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 text-rose-600 flex items-center gap-1.5 cursor-pointer font-medium border-t border-border/50"
                         >
                           <Trash2 size={12} /> Delete
                         </button>
@@ -196,10 +229,24 @@ export function ConversationSidebar({
             )}
           </div>
 
+          {renderGroup("Pinned", pinnedList)}
           {renderGroup("Today", grouped.today)}
           {renderGroup("Yesterday", grouped.yesterday)}
           {renderGroup("Previous", grouped.older)}
         </div>
+
+        {/* Footer: Clear All Chats */}
+        {sidebarOpen && !isSharedView && safeConversations.length > 0 && (
+          <div className="p-3 border-t border-border/60 shrink-0">
+            <button
+              onClick={onClearAll}
+              className="w-full py-1.5 px-3 rounded-xl border border-border/80 text-[11px] font-semibold text-text-muted hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 size={13} />
+              <span>Clear All Conversations</span>
+            </button>
+          </div>
+        )}
       </aside>
     </>
   );
