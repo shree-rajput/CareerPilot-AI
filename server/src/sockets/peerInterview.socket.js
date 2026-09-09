@@ -5,6 +5,7 @@ const roomYDocs = new Map(); // roomId -> Y.Doc
 const roomStates = new Map(); // roomId -> volatile state
 const snapshotDebounceTimers = new Map(); // roomId -> setTimeout ID
 const roomPresence = new Map(); // roomId -> Map(socketId -> presenceObject)
+const roomTeardownTimers = new Map(); // roomId -> setTimeout ID
 
 function getOrCreateRoomYDoc(roomId, initialRoomData = null) {
   if (roomYDocs.has(roomId)) {
@@ -94,6 +95,21 @@ function removeRoomPresence(roomId, socketId) {
     presenceMap.delete(socketId);
     if (presenceMap.size === 0) {
       roomPresence.delete(roomId);
+      
+      // Schedule teardown of in-memory state after 60 seconds of being empty
+      const timer = setTimeout(() => {
+        saveRoomSnapshotToDb(roomId).then(() => {
+          roomYDocs.delete(roomId);
+          roomStates.delete(roomId);
+          if (snapshotDebounceTimers.has(roomId)) {
+            clearTimeout(snapshotDebounceTimers.get(roomId));
+            snapshotDebounceTimers.delete(roomId);
+          }
+          roomTeardownTimers.delete(roomId);
+          console.log(`[Sockets] Cleaned up in-memory state for empty room ${roomId}`);
+        });
+      }, 60 * 1000);
+      roomTeardownTimers.set(roomId, timer);
     }
   }
   return getRoomPresenceList(roomId);
@@ -127,6 +143,12 @@ export function registerPeerInterviewSocket(io) {
       }
 
       const yDoc = getOrCreateRoomYDoc(roomId, roomDbData);
+
+      // Cancel any pending teardown timer since someone joined
+      if (roomTeardownTimers.has(roomId)) {
+        clearTimeout(roomTeardownTimers.get(roomId));
+        roomTeardownTimers.delete(roomId);
+      }
 
       // 2. Add to presence tracking map
       const presenceList = updateRoomPresence(roomId, socket.id, {

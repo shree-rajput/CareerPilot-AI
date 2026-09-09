@@ -11,18 +11,7 @@ import {
   sendPasswordResetConfirmationEmail
 } from "../services/email/emailService.js";
 
-// Single-use short-lived authorization codes map (TTL: 5 minutes)
-const extensionAuthCodes = new Map();
-
-// Periodic cleanup of expired codes
-setInterval(() => {
-  const now = Date.now();
-  for (const [code, data] of extensionAuthCodes.entries()) {
-    if (data.expiresAt < now) {
-      extensionAuthCodes.delete(code);
-    }
-  }
-}, 60 * 1000);
+import { ExtensionAuthCode } from "../models/ExtensionAuthCode.js";
 
 function sendAuthResponse(res, user, statusCode = 200) {
   const accessToken = createAccessToken(user);
@@ -223,11 +212,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   await user.save();
 
   // Invalidate any active extension codes for security
-  for (const [code, data] of extensionAuthCodes.entries()) {
-    if (data.userId === user._id.toString()) {
-      extensionAuthCodes.delete(code);
-    }
-  }
+  await ExtensionAuthCode.deleteMany({ userId: user._id });
 
   sendPasswordResetConfirmationEmail({ user }).catch((err) => {
     console.error("[Reset Confirmation Email Error]:", err.message);
@@ -244,16 +229,17 @@ export const resetPassword = asyncHandler(async (req, res) => {
  */
 export const generateExtensionCode = asyncHandler(async (req, res) => {
   const code = `ext_code_${crypto.randomBytes(24).toString("hex")}`;
-  const expiresAt = Date.now() + 5 * 60 * 1000;
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-  extensionAuthCodes.set(code, {
-    userId: req.user._id.toString(),
+  await ExtensionAuthCode.create({
+    code,
+    userId: req.user._id,
     expiresAt
   });
 
   return res.status(200).json({
     code,
-    expiresAt,
+    expiresAt: expiresAt.getTime(),
     user: req.user.toSafeObject()
   });
 });
@@ -268,19 +254,20 @@ export const exchangeExtensionCode = asyncHandler(async (req, res) => {
     throw new AppError("Authorization code is required", 400, "MISSING_CODE");
   }
 
-  const authData = extensionAuthCodes.get(code);
+  const authData = await ExtensionAuthCode.findOne({ code });
 
   if (!authData) {
     throw new AppError("Invalid or expired authorization code", 401, "INVALID_CODE");
   }
 
-  if (authData.expiresAt < Date.now()) {
-    extensionAuthCodes.delete(code);
+  // TTL index handles cleanup, but just in case we catch it before cleanup:
+  if (authData.expiresAt < new Date()) {
+    await ExtensionAuthCode.deleteOne({ _id: authData._id });
     throw new AppError("Authorization code has expired", 401, "EXPIRED_CODE");
   }
 
   // Single-use: delete immediately upon first exchange
-  extensionAuthCodes.delete(code);
+  await ExtensionAuthCode.deleteOne({ _id: authData._id });
 
   const user = await User.findById(authData.userId);
 

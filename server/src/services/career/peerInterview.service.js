@@ -81,6 +81,37 @@ export async function createPeerInterviewRoom({ userId, clientUrl, targetRole, t
     throw new Error("User ID is required");
   }
 
+  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+  const cutoffTime = new Date(Date.now() - TWELVE_HOURS_MS);
+
+  // Idempotency: check if user already has an active room
+  const existingActiveRoom = await PeerInterviewRoom.findOne({
+    $or: [
+      { createdBy: userId },
+      { "participants.userId": userId }
+    ],
+    status: { $in: ["waiting", "ready", "active", "paused"] }
+  }).sort({ updatedAt: -1 });
+
+  if (existingActiveRoom) {
+    if (existingActiveRoom.updatedAt < cutoffTime) {
+      console.log(`[PeerInterview] Auto-expiring stale session ${existingActiveRoom.roomId} for user ${userId}`);
+      existingActiveRoom.status = "completed";
+      existingActiveRoom.endedAt = new Date();
+      await existingActiveRoom.save();
+      // Continue to create a new session
+    } else {
+      console.log(`[PeerInterview] Idempotency: User ${userId} already has active room ${existingActiveRoom.roomId}. Returning existing room.`);
+      const inviteLink = `${clientUrl}/interview/${existingActiveRoom.roomId}?role=interviewee`;
+      return {
+        roomId: existingActiveRoom.roomId,
+        role: "interviewer",
+        status: existingActiveRoom.status,
+        inviteLink,
+      };
+    }
+  }
+
   const roomId = crypto.randomBytes(8).toString("hex");
   
   // Generate AI Plan

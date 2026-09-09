@@ -22,6 +22,7 @@ import { toast } from "../context/ToastContext";
 import { useSpeech } from "../hooks/useSpeech.js";
 import AIAvatar from "../components/interview/AIAvatar.jsx";
 import CodeEditor from "../components/interview/CodeEditor/CodeEditor.jsx";
+import { useActiveSession } from "../context/ActiveSessionContext";
 
 // ────────────────────────────────────────────────────────────
 // Error message parser
@@ -62,6 +63,8 @@ function parseQuestionError(err) {
 export function InterviewSessionPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const { refreshActiveSession } = useActiveSession();
+  const [isEndingSession, setIsEndingSession] = useState(false);
 
   // ── Core state ──────────────────────────────────────────
   const [interviewPhase, setInterviewPhase] = useState("loading_first");
@@ -481,11 +484,16 @@ export function InterviewSessionPage() {
   // ────────────────────────────────────────────────────────
   const handleEndSession = async () => {
     try {
+      setIsEndingSession(true);
       await interviewApi.completeSession(sessionId);
+      if (refreshActiveSession) {
+        await refreshActiveSession();
+      }
       navigate(`/interview/${sessionId}/report`);
     } catch (err) {
       console.error(err);
       toast.error("Failed to complete session.");
+      setIsEndingSession(false);
     }
   };
 
@@ -582,8 +590,8 @@ export function InterviewSessionPage() {
              isRecording ? 'Recording...' : 'Ready'}
           </div>
 
-          <Button variant="secondary" size="sm" onClick={handleEndSession} className="text-xs">
-            End Interview
+          <Button variant="secondary" size="sm" onClick={handleEndSession} disabled={isEndingSession} className="text-xs">
+            {isEndingSession ? "Ending..." : "End Interview"}
           </Button>
         </div>
       </header>

@@ -62,8 +62,8 @@ async function initUI() {
     // Do NOT halt page inspection. We still want to extract the job.
     // The user will be prompted to sign in when they try to Save.
   } else {
-    connectionBadge.innerText = "● Connected";
-    connectionBadge.className = "badge badge-success";
+    connectionBadge.innerText = authRes.isOffline ? "● Offline (Cached)" : "● Connected";
+    connectionBadge.className = authRes.isOffline ? "badge badge-warning" : "badge badge-success";
     disconnectBtn.classList.remove("hidden");
     disconnectBtn.onclick = async () => {
       await chrome.runtime.sendMessage({ type: "DISCONNECT" });
@@ -89,6 +89,13 @@ async function getJobDataFromTab(tab) {
   try {
     const isGmailTab = tab.url.includes("mail.google.com");
 
+    // Gmail must NEVER go through job-page detection.
+    // Route directly to the Gmail email event view.
+    if (isGmailTab) {
+      await renderGmailState(tab);
+      return;
+    }
+
     // Fetch tab context state machine status
     const tabContextRes = await chrome.runtime.sendMessage({ type: "GET_TAB_JOB_CONTEXT", tabId: tab.id }).catch(() => null);
     const tabContext = tabContextRes?.jobContext;
@@ -105,9 +112,9 @@ async function getJobDataFromTab(tab) {
 
     if (!jobResult || !jobResult.isJobPage) {
       document.getElementById("notJobMsg").innerText =
-        jobResult?.reason || "This page doesn't appear to contain an active job posting.";
+        "This page doesn't appear to contain an active job posting.";
       showState(stateNotJob);
-      
+
       const forceBtn = document.getElementById("forceManualCaptureBtn");
       if (forceBtn) {
         forceBtn.onclick = () => {
@@ -338,49 +345,40 @@ async function getJobDataFromTab(tab, isManualInspect = false) {
   }
 
   try {
-    await chrome.scripting.executeScript({
+    const injectionResults = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: [
-        "utils/logger.js",
-        "utils/siteBlocklist.js",
-        "utils/circuitBreaker.js",
-        "utils/contextEngine.js",
-        "adapters/portalRegistry.js",
-        "adapters/linkedinAdapter.js",
-        "adapters/indeedAdapter.js",
-        "adapters/naukriAdapter.js",
-        "adapters/wellfoundAdapter.js",
-        "adapters/glassdoorAdapter.js",
-        "adapters/greenhouseAdapter.js",
-        "adapters/leverAdapter.js",
-        "adapters/workdayAdapter.js",
-        "adapters/ashbyAdapter.js",
-        "adapters/smartrecruitersAdapter.js",
-        "adapters/icimsAdapter.js",
-        "adapters/taleoAdapter.js",
-        "adapters/jobviteAdapter.js",
-        "adapters/bamboohrAdapter.js",
-        "adapters/genericAdapter.js",
-        "adapters/collegePortalAdapter.js",
-        "content/contextDetector.js",
-        "content/intentDetector.js",
-        "content/intentOverlay.js",
-        "content/gmailExtractor.js",
-        "content/gmailOverlay.js",
-        "content/activationEngine.js",
-        "content/content_script.js",
-      ],
+      files: ["content/inspectCurrentPage.js"],
     });
+    
+    const inspectionResult = injectionResults?.[0]?.result;
+    
+    if (inspectionResult?.success) {
+      // Simulate GET_JOB_DATA response format so popup can use it
+      return {
+        status: "JOB_DETECTED",
+        isJobPage: true,
+        extracted: inspectionResult.job,
+        confidence: inspectionResult.confidence
+      };
+    } else {
+      return { 
+        status: inspectionResult?.reason || "JOB_NOT_DETECTED", 
+        isJobPage: false, 
+        reason: inspectionResult?.reason === "PAGE_RESTRICTED" ? "CareerPilot can't inspect this page." : "No valid job found." 
+      };
+    }
 
-    await new Promise((r) => setTimeout(r, 80));
-    const res = await sendMessageWithTimeout(tab.id, { type: messageType });
-    return res || { status: "JOB_NOT_DETECTED", isJobPage: false, reason: "No response from content script." };
+    return {
+      status: "INSPECTION_ERROR",
+      isJobPage: false,
+      error: "CareerPilot can't inspect this page.",
+    };
   } catch (injErr) {
     console.warn("[CareerPilot] chrome.scripting.executeScript fallback:", injErr.message);
     return {
       status: "INJECTION_FAILED",
       isJobPage: false,
-      error: injErr.message || "Failed to execute inspection script on tab.",
+      error: "Failed to execute inspection script on tab.",
     };
   }
 }
@@ -418,7 +416,7 @@ function renderPreview(payload, tabContext = null) {
     confidenceBanner.className = "banner banner-success mb-3";
     confidenceBanner.classList.remove("hidden");
   } else if (currentState === "PROMPT_PENDING") {
-    confidenceBanner.innerText = "⚡ Application intent detected — prompt active on page";
+    confidenceBanner.innerText = "⚡ Job Found";
     confidenceBanner.className = "banner banner-info mb-3";
     confidenceBanner.classList.remove("hidden");
   } else if (currentState === "USER_IGNORED") {

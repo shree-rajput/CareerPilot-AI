@@ -127,7 +127,8 @@ export function ActiveSessionProvider({ children }) {
     socket,
     connectionStatus,
     peerPresence,
-    liveKitToken
+    liveKitToken,
+    clearRealtimeConnections
   };
 
   const appContent = (

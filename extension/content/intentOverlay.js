@@ -504,6 +504,9 @@
       const matchedSkills = matchData?.matchedSkills || [];
       const missingSkills = matchData?.missingSkills || [];
 
+      const justSaved = Boolean(matchData?.justSaved);
+      const trackedText = justSaved ? "✓ Saved to Job Inbox" : "✓ Already in Job Inbox";
+
       container.innerHTML = `
         ${renderHeaderMarkup()}
 
@@ -515,7 +518,7 @@
           </div>
 
           <div class="cp-badges">
-            ${isTracked ? `<span class="cp-tag cp-tag-tracked">✓ Saved in Job Inbox (${appStatus})</span>` : `<span class="cp-tag ${matchBadgeClass}">${matchLabel}</span>`}
+            ${isTracked ? `<span class="cp-tag cp-tag-tracked">${trackedText}</span> <span class="cp-tag cp-tag-info">Status: ${appStatus}</span>` : `<span class="cp-tag ${matchBadgeClass}">${matchLabel}</span>`}
             ${workplaceType ? `<span class="cp-tag cp-tag-info">🏢 ${workplaceType}</span>` : ""}
             ${salary ? `<span class="cp-tag cp-tag-info">💰 ${salary}</span>` : ""}
           </div>
@@ -535,13 +538,16 @@
           }
         </div>
 
-        <div class="cp-actions">
-          ${
-            isTracked
-              ? `<button class="cp-btn cp-btn-primary" id="cp-open-app-btn">Open Job Inbox ↗</button>`
-              : `<button class="cp-btn cp-btn-primary" id="cp-track-btn">📌 Save Application</button>`
-          }
-          <button class="cp-btn cp-btn-secondary" id="cp-ignore-btn">Dismiss</button>
+        <div class="cp-actions" style="flex-direction: column; gap: 8px;">
+          ${!isTracked ? `<div style="font-size:13px; font-weight:600; color:#f8fafc; text-align:center; margin-bottom:4px;">Save this job to Job Inbox?</div>` : ""}
+          <div style="display:flex; gap:10px; width:100%;">
+            ${
+              isTracked
+                ? `<button class="cp-btn cp-btn-primary" id="cp-open-app-btn" style="flex:1;">View in Job Inbox</button>`
+                : `<button class="cp-btn cp-btn-primary" id="cp-track-btn" style="flex:1;">Save to Job Inbox</button>`
+            }
+            ${!isTracked ? `<button class="cp-btn cp-btn-secondary" id="cp-ignore-btn" style="flex:1;">Dismiss</button>` : ""}
+          </div>
         </div>
       `;
 
@@ -570,11 +576,24 @@
                 renderOverlayState({
                   state: "READY",
                   jobContext,
-                  matchData: { ...matchData, existing: true, application: updatedApp }
+                  matchData: { ...matchData, existing: true, application: updatedApp, justSaved: true }
                 });
               })
               .catch((err) => {
-                renderOverlayState({ state: "ERROR", errorData: err, jobContext, onRetry: () => onConfirm(jobContext) });
+                if (err.type === "AUTH_REQUIRED") {
+                  renderOverlayState({
+                    state: "UNAUTHENTICATED",
+                    jobContext,
+                    errorData: err
+                  });
+                } else {
+                  renderOverlayState({
+                    state: "ERROR",
+                    jobContext,
+                    errorData: err,
+                    onRetry: () => onConfirm(jobContext)
+                  });
+                }
               });
           }
         });

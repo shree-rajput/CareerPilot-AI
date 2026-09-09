@@ -4,6 +4,7 @@
  * offline action outbox retry queue, and secure API client calls.
  */
 import { apiRequest } from "./apiClient.js";
+import { ExtensionAuthManager } from "./ExtensionAuthManager.js";
 const DEFAULT_API_URL = "http://localhost:5000/api";
 const DEFAULT_APP_URL = "http://localhost:5173";
 
@@ -68,7 +69,13 @@ async function processOutboxQueue() {
 }
 
 // Check outbox periodically or on startup
-chrome.runtime.onStartup?.addListener(() => processOutboxQueue());
+chrome.runtime.onStartup?.addListener(() => {
+  ExtensionAuthManager.initialize();
+  processOutboxQueue();
+});
+
+// Also initialize on first load
+ExtensionAuthManager.initialize();
 
 const storageArea = chrome.storage?.session || chrome.storage?.local;
 
@@ -109,6 +116,14 @@ chrome.tabs?.onRemoved?.addListener((tabId) => {
 });
 
 // -----------------------------------------------------------------------------
+// Request Locks (Phase 22)
+// -----------------------------------------------------------------------------
+const activeLocks = {
+  analyze: new Set(),
+  capture: new Set()
+};
+
+// -----------------------------------------------------------------------------
 // Main Runtime Message Listener
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -139,9 +154,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "ANALYZE_JOB") {
+    const lockKey = `${request.payload.company}-${request.payload.title}-${targetTabId}`;
+    if (activeLocks.analyze.has(lockKey)) {
+      sendResponse({ success: false, error: "Analysis already in progress." });
+      return true;
+    }
+    
+    activeLocks.analyze.add(lockKey);
     handleJobAnalysis(request.payload)
       .then((res) => sendResponse({ success: true, data: res }))
-      .catch((err) => sendResponse({ success: false, error: err.message }));
+      .catch((err) => sendResponse({ success: false, error: err.message }))
+      .finally(() => activeLocks.analyze.delete(lockKey));
     return true;
   }
 
@@ -158,6 +181,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "CAPTURE_JOB_REQUEST" || request.type === "UPDATE_APPLICATION_STATUS") {
+    const lockKey = `${request.payload.company}-${request.payload.role}-${targetTabId}`;
+    if (activeLocks.capture.has(lockKey)) {
+      sendResponse({ success: false, error: "Save operation already in progress." });
+      return true;
+    }
+
+    activeLocks.capture.add(lockKey);
     handleJobCapture(request.payload)
       .then((res) => sendResponse({ success: true, data: res }))
       .catch((err) => {
@@ -172,7 +202,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           category: err.category || "UNKNOWN",
           userMessage: err.userMessage || err.message || "Capture failed."
         });
-      });
+      })
+      .finally(() => activeLocks.capture.delete(lockKey));
     return true;
   }
 
@@ -190,10 +221,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.type === "CHECK_AUTH") {
-    checkAuthStatus()
+  if (request.type === "CHECK_AUTH" || request.type === "AUTH_GET_STATE") {
+    ExtensionAuthManager.getAuthState()
       .then((authStatus) => sendResponse(authStatus))
       .catch(() => sendResponse({ isAuthenticated: false }));
+    return true;
+  }
+
+  if (request.type === "SYNC_WEB_TOKEN") {
+    ExtensionAuthManager.syncToken(request.token)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.type === "SYNC_WEB_LOGOUT") {
+    ExtensionAuthManager.logout()
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
@@ -205,7 +250,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "DISCONNECT") {
-    chrome.storage.local.remove(["token", "user", "outbox"], () => {
+    ExtensionAuthManager.logout().then(() => {
       sendResponse({ success: true });
     });
     return true;
@@ -229,26 +274,7 @@ chrome.runtime.onMessageExternal?.addListener((request, sender, sendResponse) =>
 // API Worker Callers
 // -----------------------------------------------------------------------------
 async function checkAuthStatus() {
-  const { apiUrl, token, user } = await getApiConfig();
-  if (!token) {
-    return { isAuthenticated: false };
-  }
-
-  try {
-    const response = await fetch(`${apiUrl}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      await chrome.storage.local.set({ user: data.user });
-      return { isAuthenticated: true, user: data.user };
-    } else {
-      await chrome.storage.local.remove(["token", "user"]);
-      return { isAuthenticated: false, error: "SESSION_EXPIRED" };
-    }
-  } catch (err) {
-    return { isAuthenticated: Boolean(token), user, offline: true };
-  }
+  return await ExtensionAuthManager.getAuthState();
 }
 
 async function exchangeAuthCode(code) {
@@ -265,11 +291,7 @@ async function exchangeAuthCode(code) {
     throw new Error(resData.message || "Failed to exchange authorization code.");
   }
 
-  await chrome.storage.local.set({
-    token: resData.accessToken,
-    user: resData.user,
-  });
-
+  await ExtensionAuthManager.syncToken(resData.accessToken);
   return resData;
 }
 
@@ -293,7 +315,7 @@ async function handleJobIngestion(jobPayload) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      await chrome.storage.local.remove(["token", "user"]);
+      await ExtensionAuthManager.handleAuthFailure();
       throw new Error("SESSION_EXPIRED: Your CareerPilot session expired. Reconnect to proceed.");
     }
     throw new Error(resData.message || `Ingestion failed (${response.status})`);
@@ -348,7 +370,7 @@ async function handleCreateFromEmail(payload) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      await chrome.storage.local.remove(["token", "user"]);
+      await ExtensionAuthManager.handleAuthFailure();
       throw new Error("SESSION_EXPIRED: Your CareerPilot session expired.");
     }
     throw new Error(resData.message || `Failed to create application (${response.status})`);
@@ -377,7 +399,7 @@ async function handleEmailEventProcessing(emailPayload) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      await chrome.storage.local.remove(["token", "user"]);
+      await ExtensionAuthManager.handleAuthFailure();
       throw new Error("SESSION_EXPIRED: Your CareerPilot session expired.");
     }
     throw new Error(resData.message || `Email processing failed (${response.status})`);

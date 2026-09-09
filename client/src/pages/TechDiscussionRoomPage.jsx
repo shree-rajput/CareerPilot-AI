@@ -162,8 +162,15 @@ function PeerStreamPanel({ peerPresence, participants, isVideoMinimized, onClose
 export default function TechDiscussionRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { refreshActiveSession, socket, connectionStatus, peerPresence, liveKitToken } = useActiveSession();
+  const { refreshActiveSession, socket, connectionStatus, peerPresence, liveKitToken, clearRealtimeConnections } = useActiveSession();
   const socketConnected = connectionStatus === "joined";
+
+  // Explicit unmount cleanup to tear down realtime connections
+  useEffect(() => {
+    return () => {
+      clearRealtimeConnections();
+    };
+  }, [clearRealtimeConnections]);
 
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
   const [mediaPermissions, setMediaPermissions] = useState({ hasCamera: true, hasMic: true });

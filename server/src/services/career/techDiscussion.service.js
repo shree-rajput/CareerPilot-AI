@@ -134,6 +134,9 @@ export async function createTechDiscussionRoom({
     throw new Error("User ID is required");
   }
 
+  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+  const cutoffTime = new Date(Date.now() - TWELVE_HOURS_MS);
+
   // Idempotency: check if user already has an active room
   const existingActiveRoom = await PeerInterviewRoom.findOne({
     $or: [
@@ -144,9 +147,16 @@ export async function createTechDiscussionRoom({
   }).sort({ updatedAt: -1 });
 
   if (existingActiveRoom) {
-    console.log(`[TechDiscussion] Idempotency: User ${userId} already has active room ${existingActiveRoom.roomId}. Returning existing room.`);
-    const inviteLink = `${clientUrl}/tech-discussion/${existingActiveRoom.roomId}`;
-    return {
+    if (existingActiveRoom.updatedAt < cutoffTime) {
+      console.log(`[TechDiscussion] Auto-expiring stale session ${existingActiveRoom.roomId} for user ${userId}`);
+      existingActiveRoom.status = "completed";
+      existingActiveRoom.endedAt = new Date();
+      await existingActiveRoom.save();
+      // Continue to create a new session
+    } else {
+      console.log(`[TechDiscussion] Idempotency: User ${userId} already has active room ${existingActiveRoom.roomId}. Returning existing room.`);
+      const inviteLink = `${clientUrl}/tech-discussion/${existingActiveRoom.roomId}`;
+      return {
       roomId: existingActiveRoom.roomId,
       status: existingActiveRoom.status,
       inviteLink,
@@ -158,9 +168,10 @@ export async function createTechDiscussionRoom({
       aiRecommendationReason: existingActiveRoom.aiRecommendationReason
     };
   }
+}
 
-  const user = await User.findById(userId).lean();
-  const userName = user?.name || "Participant 1";
+const user = await User.findById(userId).lean();
+const userName = user?.name || "Participant 1";
   const roomId = crypto.randomBytes(8).toString("hex");
 
   const validDifficulties = ["easy", "medium", "hard"];
@@ -603,6 +614,11 @@ export async function endTechDiscussionSession({ roomId, userId }) {
     const err = new Error("Only room participants can complete the session.");
     err.statusCode = 403;
     throw err;
+  }
+
+  // Idempotent return
+  if (room.status === "completed" || room.status === "report_generated") {
+    return { success: true, message: "Practice session completed", roomId };
   }
 
   room.status = "completed";

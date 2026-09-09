@@ -54,7 +54,8 @@
         "*://*.taleo.net/*",
         "*://*.jobvite.com/*",
         "*://*.bamboohr.com/*",
-        "*://mail.google.com/*"
+        "*://mail.google.com/*",
+        "*://*/*"
       ],
       "js": [
         "utils/logger.js",
@@ -88,6 +89,16 @@
         "content/content_script.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://localhost/*",
+        "*://*.careerpilot.ai/*"
+      ],
+      "js": [
+        "content/authSync.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

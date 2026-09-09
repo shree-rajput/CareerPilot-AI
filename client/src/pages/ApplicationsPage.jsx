@@ -55,6 +55,11 @@ export function ApplicationsPage() {
 
   useEffect(() => {
     loadApps();
+    
+    // Auto-refresh when the user returns to this tab
+    const handleFocus = () => loadApps();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, [search, statusFilter, sort]);
 
   async function loadApps() {

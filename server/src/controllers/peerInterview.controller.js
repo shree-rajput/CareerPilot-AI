@@ -176,6 +176,11 @@ export async function endInterview(req, res) {
       return res.status(403).json({ success: false, message: "Only the interviewer can end this interview session." });
     }
 
+    // Idempotent return
+    if (room.status === "completed" || room.status === "report_generated") {
+      return res.status(200).json({ success: true, data: room });
+    }
+
     room.status = "completed";
     room.endedAt = new Date();
     room.durationSeconds = room.startedAt ? Math.floor((room.endedAt - room.startedAt) / 1000) : 0;

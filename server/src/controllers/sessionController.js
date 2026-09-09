@@ -8,6 +8,23 @@ import PeerInterviewRoom from "../models/PeerInterviewRoom.js";
 export async function getActiveSession(req, res) {
   try {
     const userId = req.user._id;
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+
+    // Auto-expire stale AI interview sessions
+    await InterviewSession.updateMany(
+      { userId, status: { $in: ["in_progress", "setup"] }, updatedAt: { $lt: twelveHoursAgo } },
+      { $set: { status: "completed", interviewState: "COMPLETED", completedAt: new Date() } }
+    );
+
+    // Auto-expire stale peer interview rooms
+    await PeerInterviewRoom.updateMany(
+      {
+        $or: [{ createdBy: userId }, { "participants.userId": userId }],
+        status: { $in: ["waiting", "ready", "active", "paused"] },
+        updatedAt: { $lt: twelveHoursAgo }
+      },
+      { $set: { status: "completed" } }
+    );
 
     // 1. Check for active AI Interview session
     const activeInterview = await InterviewSession.findOne({

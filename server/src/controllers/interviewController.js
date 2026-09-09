@@ -135,6 +135,14 @@ function determineNextState(session, completedQuestions, completedChallenges) {
 
 export async function createSession(req, res, next) {
   try {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    
+    // Auto-expire stale AI interview sessions
+    await InterviewSession.updateMany(
+      { userId: req.user._id, status: { $in: ["in_progress", "setup"] }, updatedAt: { $lt: twelveHoursAgo } },
+      { $set: { status: "completed", interviewState: "COMPLETED", completedAt: new Date() } }
+    );
+
     // Check if user already has an active session
     const existingActiveSession = await InterviewSession.findOne({
       userId: req.user._id,
@@ -1327,6 +1335,14 @@ export async function completeSession(req, res, next) {
     const { sessionId } = req.params;
     const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user._id });
     if (!session) throw new AppError("Session not found", 404);
+
+    if (session.status === "completed") {
+      return res.status(200).json({
+        success: true,
+        message: "Session is already completed",
+        data: session
+      });
+    }
 
     session.status = "completed";
     session.completedAt = new Date();

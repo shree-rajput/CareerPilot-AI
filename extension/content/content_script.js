@@ -2,6 +2,11 @@
  * CareerPilot AI — Central Content Script
  * Enforces Fail-Closed activation, Circuit Breaker safeguards, SPA navigation observers,
  * and Central Activation Engine decision processing.
+ *
+ * Decision handling:
+ *   ACTIVATE      — Show overlay immediately.
+ *   RETRY_PENDING — Adapter confirmed job page but DOM not yet rendered. Watch DOM and retry.
+ *   SKIP          — Remain silent, remove any stale overlay.
  */
 
 (function () {
@@ -12,8 +17,11 @@
 
   let currentAnalysisInFlight = false;
   let lastEvaluatedUrl = "";
-  let lastEvaluatedJobId = "";
   let navDebounceTimer = null;
+  let retryObserver = null;   // MutationObserver used for RETRY_PENDING
+  let retryCount = 0;
+  const MAX_RETRIES = 4;
+  const RETRY_INTERVAL_MS = 900;
 
   function cleanText(str) {
     if (!str || typeof str !== "string") return "";
@@ -35,64 +43,113 @@
     }
   }
 
-  // 1. Central Page Orchestrator & Activation Pipeline
+  // ─── Retry Observer ───────────────────────────────────────────────────────────
+  // Called when activationEngine returns RETRY_PENDING.
+  // Watches for DOM content to populate, then re-runs activation pipeline.
+  function startDomRetryObserver() {
+    stopDomRetryObserver();
+    retryCount = 0;
+
+    // Schedule timed retries — more reliable than MutationObserver on SPAs
+    // that batch-render content.
+    function scheduleRetry() {
+      if (retryCount >= MAX_RETRIES) {
+        stopDomRetryObserver();
+        return;
+      }
+      retryCount++;
+      setTimeout(async () => {
+        const currentUrl = window.location.href;
+        if (currentUrl !== lastEvaluatedUrl) {
+          // URL changed during retry window — abort
+          stopDomRetryObserver();
+          return;
+        }
+
+        const engine = window.__CAREERPILOT_ACTIVATION_ENGINE__;
+        if (!engine) { stopDomRetryObserver(); return; }
+
+        const evaluation = await engine.evaluateActivation(document, currentUrl);
+
+        if (evaluation.decision === "ACTIVATE") {
+          stopDomRetryObserver();
+          await activateWithEvaluation(evaluation, currentUrl);
+        } else if (evaluation.decision === "RETRY_PENDING") {
+          // Not ready yet — schedule another retry
+          scheduleRetry();
+        } else {
+          // Confident SKIP — stop retrying
+          stopDomRetryObserver();
+        }
+      }, RETRY_INTERVAL_MS * retryCount);
+    }
+
+    scheduleRetry();
+  }
+
+  function stopDomRetryObserver() {
+    retryCount = 0;
+    if (retryObserver) {
+      retryObserver.disconnect();
+      retryObserver = null;
+    }
+  }
+
+  // ─── Activation Pipeline ─────────────────────────────────────────────────────
   async function runActivationPipeline() {
     const currentUrl = window.location.href;
 
-    // Check Circuit Breaker
+    // Circuit Breaker
     if (window.__CAREERPILOT_CIRCUIT_BREAKER__) {
       if (!window.__CAREERPILOT_CIRCUIT_BREAKER__.canProcess()) {
-        console.warn("[CareerPilot] Circuit breaker active. Suppressing execution for current tab.");
+        console.warn("[CareerPilot] Circuit breaker active. Suppressing execution.");
         if (window.__CAREERPILOT_INTENT_OVERLAY__) window.__CAREERPILOT_INTENT_OVERLAY__.removeOverlay();
         return;
       }
     }
 
-    // Gmail Tab Check -> Delegate to Gmail Observer
+    // Gmail — never run job detection on Gmail tabs
     if (window.location.hostname.includes("mail.google.com")) {
       if (window.__CAREERPILOT_INTENT_OVERLAY__) window.__CAREERPILOT_INTENT_OVERLAY__.removeOverlay();
       return;
     }
 
-    // Run Central Activation Engine Evaluation
     const engine = window.__CAREERPILOT_ACTIVATION_ENGINE__;
     if (!engine) return;
 
     const evaluation = await engine.evaluateActivation(document, currentUrl);
 
-    // Development diagnostic logging
-    if (console && console.debug) {
-      console.debug(`[CareerPilot] Activation Evaluation:`, {
-        domain: evaluation.domain,
-        adapter: evaluation.adapterName,
-        confidenceScore: evaluation.confidenceScore,
-        decision: evaluation.decision,
-        reason: evaluation.reason,
-      });
-    }
-
-    // FAIL CLOSED: If decision is SKIP -> Remain SILENT & Remove Stale Overlay
-    if (evaluation.decision !== "ACTIVATE") {
+    if (evaluation.decision === "ACTIVATE") {
+      stopDomRetryObserver();
+      await activateWithEvaluation(evaluation, currentUrl);
+    } else if (evaluation.decision === "RETRY_PENDING") {
+      // Adapter confirmed job page but DOM hasn't rendered yet — start retry loop
+      startDomRetryObserver();
+    } else {
+      // SKIP — stay silent
+      stopDomRetryObserver();
       if (window.__CAREERPILOT_INTENT_OVERLAY__) {
         window.__CAREERPILOT_INTENT_OVERLAY__.removeOverlay();
       }
-      return;
     }
+  }
 
-    // Record Activation in Circuit Breaker
+  async function activateWithEvaluation(evaluation, currentUrl) {
+    // Record activation in circuit breaker
     if (window.__CAREERPILOT_CIRCUIT_BREAKER__) {
       if (!window.__CAREERPILOT_CIRCUIT_BREAKER__.recordActivation()) return;
     }
 
     const jobData = evaluation.extracted;
-    if (!jobData || !jobData.title || !jobData.company) {
+    // Require at minimum a title OR a canonical URL to show overlay
+    if (!jobData || (!jobData.title && !jobData.url && !jobData.externalJobId)) {
       if (window.__CAREERPILOT_INTENT_OVERLAY__) window.__CAREERPILOT_INTENT_OVERLAY__.removeOverlay();
       return;
     }
 
     const canonicalUrl = sanitizeJobUrl(jobData.url || currentUrl);
 
-    // STEP 1: Render Overlay in EXTRACTING state
+    // Show overlay in EXTRACTING state immediately so user gets feedback
     if (window.__CAREERPILOT_INTENT_OVERLAY__) {
       window.__CAREERPILOT_INTENT_OVERLAY__.renderOverlayState({
         state: "EXTRACTING",
@@ -100,7 +157,7 @@
       });
     }
 
-    // STEP 2: Send tab context to Background Service Worker
+    // Notify background of tab context
     chrome.runtime.sendMessage({
       type: "SET_TAB_JOB_CONTEXT",
       payload: {
@@ -117,7 +174,7 @@
       },
     });
 
-    // STEP 3: Deduplicated Job Analysis API Request
+    // Deduplicated job analysis
     if (currentAnalysisInFlight) return;
     currentAnalysisInFlight = true;
 
@@ -144,6 +201,7 @@
         currentAnalysisInFlight = false;
 
         if (chrome.runtime.lastError) {
+          // Background unavailable — show READY state anyway so user can still save
           if (window.__CAREERPILOT_INTENT_OVERLAY__) {
             window.__CAREERPILOT_INTENT_OVERLAY__.renderOverlayState({
               state: "READY",
@@ -216,7 +274,11 @@
             });
             resolve(response.data);
           } else {
-            reject({ userMessage: response?.userMessage || "Failed to save application." });
+            if (response?.category === "AUTH" || response?.error === "AUTH_REQUIRED") {
+              reject({ type: "AUTH_REQUIRED", userMessage: response?.userMessage || "Please connect to CareerPilot." });
+            } else {
+              reject({ userMessage: response?.userMessage || "Failed to save application." });
+            }
           }
         }
       );
@@ -224,15 +286,28 @@
   }
 
   function handleIgnoreAction() {
-    chrome.runtime.sendMessage({
-      type: "DISMISS_APPLICATION_INTENT",
-    });
+    chrome.runtime.sendMessage({ type: "DISMISS_APPLICATION_INTENT" });
   }
 
-  // 2. SPA Navigation & Debounced DOM Observer
+  // ─── SPA Navigation Observer ──────────────────────────────────────────────────
   function handleUrlOrStateChange() {
     const currentUrl = window.location.href;
     if (currentUrl === lastEvaluatedUrl) return;
+
+    // Stop any in-progress retry from the previous URL
+    stopDomRetryObserver();
+    currentAnalysisInFlight = false;
+
+    // Clear overlay and tab context for previous page
+    if (window.__CAREERPILOT_INTENT_OVERLAY__) {
+      window.__CAREERPILOT_INTENT_OVERLAY__.removeOverlay();
+    }
+    try {
+      chrome.runtime.sendMessage({
+        type: "SET_TAB_JOB_CONTEXT",
+        payload: { jobContext: null }
+      });
+    } catch(e) {}
 
     lastEvaluatedUrl = currentUrl;
     runActivationPipeline();
@@ -244,29 +319,25 @@
 
     history.pushState = function (...args) {
       origPush.apply(this, args);
-      setTimeout(handleUrlOrStateChange, 50);
+      setTimeout(handleUrlOrStateChange, 100);
     };
 
     history.replaceState = function (...args) {
       origReplace.apply(this, args);
-      setTimeout(handleUrlOrStateChange, 50);
+      setTimeout(handleUrlOrStateChange, 100);
     };
 
-    window.addEventListener("popstate", () => setTimeout(handleUrlOrStateChange, 50));
-    window.addEventListener("hashchange", () => setTimeout(handleUrlOrStateChange, 50));
+    window.addEventListener("popstate", () => setTimeout(handleUrlOrStateChange, 100));
+    window.addEventListener("hashchange", () => setTimeout(handleUrlOrStateChange, 100));
 
-    // Gmail has its own observeGmailEvents observer - skip general observer on Gmail
-    if (window.location.hostname.includes("mail.google.com")) {
-      return;
-    }
+    // Gmail uses its own observer — skip MutationObserver on Gmail
+    if (window.location.hostname.includes("mail.google.com")) return;
 
     const observer = new MutationObserver((mutations) => {
-      // Filter out mutations caused by CareerPilot's own overlay host
       const isInternalMutation = mutations.every((m) => {
         const targetId = m.target?.id || m.target?.parentElement?.id || "";
         return targetId.includes("careerpilot");
       });
-
       if (isInternalMutation) return;
 
       if (window.__CAREERPILOT_CIRCUIT_BREAKER__) {
@@ -278,7 +349,7 @@
         if (window.location.href !== lastEvaluatedUrl) {
           handleUrlOrStateChange();
         }
-      }, 500);
+      }, 600);
     });
 
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
@@ -286,84 +357,136 @@
 
   observeSpaAndDomChanges();
 
-  // 3. Gmail Pipeline Setup
+  // ─── Gmail Pipeline ───────────────────────────────────────────────────────────
   let lastGmailMsgId = "";
   let gmailTimer = null;
 
   function observeGmailEvents() {
     if (!window.location.hostname.includes("mail.google.com")) return;
 
-    const observer = new MutationObserver(() => {
+    function triggerGmailExtraction() {
+      if (!window.__CAREERPILOT_GMAIL_EXTRACTOR__?.isGmail()) return;
+      const msg = window.__CAREERPILOT_GMAIL_EXTRACTOR__.extractOpenedGmailMessage();
+      if (!msg || !msg.messageId || msg.messageId === lastGmailMsgId) return;
+
+      lastGmailMsgId = msg.messageId;
+
+      chrome.runtime.sendMessage({ type: "PROCESS_EMAIL_EVENT", payload: msg }, (res) => {
+        if (chrome.runtime.lastError) return;
+
+        if (res?.success && res.data && window.__CAREERPILOT_GMAIL_OVERLAY__) {
+          window.__CAREERPILOT_GMAIL_OVERLAY__.renderGmailOverlay({
+            response: res.data,
+            onConfirm: (response) => {
+              // User confirmed a suggested status update
+              if (response?.application?._id && response?.classified?.detectedStatus) {
+                chrome.runtime.sendMessage({
+                  type: "UPDATE_APPLICATION_STATUS",
+                  payload: {
+                    applicationId: response.application._id,
+                    targetStatus: response.classified.detectedStatus,
+                    source: "gmail_user_confirmation",
+                    evidence: response.classified.evidenceSnippet || "",
+                  }
+                });
+              }
+            },
+            onUndo: (response) => {
+              // Undo status update — revert to previous status
+              if (response?.application?._id && response?.previousStatus) {
+                chrome.runtime.sendMessage({
+                  type: "UPDATE_APPLICATION_STATUS",
+                  payload: {
+                    applicationId: response.application._id,
+                    targetStatus: response.previousStatus,
+                    source: "gmail_undo",
+                    evidence: "User undid email event status update",
+                  }
+                });
+              }
+            },
+            onIgnore: () => {
+              // Record that this messageId was deliberately ignored
+              if (msg.messageId) {
+                chrome.storage.local.get(["ignoredEmailIds"], (res) => {
+                  const ignored = res.ignoredEmailIds || [];
+                  if (!ignored.includes(msg.messageId)) {
+                    ignored.push(msg.messageId);
+                    chrome.storage.local.set({ ignoredEmailIds: ignored.slice(-200) });
+                  }
+                });
+              }
+            },
+            onAddUntracked: (data) => {
+              console.debug("[CareerPilot] Application created from untracked email:", data);
+            }
+          });
+        }
+      });
+    }
+
+    // Gmail routing is hash-based
+    window.addEventListener("hashchange", () => {
       if (gmailTimer) clearTimeout(gmailTimer);
-      gmailTimer = setTimeout(() => {
-        if (!window.__CAREERPILOT_GMAIL_EXTRACTOR__?.isGmail()) return;
-        const msg = window.__CAREERPILOT_GMAIL_EXTRACTOR__.extractOpenedGmailMessage();
-        if (!msg || !msg.messageId || msg.messageId === lastGmailMsgId) return;
-
-        lastGmailMsgId = msg.messageId;
-
-        chrome.runtime.sendMessage({ type: "PROCESS_EMAIL_EVENT", payload: msg }, (res) => {
-          if (chrome.runtime.lastError) return;
-          if (res?.success && res.data && window.__CAREERPILOT_GMAIL_OVERLAY__) {
-            window.__CAREERPILOT_GMAIL_OVERLAY__.renderGmailOverlay({
-              response: res.data,
-              onConfirm: () => {},
-              onUndo: () => {},
-              onIgnore: () => {},
-            });
-          }
-        });
-      }, 1000);
+      gmailTimer = setTimeout(triggerGmailExtraction, 1500);
     });
 
-    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    // Handle popstate (some Gmail views)
+    window.addEventListener("popstate", () => {
+      if (gmailTimer) clearTimeout(gmailTimer);
+      gmailTimer = setTimeout(triggerGmailExtraction, 1500);
+    });
+
+    // Initial trigger for when extension loads while email is already open
+    setTimeout(triggerGmailExtraction, 2000);
   }
 
-  // 4. DOM Apply Button Click Observer & Submission Evidence Monitor
+  // ─── Apply Button Observer ────────────────────────────────────────────────────
   function setupApplyButtonClickListener() {
     if (window.location.hostname.includes("mail.google.com")) return;
 
     document.addEventListener("click", (e) => {
-      const applyBtn = typeof safeFindApplyButton === "function" ? safeFindApplyButton(document) : null;
+      const registry = window.__CAREERPILOT_PORTAL_REGISTRY__;
+      const adapter = registry ? registry.getAdapterForUrl(window.location.href) : null;
+      if (!adapter) return;
+
+      const applyBtn = adapter.getApplyButton ? adapter.getApplyButton(document) : null;
       if (!applyBtn) return;
 
       const target = e.target;
-      if (applyBtn.contains(target) || target === applyBtn) {
-        const registry = window.__CAREERPILOT_PORTAL_REGISTRY__;
-        const adapter = registry ? registry.getAdapterForUrl(window.location.href) : null;
-        const extracted = adapter ? adapter.extract(document) : {};
+      if (!applyBtn.contains(target) && target !== applyBtn) return;
 
-        const company = extracted.company || "Company";
-        const role = extracted.title || "Position";
-        const canonicalUrl = sanitizeJobUrl(extracted.url || window.location.href);
+      const extracted = adapter.extract(document);
+      const company = extracted.company || "Company";
+      const role = extracted.title || "Position";
+      const canonicalUrl = sanitizeJobUrl(extracted.url || window.location.href);
 
-        chrome.runtime.sendMessage({
-          type: "CAPTURE_JOB_REQUEST",
-          payload: {
+      chrome.runtime.sendMessage({
+        type: "CAPTURE_JOB_REQUEST",
+        payload: {
+          company,
+          role,
+          jobUrl: canonicalUrl,
+          jobDescription: extracted.description || "",
+          targetStatus: "apply_started",
+          source: "extension_apply_click",
+          evidence: "User clicked Apply button"
+        }
+      });
+
+      chrome.runtime.sendMessage({
+        type: "SET_TAB_JOB_CONTEXT",
+        payload: {
+          jobContext: {
+            url: canonicalUrl,
             company,
             role,
-            jobUrl: canonicalUrl,
-            jobDescription: extracted.description || "",
-            targetStatus: "apply_started",
-            source: "extension_auto_overlay",
-            evidence: "Candidate clicked Apply button in DOM"
+            state: "APPLY_STARTED",
+            status: "apply_started",
+            startedAt: Date.now()
           }
-        });
-
-        chrome.runtime.sendMessage({
-          type: "SET_TAB_JOB_CONTEXT",
-          payload: {
-            jobContext: {
-              url: canonicalUrl,
-              company,
-              role,
-              state: "APPLY_STARTED",
-              status: "apply_started",
-              startedAt: Date.now()
-            }
-          }
-        });
-      }
+        }
+      });
     }, true);
   }
 
@@ -373,25 +496,26 @@
     chrome.runtime.sendMessage({ type: "GET_TAB_JOB_CONTEXT" }, (res) => {
       if (chrome.runtime.lastError || !res?.success || !res?.jobContext) return;
       const ctx = res.jobContext;
+      if (ctx.state !== "APPLY_STARTED" && ctx.status !== "apply_started") return;
 
-      if (ctx.state === "APPLY_STARTED" || ctx.status === "apply_started") {
-        const registry = window.__CAREERPILOT_PORTAL_REGISTRY__;
-        const adapter = registry ? registry.getAdapterForUrl(window.location.href) : null;
-        const isSubmitted = adapter?.detectSubmissionConfirmation ? adapter.detectSubmissionConfirmation(document) : false;
+      const registry = window.__CAREERPILOT_PORTAL_REGISTRY__;
+      const adapter = registry ? registry.getAdapterForUrl(window.location.href) : null;
+      const isSubmitted = adapter?.detectSubmissionConfirmation
+        ? adapter.detectSubmissionConfirmation(document)
+        : false;
 
-        if (isSubmitted) {
-          chrome.runtime.sendMessage({
-            type: "CAPTURE_JOB_REQUEST",
-            payload: {
-              company: ctx.company,
-              role: ctx.role,
-              jobUrl: ctx.url || window.location.href,
-              targetStatus: "applied",
-              source: "extension_auto_overlay",
-              evidence: "Strong submission evidence detected in DOM"
-            }
-          });
-        }
+      if (isSubmitted) {
+        chrome.runtime.sendMessage({
+          type: "CAPTURE_JOB_REQUEST",
+          payload: {
+            company: ctx.company,
+            role: ctx.role,
+            jobUrl: ctx.url || window.location.href,
+            targetStatus: "applied",
+            source: "extension_submission_detected",
+            evidence: "Submission confirmation detected in DOM"
+          }
+        });
       }
     });
   }
@@ -399,36 +523,23 @@
   observeGmailEvents();
   setupApplyButtonClickListener();
 
-  // Initial trigger after DOM ready
+  // Initial activation after DOM is ready
   if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(() => {
       runActivationPipeline();
       checkSubmissionEvidence();
-    }, 300);
+    }, 400);
   } else {
     window.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         runActivationPipeline();
         checkSubmissionEvidence();
-      }, 300);
+      }, 400);
     });
   }
 
-  // 4. Runtime Message Listener (Unified Messaging Protocol)
+  // ─── Runtime Message Listener ─────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const isGmail = window.location.hostname.includes("mail.google.com");
-
-    if (request.type === "PING") {
-      sendResponse({ ok: true, status: "PONG" });
-      return true;
-    }
-
-    if (request.type === "GET_PAGE_CONTEXT") {
-      const context = isGmail ? "GMAIL_EMAIL" : "JOB_POSTING";
-      sendResponse({ ok: true, context });
-      return true;
-    }
-
     if (request.type === "GET_GMAIL_EVENT") {
       const emailData = window.__CAREERPILOT_GMAIL_EXTRACTOR__?.extractOpenedGmailMessage() || null;
       sendResponse({ ok: true, emailData });
@@ -444,44 +555,30 @@
             return;
           }
 
-          const evaluation = await engine.evaluateActivation(document, window.location.href);
+          const evaluation = await engine.evaluateActivation(
+            document,
+            window.location.href,
+            { isManualInspect: request.type === "ON_DEMAND_INSPECT" }
+          );
 
-          if (request.type === "ON_DEMAND_INSPECT") {
-            const isJob = evaluation.confidenceScore >= 40 || Boolean(evaluation.extracted && evaluation.extracted.title && evaluation.extracted.company);
-            sendResponse({
-              ok: true,
-              status: isJob ? "JOB_DETECTED" : "JOB_NOT_DETECTED",
-              isJobPage: isJob,
-              data: evaluation.extracted || null,
-              confidence: evaluation.confidenceScore >= 75 ? "HIGH" : evaluation.confidenceScore >= 50 ? "MEDIUM" : "LOW",
-              confidenceScore: evaluation.confidenceScore,
-              reason: evaluation.reason,
-              signals: evaluation.signals,
-            });
-            return;
-          }
+          const isJob =
+            evaluation.decision === "ACTIVATE" ||
+            evaluation.decision === "RETRY_PENDING" ||
+            evaluation.confidenceScore >= 40;
 
-          const isJob = evaluation.decision === "ACTIVATE" || evaluation.confidenceScore >= 60;
           sendResponse({
             ok: true,
             status: isJob ? "JOB_DETECTED" : "JOB_NOT_DETECTED",
             isJobPage: isJob,
-            data: isJob ? evaluation.extracted : null,
+            data: evaluation.extracted || null,
             confidence: evaluation.confidenceScore >= 75 ? "HIGH" : evaluation.confidenceScore >= 50 ? "MEDIUM" : "LOW",
             confidenceScore: evaluation.confidenceScore,
-            reason: evaluation.reason,
             signals: evaluation.signals,
           });
         } catch (e) {
-          sendResponse({ ok: false, code: "INSPECTION_FAILED", isJobPage: false, reason: e.message });
+          sendResponse({ ok: false, code: "INSPECTION_FAILED", isJobPage: false });
         }
       })();
-      return true;
-    }
-
-    if (request.type === "TRIGGER_INTENT_TOAST") {
-      runActivationPipeline();
-      sendResponse({ ok: true });
       return true;
     }
 

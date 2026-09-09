@@ -16,19 +16,19 @@ function normalizeError(err, responseStatus, responseData) {
   let code = "UNKNOWN_ERROR";
   let retryable = false;
 
-  if (err.name === "AbortError" || err.message?.includes("timeout")) {
+  if (err?.name === "AbortError" || err?.message?.includes("timeout")) {
     category = "TIMEOUT";
-    userMessage = "The request took too long. We'll try again.";
-    code = "TIMEOUT_ERROR";
+    userMessage = "Couldn't save this job";
+    code = "NETWORK_TIMEOUT";
     retryable = true;
-  } else if (err.message?.includes("NetworkError") || err.message?.includes("Failed to fetch") || err.message?.includes("offline")) {
+  } else if (!responseStatus || err?.message?.includes("NetworkError") || err?.message?.includes("Failed to fetch") || err?.message?.includes("offline")) {
     category = "NETWORK";
-    userMessage = "CareerPilot is temporarily unavailable. Your job details are safe.";
+    userMessage = "Couldn't save this job";
     code = "NETWORK_ERROR";
     retryable = true;
-  } else if (responseStatus === 401 || err.message?.includes("SESSION_EXPIRED") || err.message?.includes("AUTH_REQUIRED")) {
+  } else if (responseStatus === 401 || responseStatus === 403) {
     category = "AUTH";
-    userMessage = "Please sign in to CareerPilot to save jobs.";
+    userMessage = "Sign in to CareerPilot to save this job";
     code = "AUTH_REQUIRED";
     retryable = false;
   } else if (responseStatus === 400 || responseStatus === 422) {
@@ -36,14 +36,14 @@ function normalizeError(err, responseStatus, responseData) {
     userMessage = responseData?.error?.message || responseData?.message || "Some job information needs to be reviewed.";
     code = responseData?.error?.code || "VALIDATION_ERROR";
     retryable = false;
-  } else if (responseStatus === 409 || responseData?.isDuplicate) {
+  } else if (responseStatus === 409) {
     category = "DUPLICATE";
-    userMessage = responseData?.message || "This job is already in your applications.";
+    userMessage = "Already in Job Inbox";
     code = "DUPLICATE_RESOURCE";
     retryable = false;
   } else if (responseStatus >= 500) {
     category = "SERVER";
-    userMessage = "CareerPilot couldn't save this job right now.";
+    userMessage = "CareerPilot is temporarily unavailable";
     code = "SERVER_ERROR";
     retryable = true;
   } else if (err) {
