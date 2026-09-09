@@ -20,6 +20,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card, CardContent } from "../components/ui/Card";
 import { toast } from "../context/ToastContext";
+import { useActiveSession } from "../context/ActiveSessionContext";
 
 const PRACTICE_MODES = [
   {
@@ -40,6 +41,7 @@ const PRACTICE_MODES = [
 
 export default function TechDiscussionSetupPage() {
   const navigate = useNavigate();
+  const { activeSession, refreshActiveSession } = useActiveSession();
   const [mode, setMode] = useState("create");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -115,6 +117,7 @@ export default function TechDiscussionSetupPage() {
       }
 
       setCreatedRoomInfo(roomData);
+      await refreshActiveSession();
     } catch (err) {
       console.error("Create room failed:", err);
       setError(err?.response?.data?.message || err.message || "Failed to create discussion room.");
@@ -136,6 +139,7 @@ export default function TechDiscussionSetupPage() {
 
       const res = await joinTechDiscussionRoom(code);
       const joinedRoomId = res?.data?.roomId || code;
+      await refreshActiveSession();
 
       navigate(`/tech-discussion/${joinedRoomId}`);
     } catch (err) {
@@ -185,6 +189,32 @@ export default function TechDiscussionSetupPage() {
           <History className="w-4 h-4 text-primary" /> Practice History
         </Button>
       </div>
+
+      {activeSession?.type === "tech_discussion" && (
+        <div className="bg-primary-bg/80 border border-primary-border rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary text-white shrink-0">
+              <Code2 size={20} />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-text m-0">Active Tech Discussion Room In Progress</h3>
+              <p className="text-[11px] text-text-secondary m-0 mt-0.5 font-medium">
+                {activeSession.title} · Started {new Date(activeSession.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => navigate(activeSession.route)}
+            className="flex items-center gap-1.5 shrink-0 font-bold"
+          >
+            <span>Return to Room</span>
+            <ArrowRight size={14} />
+          </Button>
+        </div>
+      )}
 
       <Card>
         <div className="flex border-b border-border bg-bg-secondary/40">

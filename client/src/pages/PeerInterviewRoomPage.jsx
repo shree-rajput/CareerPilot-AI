@@ -14,6 +14,7 @@ import { useSocket } from "../hooks/useSocket.js";
 import { useLiveKitRoom } from "../hooks/useLiveKitRoom.js";
 import { useCodingQuestion } from "../hooks/useCodingQuestion.js";
 import { useTimer } from "../hooks/useTimer.js";
+import { useActiveSession } from "../context/ActiveSessionContext";
 
 // Error Boundary to prevent white screen on LiveKit component crashes
 class LiveKitErrorBoundary extends React.Component {
@@ -367,6 +368,7 @@ function InterviewRoomLayout({
 export default function PeerInterviewRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const { refreshActiveSession } = useActiveSession();
 
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
   const [currentCode, setCurrentCode] = useState("");
@@ -447,6 +449,7 @@ export default function PeerInterviewRoomPage() {
     try {
       setLoading(true);
       await import("../api/http").then(({ http }) => http.post(`/interview-rooms/${roomId}/end`));
+      await refreshActiveSession();
       navigate(`/peer-interview/${roomId}/report`);
     } catch (err) {
       console.error("Failed to end interview:", err);

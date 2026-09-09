@@ -17,6 +17,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { Button } from "./ui/Button";
 import { CopilotChat } from "./CopilotChat";
+import { GlobalSessionIndicator } from "./GlobalSessionIndicator";
 
 import { NAVIGATION_CATEGORIES, FEATURES, FEATURE_STATUS } from "../config/features";
 import api from "../api/axios";
@@ -316,6 +317,9 @@ export function AppLayout() {
             </div>
           </div>
         </header>
+
+        {/* Global Active Session Indicator */}
+        <GlobalSessionIndicator />
 
         {/* Scrollable Main Content Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scroll-smooth">

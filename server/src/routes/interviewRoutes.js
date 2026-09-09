@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth.js";
 import {
   createSession,
   getNextQuestion,
+  getCurrentState,
   submitAnswer,
   completeSession,
   getSessionReport,
@@ -27,6 +28,7 @@ router.get("/history", getHistory);
 router.get("/:sessionId/report", getSessionReport);
 router.get("/:sessionId/replay", getReplay);
 router.get("/replay/:sessionId", getReplay);
+router.get("/:sessionId/current-state", getCurrentState);
 router.post("/:sessionId/question", getNextQuestion);
 router.post("/question/:questionId/answer", submitAnswer);
 router.post("/question/:questionId/run", runCode);

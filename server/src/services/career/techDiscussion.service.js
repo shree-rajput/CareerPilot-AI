@@ -134,6 +134,31 @@ export async function createTechDiscussionRoom({
     throw new Error("User ID is required");
   }
 
+  // Idempotency: check if user already has an active room
+  const existingActiveRoom = await PeerInterviewRoom.findOne({
+    $or: [
+      { createdBy: userId },
+      { "participants.userId": userId }
+    ],
+    status: { $in: ["waiting", "ready", "active", "paused"] }
+  }).sort({ updatedAt: -1 });
+
+  if (existingActiveRoom) {
+    console.log(`[TechDiscussion] Idempotency: User ${userId} already has active room ${existingActiveRoom.roomId}. Returning existing room.`);
+    const inviteLink = `${clientUrl}/tech-discussion/${existingActiveRoom.roomId}`;
+    return {
+      roomId: existingActiveRoom.roomId,
+      status: existingActiveRoom.status,
+      inviteLink,
+      roomCode: existingActiveRoom.roomId.toUpperCase(),
+      problem: existingActiveRoom.problem,
+      questionSequence: existingActiveRoom.questionSequence,
+      questionState: existingActiveRoom.questionState,
+      nextQuestionAvailable: existingActiveRoom.nextQuestionAvailable,
+      aiRecommendationReason: existingActiveRoom.aiRecommendationReason
+    };
+  }
+
   const user = await User.findById(userId).lean();
   const userName = user?.name || "Participant 1";
   const roomId = crypto.randomBytes(8).toString("hex");

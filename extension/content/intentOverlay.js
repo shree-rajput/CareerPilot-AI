@@ -515,7 +515,7 @@
           </div>
 
           <div class="cp-badges">
-            ${isTracked ? `<span class="cp-tag cp-tag-tracked">✓ Tracked in Workspace (${appStatus})</span>` : `<span class="cp-tag ${matchBadgeClass}">${matchLabel}</span>`}
+            ${isTracked ? `<span class="cp-tag cp-tag-tracked">✓ Saved in Job Inbox (${appStatus})</span>` : `<span class="cp-tag ${matchBadgeClass}">${matchLabel}</span>`}
             ${workplaceType ? `<span class="cp-tag cp-tag-info">🏢 ${workplaceType}</span>` : ""}
             ${salary ? `<span class="cp-tag cp-tag-info">💰 ${salary}</span>` : ""}
           </div>
@@ -538,8 +538,8 @@
         <div class="cp-actions">
           ${
             isTracked
-              ? `<button class="cp-btn cp-btn-primary" id="cp-open-app-btn">View in Workspace ↗</button>`
-              : `<button class="cp-btn cp-btn-primary" id="cp-track-btn">⚡ Track Application</button>`
+              ? `<button class="cp-btn cp-btn-primary" id="cp-open-app-btn">Open Job Inbox ↗</button>`
+              : `<button class="cp-btn cp-btn-primary" id="cp-track-btn">📌 Save Application</button>`
           }
           <button class="cp-btn cp-btn-secondary" id="cp-ignore-btn">Dismiss</button>
         </div>

@@ -11,6 +11,7 @@ import {
 import { Track } from "livekit-client";
 import "@livekit/components-styles";
 import { toast } from "../context/ToastContext";
+import { useActiveSession } from "../context/ActiveSessionContext";
 import CodeEditor from "../components/interview/CodeEditor/CodeEditor.jsx";
 import ArchitecturalCanvas from "../components/interview/ArchitecturalCanvas.jsx";
 import PreJoinLobby from "../components/interview/PreJoinLobby.jsx";
@@ -38,10 +39,9 @@ import {
   Layout,
   FileText
 } from "lucide-react";
-import { useSocket } from "../hooks/useSocket.js";
 import { YjsSocketProvider } from "../services/yjsProvider.js";
 import {
-  getLiveKitToken,
+
   getTechDiscussionSession,
   saveTechDiscussionDraft,
   endTechDiscussionSession,
@@ -162,14 +162,16 @@ function PeerStreamPanel({ peerPresence, participants, isVideoMinimized, onClose
 export default function TechDiscussionRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const { refreshActiveSession, socket, connectionStatus, peerPresence, liveKitToken } = useActiveSession();
+  const socketConnected = connectionStatus === "joined";
 
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
   const [mediaPermissions, setMediaPermissions] = useState({ hasCamera: true, hasMic: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
 
-  // Room & LiveKit Data
-  const [roomData, setRoomData] = useState(null);
+  // Room Data
   const [problem, setProblem] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [currentCode, setCurrentCode] = useState("");
@@ -206,13 +208,6 @@ export default function TechDiscussionRoomPage() {
 
   // Timer State
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(45 * 60);
-
-  // Real-time socket & presence hook
-  const { socket, socketConnected, connectionStatus, peerPresence } = useSocket(
-    roomId,
-    hasJoinedLobby,
-    { hasCamera: mediaPermissions.hasCamera, hasMic: mediaPermissions.hasMic }
-  );
 
   // Sync workspace activity over Socket.IO
   useEffect(() => {
@@ -278,25 +273,8 @@ export default function TechDiscussionRoomPage() {
           setTimeRemainingSeconds(sessionData.timeRemainingSeconds);
         }
 
-        // 2. Fetch WebRTC LiveKit Token seamlessly
-        const lkData = await getLiveKitToken(roomId).catch((lkErr) => {
-          console.warn("LiveKit media token warning (continuing workspace practice):", lkErr.message);
-          return null;
-        });
-
         if (!isMounted) return;
-
-        if (lkData) {
-          setRoomData(lkData);
-        } else {
-          // Soft fallback so room page remains active even if LiveKit server is offline
-          setRoomData({
-            token: "",
-            roomName: `tech-discussion-${roomId}`,
-            problem: sessionData.problem,
-            participants: sessionData.participants
-          });
-        }
+        setSessionLoaded(true);
       } catch (err) {
         if (isMounted) {
           console.error("Session restoration error:", err);
@@ -528,10 +506,12 @@ export default function TechDiscussionRoomPage() {
     try {
       setLoading(true);
       await endTechDiscussionSession(roomId).catch(() => {});
+      await refreshActiveSession();
       toast.success("Practice session ended.");
       navigate("/tech-discussion/history");
     } catch (err) {
       console.error("Failed to end session:", err);
+      await refreshActiveSession();
       navigate("/tech-discussion/history");
     }
   };
@@ -563,7 +543,7 @@ export default function TechDiscussionRoomPage() {
     );
   }
 
-  if (error || !roomData) {
+  if (error || !sessionLoaded) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-bg text-text p-6">
         <AlertCircle className="mb-4 h-12 w-12 text-danger" />
@@ -711,15 +691,7 @@ export default function TechDiscussionRoomPage() {
       </div>
 
       {/* MAIN WORKSPACE BODY */}
-      <LiveKitRoom
-        token={roomData.token}
-        serverUrl={import.meta.env.VITE_LIVEKIT_URL || roomData.livekitUrl}
-        connect={Boolean(roomData.token)}
-        audio={mediaPermissions.hasMic}
-        video={mediaPermissions.hasCamera}
-        onMediaDeviceFailure={(err) => console.warn("LiveKit Media Device Warning (avatar fallback active):", err?.message || err)}
-        className="flex flex-1 overflow-hidden relative bg-bg"
-      >
+      <div className="flex flex-1 overflow-hidden relative bg-bg">
         <LiveKitErrorBoundary>
 
           {/* FLOATING MINIMIZABLE VIDEO PANEL */}
@@ -918,7 +890,7 @@ export default function TechDiscussionRoomPage() {
             )}
           </div>
         </LiveKitErrorBoundary>
-      </LiveKitRoom>
+      </div>
     </div>
   );
 }

@@ -119,7 +119,51 @@ export function InterviewSessionPage() {
   useEffect(() => {
     let mounted = true;
     async function loadFirst() {
-      await fetchNextQuestion({ forceFetch: false, mountedRef: { current: mounted } });
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      try {
+        const currentState = await interviewApi.getCurrentState(sessionId);
+        if (mounted && currentState) {
+          const actualEntity = currentState;
+          setCurrentEntity(actualEntity);
+          setOpeningGreeting(actualEntity.greeting || "");
+          
+          if (actualEntity.type === 'challenge') {
+            const lang = (currentLanguage || 'javascript').toLowerCase();
+            const starter = actualEntity.data?.draftCode?.[lang] || actualEntity.data?.starterCode?.[lang] || actualEntity.data?.starterCode?.javascript || "";
+            setCurrentCode(starter || "function solution(input) {\n  // Write your code here\n}");
+            if (actualEntity.data.status === "answered") {
+              setCodingResult({ aiReview: actualEntity.data.aiReview });
+            }
+          } else {
+            if (actualEntity.data.status === "answered") {
+              setInterviewerReaction(actualEntity.data.evaluation?.interviewerReaction || "Okay, let's move on.");
+            }
+          }
+
+          if (actualEntity.data.status === "answered") {
+            setInterviewPhase("evaluated");
+          } else {
+            setInterviewPhase("questioning");
+          }
+          setFetchStatus("ready");
+        } else if (mounted) {
+          // No current state exists, fetch next question
+          isFetchingRef.current = false;
+          await fetchNextQuestion({ forceFetch: true, mountedRef: { current: mounted } });
+        }
+      } catch (err) {
+        if (mounted) {
+          console.error("Failed to load current state", err);
+          setQuestionError(parseQuestionError(err));
+          setFetchStatus("error");
+          setInterviewPhase("error");
+        }
+      } finally {
+        if (mounted && setInterviewPhase !== "loading_first") {
+          isFetchingRef.current = false;
+        }
+      }
     }
     loadFirst();
     return () => { mounted = false; };

@@ -13,6 +13,12 @@ export const interviewApi = {
     const res = await http.post(`/interview/${sessionId}/question`);
     return res.data.data;
   },
+  getCurrentState: async (sessionId) => {
+    const res = await http.get(`/interview/${sessionId}/current-state`);
+    // Status 204 means no state yet
+    if (res.status === 204) return null;
+    return res.data.data;
+  },
   submitAnswer: async (questionId, data) => {
     const payload = typeof data === "string" ? { transcript: data, answer: data } : {
       transcript: data?.transcript || data?.answer || data?.text || "",

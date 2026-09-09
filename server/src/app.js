@@ -33,6 +33,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import { reminderRouter } from "./routes/reminderRoutes.js";
+import sessionRoutes from "./routes/sessionRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -95,6 +96,7 @@ export function createApp() {
   app.use("/api/match", matchRouter);
   app.use("/api/tailor", tailoringRouter);
   app.use("/api/analytics", analyticsRouter);
+  app.use("/api/sessions", sessionRoutes);
   app.use("/api/interview", interviewRouter);
   app.use("/api/interview-rooms", peerInterviewRoutes);
   app.use("/api/tech-discussion", techDiscussionRoutes);

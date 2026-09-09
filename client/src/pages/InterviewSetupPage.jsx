@@ -9,11 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card"
 import { Spinner } from "../components/ui/Spinner";
 import { Badge } from "../components/ui/Badge";
 import { useAuth } from "../context/useAuth";
+import { useActiveSession } from "../context/ActiveSessionContext";
 
 export function InterviewSetupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { activeSession, refreshActiveSession } = useActiveSession();
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [fetchingSessions, setFetchingSessions] = useState(true);
@@ -85,6 +87,7 @@ export function InterviewSetupPage() {
     try {
       setLoading(true);
       const session = await interviewApi.createSession(form);
+      await refreshActiveSession();
       navigate(`/interview/${session._id}`);
     } catch (err) {
       toast.error("Failed to start session: " + (err.response?.data?.message || err.message));
@@ -117,6 +120,32 @@ export function InterviewSetupPage() {
           <span>View History & Progress</span>
         </Button>
       </div>
+
+      {activeSession?.type === "ai_interview" && (
+        <div className="bg-primary-bg/80 border border-primary-border rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary text-white shrink-0">
+              <Mic size={20} />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-text m-0">Active Interview Session In Progress</h3>
+              <p className="text-[11px] text-text-secondary m-0 mt-0.5 font-medium">
+                {activeSession.title} · Started {new Date(activeSession.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => navigate(activeSession.route)}
+            className="flex items-center gap-1.5 shrink-0 font-bold"
+          >
+            <span>Resume Interview</span>
+            <ArrowRight size={14} />
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* NEW SESSION FORM */}

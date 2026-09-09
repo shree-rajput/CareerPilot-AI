@@ -135,6 +135,21 @@ function determineNextState(session, completedQuestions, completedChallenges) {
 
 export async function createSession(req, res, next) {
   try {
+    // Check if user already has an active session
+    const existingActiveSession = await InterviewSession.findOne({
+      userId: req.user._id,
+      status: { $in: ["in_progress", "setup"] }
+    }).sort({ updatedAt: -1 });
+
+    if (existingActiveSession) {
+      console.log(`[Interview] Idempotency: User ${req.user._id} already has active session ${existingActiveSession._id}. Returning existing session.`);
+      return res.status(200).json({
+        success: true,
+        data: existingActiveSession,
+        message: "Restored existing active session"
+      });
+    }
+
     const { targetRole, technologyStack, interviewType, difficulty, applicationId, jobDescription, numberOfQuestions, mode, resumeText } = req.body;
 
     const userPrefs = req.user?.interviewPreferences || {};
@@ -728,6 +743,68 @@ export async function getNextQuestion(req, res, next) {
       await InterviewQuestion.deleteOne({ _id: stub._id });
       throw err;
     }
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 2b. Get Current State (Safe Recovery)
+// ──────────────────────────────────────────────────────────────────────────────
+export async function getCurrentState(req, res, next) {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user._id });
+    if (!session) throw new AppError("Session not found", 404);
+
+    if (session.status === "completed") {
+      return res.status(200).json({
+        success: true,
+        data: null,
+        message: "Interview completed"
+      });
+    }
+
+    const previousQuestions = await InterviewQuestion.find({ sessionId }).sort({ createdAt: 1 }).lean();
+    const previousChallenges = await InterviewChallenge.find({ interviewSessionId: sessionId }).sort({ createdAt: 1 }).lean();
+
+    const completedQuestions = previousQuestions.filter(q => q.status !== "pending");
+    const completedChallenges = previousChallenges.filter(c => c.validationStatus !== "pending");
+
+    // We need to return the most recently active entity
+    const lastQuestion = completedQuestions[completedQuestions.length - 1];
+    const activeChallenge = completedChallenges.find(c => c.status === "active");
+    const answeredChallenge = completedChallenges[completedChallenges.length - 1];
+
+    let currentEntity = null;
+    let type = null;
+
+    if (activeChallenge) {
+      currentEntity = activeChallenge;
+      type = "challenge";
+    } else if (lastQuestion && answeredChallenge && new Date(lastQuestion.createdAt) < new Date(answeredChallenge.updatedAt)) {
+      currentEntity = answeredChallenge;
+      type = "challenge";
+    } else if (lastQuestion) {
+      currentEntity = lastQuestion;
+      type = "question";
+    }
+
+    if (!currentEntity) {
+      // Nothing generated yet, so there is no current state. Frontend should proceed to call nextQuestion.
+      return res.status(204).send();
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        type,
+        data: currentEntity,
+        greeting: completedQuestions.length === 1 && currentEntity._id === completedQuestions[0]._id ? session.greeting : undefined
+      }
+    });
+
   } catch (error) {
     next(error);
   }
