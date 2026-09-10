@@ -405,7 +405,134 @@ async function handleEmailEventProcessing(emailPayload) {
     throw new Error(resData.message || `Email processing failed (${response.status})`);
   }
 
+  // ─── Chrome Notification Delivery ───────────────────────────────────────
+  // Deduplicate using messageId so same email never creates two Chrome notifications
+  const messageId = emailPayload.messageId || "";
+  const notifDedupeKey = `chrome-notif-email-${messageId}`;
+
+  if (messageId) {
+    const stored = await chrome.storage.local.get(notifDedupeKey);
+    if (stored[notifDedupeKey]) {
+      // Already delivered a Chrome notification for this message
+      return resData;
+    }
+  }
+
+  const { appUrl } = await getApiConfig();
+  const classified = resData.classified || {};
+  const app = resData.application || {};
+  const company = app.company || classified.detectedCompany || "";
+  const role = app.role || classified.detectedRole || "";
+
+  let notifConfig = null;
+
+  if (resData.status === "AUTOMATIC_UPDATE") {
+    const eventType = classified.eventType || "";
+    const emojiMap = {
+      OA_INVITATION:          "🧪",
+      INTERVIEW_INVITATION:   "🎯",
+      INTERVIEW_SCHEDULED:    "🗓️",
+      OFFER_RECEIVED:         "🎉",
+      APPLICATION_REJECTED:   "📋",
+      APPLICATION_RECEIVED:   "✅",
+      APPLICATION_ADVANCED:   "📈",
+    };
+    const emoji = emojiMap[eventType] || "🔔";
+    const titleMap = {
+      OA_INVITATION:        `Assessment invitation — ${company}`,
+      INTERVIEW_INVITATION: `Interview invitation — ${company}`,
+      INTERVIEW_SCHEDULED:  `Interview confirmed — ${company}`,
+      OFFER_RECEIVED:       `Offer received — ${company}`,
+      APPLICATION_REJECTED: `Application update — ${company}`,
+      APPLICATION_RECEIVED: `Application confirmed — ${company}`,
+      APPLICATION_ADVANCED: `Application advancing — ${company}`,
+    };
+    const msgMap = {
+      OA_INVITATION:        `${company} invited you to complete an assessment${role ? " for " + role : ""}.`,
+      INTERVIEW_INVITATION: `${company} invited you for an interview${role ? " for " + role : ""}.`,
+      INTERVIEW_SCHEDULED:  `Your interview${role ? " for " + role : ""} at ${company} is confirmed.`,
+      OFFER_RECEIVED:       `You received an offer from ${company}${role ? " for " + role : ""}.`,
+      APPLICATION_REJECTED: `${company} has updated your application status.`,
+      APPLICATION_RECEIVED: `${company} confirmed your application${role ? " for " + role : ""}.`,
+      APPLICATION_ADVANCED: `Your application at ${company} has moved forward.`,
+    };
+    notifConfig = {
+      id: `email-auto-${messageId || Date.now()}`,
+      title: (titleMap[eventType] || `CareerPilot — Application Update`),
+      message: msgMap[eventType] || `Your application at ${company} has been updated.`,
+      deepLink: `${appUrl}/applications/${app._id || ""}`,
+      priority: ["OA_INVITATION", "INTERVIEW_INVITATION", "OFFER_RECEIVED"].includes(eventType) ? 2 : 1,
+    };
+  } else if (resData.status === "APPLICATION_RECOVERY" && resData.isRecoverable) {
+    const c = classified.detectedCompany || "a company";
+    const r = classified.detectedRole || "";
+    notifConfig = {
+      id: `email-recovery-${messageId || Date.now()}`,
+      title: `🔔 Application found — ${c}`,
+      message: `We found a confirmation that you applied to ${r ? r + " at " : ""}${c}. Add it to your Job Inbox.`,
+      deepLink: `${appUrl}/applications?recover=1&company=${encodeURIComponent(c)}&role=${encodeURIComponent(r)}&messageId=${encodeURIComponent(messageId)}`,
+      priority: 2,
+    };
+  } else if (resData.status === "AMBIGUOUS_MATCH") {
+    const c = classified.detectedCompany || "a company";
+    notifConfig = {
+      id: `email-ambiguous-${messageId || Date.now()}`,
+      title: `📬 Review needed — ${c}`,
+      message: `We found a ${c} recruitment email but couldn't match it. Open CareerPilot to select the correct application.`,
+      deepLink: `${appUrl}/applications`,
+      priority: 1,
+    };
+  }
+
+  if (notifConfig) {
+    await triggerRecruitmentNotification(notifConfig);
+    if (messageId) {
+      await chrome.storage.local.set({ [notifDedupeKey]: true });
+    }
+  }
+
   return resData;
+}
+
+/**
+ * Delivers a Chrome notification for recruitment events with deduplication guard.
+ * Stores notificationId → deepLink in storage for click handling.
+ */
+async function triggerRecruitmentNotification({ id, title, message, deepLink, priority = 1 }) {
+  if (typeof chrome === "undefined" || !chrome.notifications?.create) return;
+
+  try {
+    const iconUrl = chrome.runtime?.getURL
+      ? chrome.runtime.getURL("assets/icon48.png")
+      : "assets/icon48.png";
+
+    await new Promise((resolve) => {
+      chrome.notifications.create(
+        id,
+        {
+          type: "basic",
+          iconUrl,
+          title,
+          message,
+          priority: Math.min(2, Math.max(0, priority)),
+        },
+        (createdId) => {
+          if (chrome.runtime.lastError) {
+            console.warn("[CareerPilot] Chrome notification suppressed:", chrome.runtime.lastError.message);
+          }
+          resolve(createdId);
+        }
+      );
+    });
+
+    // Persist deepLink so onClicked can navigate correctly
+    if (id && deepLink) {
+      const linkKey = `notif-link-${id}`;
+      await chrome.storage.local.set({ [linkKey]: deepLink });
+    }
+  } catch (e) {
+    console.warn("[CareerPilot] Notification creation error:", e);
+  }
 }
 
 // -----------------------------------------------------------------------------

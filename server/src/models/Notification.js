@@ -11,6 +11,13 @@ const notificationSchema = new mongoose.Schema(
         "INTERVIEW",
         "LEARNING",
         "PROGRESS",
+        // Email-driven lifecycle events
+        "APPLICATION_RECOVERY",   // Untracked application found via email
+        "EMAIL_STATUS_UPDATE",     // Generic auto-update from email
+        "OA_INVITED",             // Online Assessment invitation
+        "INTERVIEW_INVITED",      // Interview invitation
+        "OFFER_RECEIVED_UPDATE",  // Offer detected
+        "REJECTED_UPDATE",        // Rejection detected
         // Legacy fallbacks kept to avoid breaking existing data immediately
         "INTERVIEW_REMINDER",
         "APPLICATION_FOLLOWUP",

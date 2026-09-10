@@ -81,6 +81,7 @@ const INTERVIEW_PHRASES = [
 ];
 
 const OA_PHRASES = [
+  // Platform names
   "online assessment",
   "coding assessment",
   "technical assessment",
@@ -88,10 +89,35 @@ const OA_PHRASES = [
   "codesignal",
   "testgorilla",
   "karat assessment",
+  "xobin",
+  "mettl",
+  "limetest",
+  "imocha",
+  "coderbyte",
+  "hackerearth",
+  "mckinsey solve",
+  "pymetrics",
+  // Action-oriented phrases
   "assessment invitation",
   "complete the assessment",
   "take home assignment",
   "take-home test",
+  "invited for an assessment",
+  "invited to complete an assessment",
+  "invited to take an assessment",
+  "complete your assessment",
+  "pending assessment",
+  "assessment link",
+  "complete the test",
+  "haven't completed the test",
+  "still haven't completed",
+  "take the test",
+  "take the assessment",
+  "assessment is waiting",
+  "your assessment is ready",
+  "complete your online test",
+  "coding challenge",
+  "coding test",
 ];
 
 const OFFER_PHRASES = [

@@ -17,6 +17,7 @@ import { AppError } from "../utils/errors.js";
 import { queueApplicationIntelligence } from "../services/intelligence/backgroundIntelligenceService.js";
 import { ingestJobOpportunity } from "../services/jobIngestionService.js";
 import { normalizeAndRecordEvent } from "../services/career/applicationEventService.js";
+import { evaluateAndScheduleReminders } from "../services/scheduler/reminderEngine.js";
 
 const createApplicationSchema = z.object({
   company: z.string().trim().min(1).max(150),
@@ -987,6 +988,15 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
   }
 
   if (!matchResult.matchedApplication || matchResult.confidence?.toUpperCase() === "LOW") {
+    // Determine if this is an APPLICATION_RECEIVED event with enough info for recovery
+    const isRecoverable =
+      classified.isApplicationRelevant &&
+      classified.eventType === "APPLICATION_RECEIVED" &&
+      classified.detectedCompany &&
+      classified.detectedCompany !== "Unknown" &&
+      classified.detectedRole &&
+      classified.detectedRole !== "Unknown";
+
     const record = await EmailEventRecord.create({
       userId: req.user._id,
       messageId,
@@ -1002,14 +1012,42 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
       receivedAt: emailData.timestamp,
       evidence: classified.evidenceSnippet,
       matchSignals: matchResult.matchSignals,
-      actionTaken: "IGNORED_LOW_CONFIDENCE",
+      actionTaken: isRecoverable ? "RECOVERY_NOTIFICATION_SENT" : "IGNORED_LOW_CONFIDENCE",
     });
 
+    // Create recovery notification only when company+role are both resolved
+    if (isRecoverable) {
+      await createNotification({
+        userId: req.user._id,
+        type: "APPLICATION_RECOVERY",
+        priority: "HIGH",
+        title: `🔔 Application found — ${classified.detectedCompany}`,
+        message: `We found a confirmation that you applied to ${classified.detectedRole} at ${classified.detectedCompany}. This application isn't in your Job Inbox yet.`,
+        source: {
+          entityType: "email_recovery",
+          entityId: record._id.toString(),
+          eventType: "APPLICATION_RECOVERY",
+        },
+        action: {
+          route: `/applications?recover=1&company=${encodeURIComponent(classified.detectedCompany)}&role=${encodeURIComponent(classified.detectedRole)}&messageId=${encodeURIComponent(messageId)}`,
+          label: "Add to Job Inbox",
+        },
+        metadata: {
+          detectedCompany: classified.detectedCompany,
+          detectedRole: classified.detectedRole,
+          evidenceSnippet: classified.evidenceSnippet,
+          messageId,
+        },
+        dedupeKey: `APPLICATION_RECOVERY:${req.user._id}:${messageId}`,
+      }).catch(() => {});
+    }
+
     return res.status(200).json({
-      status: "NO_MATCHING_APPLICATION",
+      status: isRecoverable ? "APPLICATION_RECOVERY" : "NO_MATCHING_APPLICATION",
       classified,
       matchResult,
       record,
+      isRecoverable,
     });
   }
 
@@ -1046,6 +1084,51 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
     });
   }
 
+  // ─── Helper: map eventType → notification type ────────────────────────────
+  function resolveNotificationType(eventType) {
+    const map = {
+      OA_INVITATION: "OA_INVITED",
+      INTERVIEW_INVITATION: "INTERVIEW_INVITED",
+      INTERVIEW_SCHEDULED: "INTERVIEW_INVITED",
+      OFFER_RECEIVED: "OFFER_RECEIVED_UPDATE",
+      APPLICATION_REJECTED: "REJECTED_UPDATE",
+      APPLICATION_RECEIVED: "EMAIL_STATUS_UPDATE",
+      APPLICATION_ADVANCED: "EMAIL_STATUS_UPDATE",
+      APPLICATION_WITHDRAWN: "EMAIL_STATUS_UPDATE",
+      INTERVIEW_COMPLETED: "EMAIL_STATUS_UPDATE",
+    };
+    return map[eventType] || "EMAIL_STATUS_UPDATE";
+  }
+
+  // ─── Helper: map eventType → notification emoji + title ──────────────────
+  function resolveNotificationTitle(eventType, company) {
+    const map = {
+      OA_INVITATION: `🧪 Assessment invitation — ${company}`,
+      INTERVIEW_INVITATION: `🎯 Interview invitation — ${company}`,
+      INTERVIEW_SCHEDULED: `🗓️ Interview scheduled — ${company}`,
+      OFFER_RECEIVED: `🎉 Offer received — ${company}`,
+      APPLICATION_REJECTED: `Application update — ${company}`,
+      APPLICATION_RECEIVED: `✅ Application confirmed — ${company}`,
+      APPLICATION_ADVANCED: `📈 Application advanced — ${company}`,
+    };
+    return map[eventType] || `Application update — ${company}`;
+  }
+
+  // ─── Helper: map eventType → user-facing message ──────────────────────────
+  function resolveNotificationMessage(eventType, company, role) {
+    const roleStr = role && role !== "Unknown" ? ` for ${role}` : "";
+    const map = {
+      OA_INVITATION: `${company} invited you to complete an online assessment${roleStr}. Check your email for the assessment link.`,
+      INTERVIEW_INVITATION: `${company} invited you for an interview${roleStr}. Check your email for scheduling details.`,
+      INTERVIEW_SCHEDULED: `Your interview${roleStr} at ${company} has been confirmed. Prepare well!`,
+      OFFER_RECEIVED: `You received an offer update from ${company}${roleStr}. Review the details.`,
+      APPLICATION_REJECTED: `${company} has updated your application status${roleStr}.`,
+      APPLICATION_RECEIVED: `${company} confirmed receipt of your application${roleStr}.`,
+      APPLICATION_ADVANCED: `Your application${roleStr} at ${company} has moved forward.`,
+    };
+    return map[eventType] || `Your application at ${company} has been updated.`;
+  }
+
   // 5. Apply Automatic Update (HIGH Confidence) or Pending Suggestion (MEDIUM Confidence)
   const isHighMatch = matchResult.confidence?.toUpperCase() === "HIGH";
   const isHighEvent = classified.eventConfidence?.toUpperCase() === "HIGH";
@@ -1061,17 +1144,38 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
 
     await app.save();
 
-    // Create In-App Notification
-    await Notification.create({
+    const notifType = resolveNotificationType(classified.eventType);
+    const notifTitle = resolveNotificationTitle(classified.eventType, app.company);
+    const notifMessage = resolveNotificationMessage(classified.eventType, app.company, app.role);
+
+    // Create in-app notification with correct type and deep link
+    await createNotification({
       userId: req.user._id,
-      type: "APPLICATION_STATUS",
-      title: `${app.company} Application Updated`,
-      message: `Status for ${app.role} at ${app.company} updated to ${classified.detectedStatus.toUpperCase()} based on email event.`,
-      entityType: "application",
-      entityId: app._id.toString(),
-      actionUrl: `/applications/${app._id}`,
-      idempotencyKey: `email-${messageId}`,
+      type: notifType,
+      priority: ["OA_INVITED", "INTERVIEW_INVITED", "OFFER_RECEIVED_UPDATE"].includes(notifType) ? "HIGH" : "MEDIUM",
+      title: notifTitle,
+      message: notifMessage,
+      source: {
+        entityType: "application",
+        entityId: app._id.toString(),
+        eventType: classified.eventType,
+      },
+      action: {
+        route: `/applications/${app._id}`,
+        label: "View Application",
+      },
+      metadata: {
+        detectedStatus: classified.detectedStatus,
+        evidenceSnippet: classified.evidenceSnippet,
+        messageId,
+      },
+      dedupeKey: `email-${messageId}`,
     }).catch(() => {});
+
+    // Trigger reminder engine immediately (rather than waiting for next hourly cron)
+    evaluateAndScheduleReminders(req.user._id).catch((err) =>
+      console.error("[processEmailEvent] Reminder engine error:", err.message)
+    );
 
     const record = await EmailEventRecord.create({
       userId: req.user._id,
@@ -1099,7 +1203,7 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
       record,
     });
   } else {
-    // Medium confidence -> create pending suggestion
+    // Medium confidence -> create pending suggestion + ACTION_REQUIRED notification
     app.pendingStatusSuggestions.push({
       suggestedStatus: classified.detectedStatus,
       reason: classified.evidenceSnippet || `Email event detected: ${classified.eventType}`,
@@ -1109,6 +1213,29 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
     });
 
     await app.save();
+
+    await createNotification({
+      userId: req.user._id,
+      type: "ACTION_REQUIRED",
+      priority: "MEDIUM",
+      title: `Review suggested update — ${app.company}`,
+      message: `We detected a possible status change for ${app.role} at ${app.company} based on a recruitment email. Review and confirm the update.`,
+      source: {
+        entityType: "application",
+        entityId: app._id.toString(),
+        eventType: classified.eventType,
+      },
+      action: {
+        route: `/applications/${app._id}`,
+        label: "Review Suggestion",
+      },
+      metadata: {
+        suggestedStatus: classified.detectedStatus,
+        evidenceSnippet: classified.evidenceSnippet,
+        messageId,
+      },
+      dedupeKey: `suggestion-${messageId}`,
+    }).catch(() => {});
 
     const record = await EmailEventRecord.create({
       userId: req.user._id,
