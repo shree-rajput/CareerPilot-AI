@@ -48,20 +48,22 @@
   // Watches for DOM content to populate, then re-runs activation pipeline.
   function startDomRetryObserver() {
     stopDomRetryObserver();
-    retryCount = 0;
 
-    // Schedule timed retries — more reliable than MutationObserver on SPAs
-    // that batch-render content.
-    function scheduleRetry() {
-      if (retryCount >= MAX_RETRIES) {
-        stopDomRetryObserver();
-        return;
-      }
-      retryCount++;
-      setTimeout(async () => {
+    let retryDebounceTimer = null;
+    let fallbackTimeout = null;
+
+    retryObserver = new MutationObserver((mutations) => {
+      // Ignore mutations from our own overlay
+      const isInternalMutation = mutations.every((m) => {
+        const targetId = m.target?.id || m.target?.parentElement?.id || "";
+        return targetId.includes("careerpilot");
+      });
+      if (isInternalMutation) return;
+
+      if (retryDebounceTimer) clearTimeout(retryDebounceTimer);
+      retryDebounceTimer = setTimeout(async () => {
         const currentUrl = window.location.href;
         if (currentUrl !== lastEvaluatedUrl) {
-          // URL changed during retry window — abort
           stopDomRetryObserver();
           return;
         }
@@ -74,22 +76,28 @@
         if (evaluation.decision === "ACTIVATE") {
           stopDomRetryObserver();
           await activateWithEvaluation(evaluation, currentUrl);
-        } else if (evaluation.decision === "RETRY_PENDING") {
-          // Not ready yet — schedule another retry
-          scheduleRetry();
-        } else {
+        } else if (evaluation.decision === "SKIP") {
           // Confident SKIP — stop retrying
           stopDomRetryObserver();
         }
-      }, RETRY_INTERVAL_MS * retryCount);
-    }
+      }, 500); // 500ms debounce
+    });
 
-    scheduleRetry();
+    retryObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, attributes: true });
+
+    // Fallback: forcefully stop observing after 10 seconds to avoid infinite loops on hanging pages
+    fallbackTimeout = setTimeout(() => {
+      stopDomRetryObserver();
+    }, 10000);
+
+    retryObserver._fallbackTimeout = fallbackTimeout;
+    retryObserver._debounceTimer = retryDebounceTimer;
   }
 
   function stopDomRetryObserver() {
-    retryCount = 0;
     if (retryObserver) {
+      if (retryObserver._fallbackTimeout) clearTimeout(retryObserver._fallbackTimeout);
+      if (retryObserver._debounceTimer) clearTimeout(retryObserver._debounceTimer);
       retryObserver.disconnect();
       retryObserver = null;
     }

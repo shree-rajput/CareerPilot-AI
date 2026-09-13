@@ -79,6 +79,7 @@
         ".job-view-layout h1",
         ".jobs-unified-top-card h1",
         "[data-test-id='job-detail-name']",
+        "h1"
       ];
       for (const sel of selectors) {
         const el = doc.querySelector(sel);

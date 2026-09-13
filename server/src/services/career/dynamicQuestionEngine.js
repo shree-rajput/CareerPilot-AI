@@ -3,6 +3,7 @@ import { executeCode } from "../codeExecution/executionService.js";
 import { User } from "../../models/User.js";
 import PeerInterviewRoom from "../../models/PeerInterviewRoom.js";
 import TechnicalScenarioBank from "../../models/TechnicalScenarioBank.js";
+import { normalizeCodingQuestion } from "../codeExecution/questionNormalizationService.js";
 import crypto from "node:crypto";
 
 const MAX_RETRIES = 3;
@@ -16,24 +17,6 @@ function computeFingerprint(title = "") {
     .replace(/[^a-z0-9]/g, "");
 }
 
-/**
- * Ensures starter code has stubs for supported languages.
- */
-function normalizeStarterCode(starterCode = {}, functionName = "solution", params = [], _returnType = "AUTO") {
-  const paramNames = Array.isArray(params) ? params.map((p) => p.name || p).join(", ") : "";
-
-  const jsDefault = `function ${functionName}(${paramNames}) {\n  // Write your code here\n}\n`;
-  const pyDefault = `def ${functionName}(${paramNames}):\n    # Write your code here\n    pass\n`;
-  const javaDefault = `public class Solution {\n    public Object ${functionName}(${paramNames}) {\n        // Write your code here\n        return null;\n    }\n}\n`;
-  const cppDefault = `class Solution {\npublic:\n    auto ${functionName}(${paramNames}) {\n        // Write your code here\n    }\n};\n`;
-
-  return {
-    javascript: starterCode.javascript?.trim() ? starterCode.javascript : jsDefault,
-    python: starterCode.python?.trim() ? starterCode.python : pyDefault,
-    java: starterCode.java?.trim() ? starterCode.java : javaDefault,
-    cpp: starterCode.cpp?.trim() ? starterCode.cpp : cppDefault,
-  };
-}
 
 /**
  * Main Engine Entrypoint: Dynamic AI-First Question Generation with Reference Quality Gate.
@@ -169,14 +152,7 @@ export async function generateDynamicInterviewQuestion(userId = null, options = 
         returnType: "AUTO"
       };
 
-      const normalizedStarterCode = normalizeStarterCode(
-        aiResult.starterCode,
-        executionContract.functionName,
-        executionContract.parameters,
-        executionContract.returnType
-      );
-
-      const canonicalQuestion = {
+      const rawQuestionMetadata = {
         id: questionId,
         questionId,
         _id: questionId,
@@ -191,11 +167,10 @@ export async function generateDynamicInterviewQuestion(userId = null, options = 
         difficulty: aiResult.difficulty || difficulty,
         experienceLevel: aiResult.experienceLevel || candidateExp,
         concepts: Array.isArray(aiResult.concepts) ? aiResult.concepts : [],
-        expectedConcepts: Array.isArray(aiResult.concepts) ? aiResult.concepts : [],
         expectedSkills: Array.isArray(aiResult.expectedSkills) ? aiResult.expectedSkills : candidateSkills,
         supportedLanguages: Array.isArray(aiResult.supportedLanguages) ? aiResult.supportedLanguages : ["javascript", "python", "java", "cpp"],
         defaultLanguage: language,
-        starterCode: normalizedStarterCode,
+        starterCode: aiResult.starterCode,
         execution: executionContract,
         testCases: Array.isArray(aiResult.testCases) ? aiResult.testCases : [],
         referenceSolution: aiResult.referenceSolution || {},
@@ -209,6 +184,9 @@ export async function generateDynamicInterviewQuestion(userId = null, options = 
           attempt
         }
       };
+
+      const canonicalQuestion = normalizeCodingQuestion(rawQuestionMetadata);
+
 
       // Persist to MongoDB TechnicalScenarioBank in background for audit trail
       TechnicalScenarioBank.create({

@@ -29,12 +29,14 @@
         }
 
         const jk = params.get("jk") || params.get("vjs") || params.get("vjk");
-        const isViewJob = /\/(viewjob|rc\/clk)\b/i.test(path);
-        if (isViewJob && jk) return true;
+        if (jk) return true;
 
-        const titleEl = doc.querySelector(".jobsearch-JobInfoHeader-title, h1[data-testid='simpler-job-title']");
-        const descEl = doc.querySelector("#jobDescriptionText, .jobsearch-jobDescriptionText");
-        return Boolean(titleEl && descEl && (jk || path.includes("/jobs")));
+        const isViewJob = /\/(viewjob|rc\/clk)\b/i.test(path);
+        if (isViewJob) return true;
+
+        const titleEl = doc.querySelector(".jobsearch-JobInfoHeader-title, h1[data-testid='simpler-job-title'], h1");
+        const descEl = doc.querySelector("#jobDescriptionText, .jobsearch-jobDescriptionText, .jobsearch-JobComponent-description");
+        return Boolean(titleEl && descEl && path.includes("/jobs"));
       } catch (e) {
         return false;
       }
@@ -56,13 +58,20 @@
     }
 
     extractTitle(doc = window.document) {
-      const el = doc.querySelector(".jobsearch-JobInfoHeader-title, h1[data-testid='simpler-job-title']");
-      return el ? el.textContent.trim() : "";
+      const el = doc.querySelector(".jobsearch-JobInfoHeader-title, h1[data-testid='simpler-job-title'], h1, h2.jobTitle");
+      if (el) return el.textContent.trim();
+      const docTitle = doc.title || "";
+      if (docTitle.includes("-")) return docTitle.split("-")[0].trim();
+      return "";
     }
 
     extractCompany(doc = window.document) {
-      const el = doc.querySelector('[data-company-name="true"], [data-testid="inlineHeader-companyName"], .jobsearch-InlineCompanyRating div');
-      return el ? el.textContent.trim() : "";
+      const el = doc.querySelector('[data-company-name="true"], [data-testid="inlineHeader-companyName"], .jobsearch-InlineCompanyRating div, .jobsearch-CompanyReview--heading');
+      if (el) return el.textContent.trim();
+      const docTitle = doc.title || "";
+      const match = docTitle.match(/-\s*(.*?)\s*-/);
+      if (match && match[1]) return match[1].trim();
+      return "";
     }
 
     extractLocation(doc = window.document) {
@@ -71,7 +80,7 @@
     }
 
     extractDescription(doc = window.document) {
-      const el = doc.querySelector("#jobDescriptionText, .jobsearch-jobDescriptionText");
+      const el = doc.querySelector("#jobDescriptionText, .jobsearch-jobDescriptionText, .jobsearch-JobComponent-description");
       const raw = el ? (el.innerText || el.textContent) : "";
       return typeof cleanJobDescriptionText === "function" ? cleanJobDescriptionText(el || raw) : raw.trim();
     }

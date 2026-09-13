@@ -39,9 +39,10 @@ import {
   Layout,
   FileText
 } from "lucide-react";
+import { useSocket } from "../hooks/useSocket.js";
 import { YjsSocketProvider } from "../services/yjsProvider.js";
 import {
-
+  getTechDiscussionLiveKitToken,
   getTechDiscussionSession,
   saveTechDiscussionDraft,
   endTechDiscussionSession,
@@ -162,15 +163,7 @@ function PeerStreamPanel({ peerPresence, participants, isVideoMinimized, onClose
 export default function TechDiscussionRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { refreshActiveSession, socket, connectionStatus, peerPresence, liveKitToken, clearRealtimeConnections } = useActiveSession();
-  const socketConnected = connectionStatus === "joined";
-
-  // Explicit unmount cleanup to tear down realtime connections
-  useEffect(() => {
-    return () => {
-      clearRealtimeConnections();
-    };
-  }, [clearRealtimeConnections]);
+  const { refreshActiveSession } = useActiveSession();
 
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
   const [mediaPermissions, setMediaPermissions] = useState({ hasCamera: true, hasMic: true });
@@ -178,7 +171,8 @@ export default function TechDiscussionRoomPage() {
   const [error, setError] = useState(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
 
-  // Room Data
+  // Room & LiveKit Data
+  const [roomData, setRoomData] = useState(null);
   const [problem, setProblem] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [currentCode, setCurrentCode] = useState("");
@@ -215,6 +209,13 @@ export default function TechDiscussionRoomPage() {
 
   // Timer State
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(45 * 60);
+
+  // Real-time socket & presence hook
+  const { socket, socketConnected, connectionStatus, peerPresence } = useSocket(
+    roomId,
+    hasJoinedLobby,
+    { hasCamera: mediaPermissions.hasCamera, hasMic: mediaPermissions.hasMic }
+  );
 
   // Sync workspace activity over Socket.IO
   useEffect(() => {
@@ -280,7 +281,26 @@ export default function TechDiscussionRoomPage() {
           setTimeRemainingSeconds(sessionData.timeRemainingSeconds);
         }
 
+        // 2. Fetch WebRTC LiveKit Token seamlessly
+        const lkData = await getTechDiscussionLiveKitToken(roomId).catch((lkErr) => {
+          console.warn("LiveKit media token warning (continuing workspace practice):", lkErr.message);
+          return null;
+        });
+
         if (!isMounted) return;
+
+        if (lkData) {
+          setRoomData(lkData);
+        } else {
+          // Soft fallback so room page remains active even if LiveKit server is offline
+          setRoomData({
+            token: "",
+            livekitUrl: "",
+            problem: sessionData.problem,
+            participants: sessionData.participants
+          });
+        }
+        
         setSessionLoaded(true);
       } catch (err) {
         if (isMounted) {
@@ -698,7 +718,15 @@ export default function TechDiscussionRoomPage() {
       </div>
 
       {/* MAIN WORKSPACE BODY */}
-      <div className="flex flex-1 overflow-hidden relative bg-bg">
+      <LiveKitRoom
+        token={roomData?.token || ""}
+        serverUrl={roomData?.livekitUrl || import.meta.env.VITE_LIVEKIT_URL || ""}
+        connect={Boolean(roomData?.token)}
+        audio={mediaPermissions.hasMic}
+        video={mediaPermissions.hasCamera}
+        onMediaDeviceFailure={(err) => console.warn("LiveKit Media Device Warning (avatar fallback active):", err?.message || err)}
+        className="flex flex-1 overflow-hidden relative bg-bg"
+      >
         <LiveKitErrorBoundary>
 
           {/* FLOATING MINIMIZABLE VIDEO PANEL */}
@@ -897,7 +925,7 @@ export default function TechDiscussionRoomPage() {
             )}
           </div>
         </LiveKitErrorBoundary>
-      </div>
+      </LiveKitRoom>
     </div>
   );
 }

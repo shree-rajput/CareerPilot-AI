@@ -108,10 +108,12 @@ export function InterviewSessionPage() {
   // Mount / Unmount
   // ────────────────────────────────────────────────────────
   useEffect(() => {
+    console.log(`[INTERVIEW_FLOW] COMPONENT_MOUNT session=${sessionId}`);
     initCamera();
     // Session timer
     sessionTimerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
     return () => {
+      console.log(`[INTERVIEW_FLOW] COMPONENT_UNMOUNT session=${sessionId}`);
       clearInterval(timerRef.current);
       clearInterval(sessionTimerRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
@@ -125,8 +127,12 @@ export function InterviewSessionPage() {
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
       try {
+        console.log(`[INTERVIEW_FLOW] SESSION_FETCH_START sessionId=${sessionId}`);
         const currentState = await interviewApi.getCurrentState(sessionId);
+        console.log(`[INTERVIEW_FLOW] SESSION_FETCH_END currentState=`, currentState);
         if (mounted && currentState) {
+          console.log(`[INTERVIEW_FLOW] MODE=RESTORE`);
+          console.log(`[INTERVIEW_FLOW] RESTORE_START`);
           const actualEntity = currentState;
           setCurrentEntity(actualEntity);
           setOpeningGreeting(actualEntity.greeting || "");
@@ -150,7 +156,9 @@ export function InterviewSessionPage() {
             setInterviewPhase("questioning");
           }
           setFetchStatus("ready");
+          console.log(`[INTERVIEW_FLOW] RESTORE_END`);
         } else if (mounted) {
+          console.log(`[INTERVIEW_FLOW] MODE=NEW`);
           // No current state exists, fetch next question
           isFetchingRef.current = false;
           await fetchNextQuestion({ forceFetch: true, mountedRef: { current: mounted } });
@@ -203,6 +211,7 @@ export function InterviewSessionPage() {
 
     const thisFetchId = ++fetchIdRef.current;
 
+    console.log(`[INTERVIEW_FLOW] PREPARE_START / fetchNextQuestion fetchId=${thisFetchId}`);
     setInterviewPhase(currentEntity ? "loading_next" : "loading_first");
     setFetchStatus("generating");
     setQuestionError(null);
@@ -218,6 +227,7 @@ export function InterviewSessionPage() {
       let attempts = 0;
       const maxAttempts = 18; // Poll for up to ~45 seconds
 
+      console.log(`[INTERVIEW_FLOW] AI_START fetchId=${thisFetchId}`);
       while (attempts < maxAttempts) {
         try {
           response = await interviewApi.getNextQuestion(sessionId);
@@ -241,6 +251,8 @@ export function InterviewSessionPage() {
 
       if (mountedRef && !mountedRef.current) return;
       if (fetchIdRef.current !== thisFetchId) return;
+
+      console.log(`[INTERVIEW_FLOW] AI_END response received`);
 
       if (!response || response?.message === "Interview completed") {
         navigate(`/interview/${sessionId}/report`);
@@ -286,6 +298,8 @@ export function InterviewSessionPage() {
           speakText(questionText);
         }
       }, 500);
+
+      console.log(`[INTERVIEW_FLOW] PREPARE_END`);
 
     } catch (err) {
       if (mountedRef && !mountedRef.current) return;
@@ -577,6 +591,7 @@ export function InterviewSessionPage() {
   // ────────────────────────────────────────────────────────
   // Main render
   // ────────────────────────────────────────────────────────
+  console.log(`[INTERVIEW_FLOW] INTERVIEW_RENDERED phase=${interviewPhase} hasEntity=${!!currentEntity}`);
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden">
 

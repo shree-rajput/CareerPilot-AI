@@ -9,7 +9,7 @@ const stringArray = z.preprocess((val) => {
 
 const codeObject = z.preprocess((val) => {
   if (typeof val === "string") {
-    return { javascript: val, python: val, java: val, cpp: val };
+    return { javascript: val, python: "", java: "", cpp: "" };
   }
   if (val && typeof val === "object") {
     return val;

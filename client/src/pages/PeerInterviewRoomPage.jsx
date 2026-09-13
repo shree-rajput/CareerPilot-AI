@@ -368,16 +368,7 @@ function InterviewRoomLayout({
 export default function PeerInterviewRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { refreshActiveSession, clearRealtimeConnections } = useActiveSession();
-
-  // Explicit unmount cleanup to tear down realtime connections
-  useEffect(() => {
-    return () => {
-      if (clearRealtimeConnections) {
-        clearRealtimeConnections();
-      }
-    };
-  }, [clearRealtimeConnections]);
+  const { refreshActiveSession } = useActiveSession();
 
   const [hasJoinedLobby, setHasJoinedLobby] = useState(false);
   const [currentCode, setCurrentCode] = useState("");
