@@ -22,9 +22,13 @@ export async function joinTechDiscussionRoom(roomId) {
   return response.data;
 }
 
-export async function getLiveKitToken(roomId) {
+export async function getTechDiscussionLiveKitToken(roomId) {
   const response = await http.post(`/tech-discussion/${roomId}/livekit-token`);
-  return response.data;
+  const data = response.data;
+  if (!data?.token || !data?.livekitUrl) {
+    throw new Error("Discussion room media configuration is unavailable.");
+  }
+  return data;
 }
 
 export async function getAINudge(roomId, { currentCode, hintLevel, questionTitle, selectedSnippet }) {
@@ -91,6 +95,5 @@ export async function saveTechDiscussionDraft(roomId, { code, language, activeWo
   const response = await http.post(`/tech-discussion/${roomId}/draft`, { code, language, activeWorkspace });
   return response.data;
 }
-
 
 

@@ -1,6 +1,6 @@
 import { domainEvents, DOMAIN_EVENTS } from "./domainEvents.js";
 import { UserSkill } from "../../models/UserSkill.js";
-import { Notification } from "../../models/Notification.js";
+import { createNotification } from "../notification/notificationService.js";
 import { updateUserReadinessScore } from "../career/readinessService.js";
 
 /**
@@ -10,20 +10,33 @@ export function registerEventSubscribers() {
   // 1. Application Interview Scheduled
   domainEvents.on(DOMAIN_EVENTS.APPLICATION_INTERVIEW_SCHEDULED, async (payload) => {
     try {
-      const { userId, company, role } = payload;
+      const { userId, applicationId, company, role } = payload;
       if (!userId) return;
 
-      // Send In-App Notification
-      await Notification.create({
+      // Send In-App Notification via service (idempotency + socket emit)
+      // dedupeKey prevents double notification if controller already created one for this transition
+      await createNotification({
         userId,
+        type: "INTERVIEW",
+        priority: "HIGH",
         title: `Interview Scheduled: ${company}`,
         message: `Your interview for ${role || "Software Engineer"} at ${company} has been scheduled. Check your Preparation Plan to focus on required skills!`,
-        type: "INTERVIEW_REMINDER",
-        priority: "HIGH"
-      }).catch(err => console.warn("[EventSubscriber] Notification failed:", err.message));
+        source: {
+          entityType: "application",
+          entityId: applicationId?.toString() || "",
+          eventType: "INTERVIEW_SCHEDULED"
+        },
+        action: {
+          route: applicationId ? `/applications/${applicationId}` : "/preparation",
+          label: "View Preparation Plan"
+        },
+        // Deterministic: dedupeKey is the same as what the controller creates for interview transition,
+        // so only ONE notification is created regardless of which path fires first.
+        dedupeKey: `status-change:${applicationId}:oa:interview`
+      }).catch(err => console.warn("[EventSubscriber] Interview notification failed:", err.message));
 
       // Recalculate candidate readiness score
-      await updateUserReadinessScore(userId, `Interview scheduled at ${company}`).catch(() => {});
+      await updateUserReadinessScore(userId, `Interview scheduled at ${company}`).catch(() => { });
     } catch (err) {
       console.error("[EventSubscriber] Error handling APPLICATION_INTERVIEW_SCHEDULED:", err.message);
     }
@@ -32,7 +45,7 @@ export function registerEventSubscribers() {
   // 2. Interview Completed
   domainEvents.on(DOMAIN_EVENTS.INTERVIEW_COMPLETED, async (payload) => {
     try {
-      const { userId, overallScore, weakTopics = [] } = payload;
+      const { userId, sessionId, overallScore, weakTopics = [] } = payload;
       if (!userId) return;
 
       // Update UserSkill records for weak topics identified during interview
@@ -56,20 +69,30 @@ export function registerEventSubscribers() {
             }
           },
           { upsert: true }
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
-      // Notify candidate of report availability
-      await Notification.create({
+      // Notify candidate of report availability via service (idempotency + socket emit)
+      await createNotification({
         userId,
+        type: "INTERVIEW",
+        priority: "MEDIUM",
         title: `Interview Report Ready`,
         message: `Your mock interview evaluation is complete. Overall Score: ${overallScore || 0}/100.`,
-        type: "INTERVIEW_REMINDER",
-        priority: "MEDIUM"
-      }).catch(() => {});
+        source: {
+          entityType: "interview_session",
+          entityId: sessionId?.toString() || "",
+          eventType: "INTERVIEW_COMPLETED"
+        },
+        action: {
+          route: sessionId ? `/interview/${sessionId}/report` : "/interview-history",
+          label: "View Report"
+        },
+        dedupeKey: `interview-completed:${sessionId || userId}`
+      }).catch(() => { });
 
       // Recalculate readiness score
-      await updateUserReadinessScore(userId, "Mock interview completed").catch(() => {});
+      await updateUserReadinessScore(userId, "Mock interview completed").catch(() => { });
     } catch (err) {
       console.error("[EventSubscriber] Error handling INTERVIEW_COMPLETED:", err.message);
     }
@@ -104,10 +127,10 @@ export function registerEventSubscribers() {
             }
           },
           { upsert: true }
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
-      await updateUserReadinessScore(userId, `New project added: ${name}`).catch(() => {});
+      await updateUserReadinessScore(userId, `New project added: ${name}`).catch(() => { });
     } catch (err) {
       console.error("[EventSubscriber] Error handling PROJECT_CREATED:", err.message);
     }
@@ -115,3 +138,5 @@ export function registerEventSubscribers() {
 
   console.log("[DomainEvents] Global event subscribers registered successfully.");
 }
+
+

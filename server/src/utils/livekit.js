@@ -1,6 +1,9 @@
 import { AccessToken } from "livekit-server-sdk";
 
 export async function createLiveKitToken({ identity, roomName, name }) {
+  if (!process.env.LIVEKIT_URL) {
+    throw new Error("LIVEKIT_URL is not configured");
+  }
   if (!process.env.LIVEKIT_API_KEY) {
     throw new Error("LIVEKIT_API_KEY is not configured");
   }

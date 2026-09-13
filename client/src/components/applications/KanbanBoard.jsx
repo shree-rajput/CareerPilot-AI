@@ -14,7 +14,7 @@ const STATUSES = [
   { id: "rejected", label: "Rejected", headerBg: "bg-rose-50/80 text-rose-700 border-rose-200" }
 ];
 
-export function KanbanBoard({ applications, onStatusChange, loading }) {
+export function KanbanBoard({ applications, onStatusChange, loading, pendingIds = [] }) {
   const navigate = useNavigate();
 
   const handleDragStart = (e, appId) => {
@@ -86,14 +86,19 @@ export function KanbanBoard({ applications, onStatusChange, loading }) {
               ) : (
                 columnApps.map(app => {
                   const score = app.matchResultId?.overallScore;
+                  const isPending = pendingIds.includes(app._id);
 
                   return (
                     <div
                       key={app._id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, app._id)}
-                      onClick={() => navigate(`/applications/${app._id}`)}
-                      className="bg-surface border border-border p-3 rounded-lg shadow-2xs cursor-grab active:cursor-grabbing hover:border-primary-border transition-all group"
+                      draggable={!isPending}
+                      onDragStart={(e) => {
+                        if (!isPending) handleDragStart(e, app._id);
+                      }}
+                      onClick={() => !isPending && navigate(`/applications/${app._id}`)}
+                      className={`bg-surface border border-border p-3 rounded-lg shadow-2xs transition-all group ${
+                        isPending ? "opacity-50 cursor-not-allowed" : "cursor-grab active:cursor-grabbing hover:border-primary-border"
+                      }`}
                     >
                       <h4 className="font-bold text-text text-xs m-0 group-hover:text-primary transition-colors truncate">
                         {app.role}

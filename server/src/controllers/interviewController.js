@@ -143,6 +143,9 @@ export async function createSession(req, res, next) {
       { $set: { status: "completed", interviewState: "COMPLETED", completedAt: new Date() } }
     );
 
+    const correlationId = crypto.randomUUID().slice(0, 8);
+    console.log(`[AI_INTERVIEW][reqId=${correlationId}] START (Create Session)`);
+
     // Check if user already has an active session
     const existingActiveSession = await InterviewSession.findOne({
       userId: req.user._id,
@@ -174,7 +177,10 @@ export async function createSession(req, res, next) {
     let resumeData = null;
     if (!extractedResumeText && applicationId) {
       const app = await Application.findOne({ _id: applicationId, userId: req.user._id });
-      if (app && app.resumeVersionId) {
+      if (!app) {
+        throw new AppError("Application not found.", 404, "APPLICATION_NOT_FOUND");
+      }
+      if (app.resumeVersionId) {
         const resume = await Resume.findOne({ _id: app.resumeVersionId, userId: req.user._id });
         if (resume) {
           extractedResumeText = resume.rawText;
@@ -203,7 +209,9 @@ export async function createSession(req, res, next) {
 
     if (extractedResumeText || jobDescription) {
       try {
+        console.log(`[AI_INTERVIEW][reqId=${correlationId}] CONTEXT BUILD START (extractCandidateContext)`);
         candidateContext = await extractCandidateContext({ resumeText: extractedResumeText, jobDescription, targetRole: finalTargetRole });
+        console.log(`[AI_INTERVIEW][reqId=${correlationId}] CONTEXT BUILD END`);
       } catch (err) {
         console.error("Failed to extract candidate context", err);
       }
@@ -292,11 +300,13 @@ export async function createSession(req, res, next) {
     });
 
     await session.save();
+    console.log(`[AI_INTERVIEW][reqId=${correlationId}] SESSION CREATE END (ID: ${session._id})`);
 
     res.status(201).json({
       success: true,
       data: session
     });
+    console.log(`[AI_INTERVIEW][reqId=${correlationId}] RESPONSE SENT (Create Session)`);
   } catch (error) {
     next(error);
   }
@@ -314,6 +324,7 @@ export async function createSession(req, res, next) {
 export async function getNextQuestion(req, res, next) {
   try {
     const { sessionId } = req.params;
+    console.log(`[AI_INTERVIEW][sessionId=${sessionId}] START (getNextQuestion)`);
 
     const session = await InterviewSession.findOne({ _id: sessionId, userId: req.user._id });
     if (!session) throw new AppError("Session not found", 404);
@@ -598,6 +609,7 @@ export async function getNextQuestion(req, res, next) {
             };
           }
 
+          console.log(`[AI_INTERVIEW][sessionId=${sessionId}] ADAPTIVE ACTION START`);
           const adaptiveRes = limitCheck.allowed && lastQ
             ? await adaptiveNextAction({
                 targetRole: session.targetRole,
@@ -615,6 +627,7 @@ export async function getNextQuestion(req, res, next) {
                 nextQuestionText: buildFallbackInterviewQuestion(questionContext).questionText,
                 expectedConcepts: []
               };
+          console.log(`[AI_INTERVIEW][sessionId=${sessionId}] ADAPTIVE ACTION END`);
 
           aiQuestion = {
             questionText: adaptiveRes.nextQuestionText,
@@ -624,9 +637,11 @@ export async function getNextQuestion(req, res, next) {
             generationSource: "ai"
           };
         } else {
+          console.log(`[AI_INTERVIEW][sessionId=${sessionId}] GENERATE QUESTION START`);
           aiQuestion = limitCheck.allowed
             ? await generateInterviewQuestion(questionContext)
             : buildFallbackInterviewQuestion(questionContext, "Limit reached");
+          console.log(`[AI_INTERVIEW][sessionId=${sessionId}] GENERATE QUESTION END`);
         }
 
         let novelty = { isNovel: true, maxSimilarity: 0 };
@@ -635,6 +650,7 @@ export async function getNextQuestion(req, res, next) {
         if (aiQuestion && aiQuestion.questionText) {
           console.log(`[Interview] AI generated: "${aiQuestion.questionText}"`);
           novelty = isNovelQuestion(aiQuestion.questionText, previousQuestionTexts);
+          console.log(`[AI_INTERVIEW][sessionId=${sessionId}] CUSTOM VALIDATION START`);
           validation = validateGeneratedQuestion({
             questionText: aiQuestion.questionText,
             candidateContext: session.candidateContext || {},
@@ -644,6 +660,7 @@ export async function getNextQuestion(req, res, next) {
             interviewType: session.interviewType,
             candidateExperience: session.candidateExperience || "fresher"
           });
+          console.log(`[AI_INTERVIEW][sessionId=${sessionId}] CUSTOM VALIDATION END`);
         } else {
           console.log(`[Interview] AI generation failed or returned empty question:`, aiQuestion);
           validation = { isValid: false, reason: "Empty or null question generated" };
@@ -750,6 +767,8 @@ export async function getNextQuestion(req, res, next) {
     } catch (err) {
       await InterviewQuestion.deleteOne({ _id: stub._id });
       throw err;
+    } finally {
+      console.log(`[AI_INTERVIEW][sessionId=${sessionId}] RESPONSE SENT (getNextQuestion)`);
     }
   } catch (error) {
     next(error);

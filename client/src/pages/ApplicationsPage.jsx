@@ -44,6 +44,9 @@ export function ApplicationsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [sort, setSort] = useState("createdAt");
   const [viewMode, setViewMode] = useState("board");
+  
+  // Guard against concurrent drags/drops
+  const [pendingIds, setPendingIds] = useState([]);
 
   // Selection state for Bulk Actions
   const [selectedIds, setSelectedIds] = useState([]);
@@ -78,15 +81,30 @@ export function ApplicationsPage() {
   }
 
   async function handleStatusChange(appId, newStatus) {
+    if (pendingIds.includes(appId)) return;
+    setPendingIds((prev) => [...prev, appId]);
+    
+    // Remember previous status for rollback
+    const app = apps.find(a => a._id === appId);
+    const previousStatus = app ? app.status : null;
+    
     try {
       setApps((prev) =>
         prev.map((app) => (app._id === appId ? { ...app, status: newStatus } : app))
       );
-      await applicationsApi.update(appId, { status: newStatus });
+      await applicationsApi.updateStatus(appId, newStatus);
       toast.success("Application status updated!");
     } catch (err) {
-      toast.error("Failed to update status.");
-      loadApps();
+      // Rollback optimistic update
+      if (previousStatus) {
+        setApps((prev) =>
+          prev.map((app) => (app._id === appId ? { ...app, status: previousStatus } : app))
+        );
+      }
+      const reason = err?.response?.data?.message || err?.message || "Failed to update status.";
+      toast.error(reason);
+    } finally {
+      setPendingIds((prev) => prev.filter(id => id !== appId));
     }
   }
 
@@ -393,7 +411,7 @@ export function ApplicationsPage() {
           <Spinner size="md" />
         </div>
       ) : viewMode === "board" ? (
-        <KanbanBoard applications={apps} onStatusChange={handleStatusChange} loading={loading} />
+        <KanbanBoard applications={apps} onStatusChange={handleStatusChange} loading={loading} pendingIds={pendingIds} />
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">

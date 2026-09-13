@@ -61,7 +61,13 @@ export async function createRoomController(req, res) {
     return res.status(201).json({ success: true, data: result });
   } catch (error) {
     console.error("createRoomController error:", error);
-    return res.status(500).json({ success: false, code: "ROOM_CREATION_FAILED", message: error.message || "Failed to create discussion room" });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code || "ROOM_CREATION_FAILED",
+      message: error.statusCode && error.statusCode < 500
+        ? error.message
+        : "Unable to create discussion room. Please try again.",
+    });
   }
 }
 
@@ -285,5 +291,4 @@ export async function saveDraftController(req, res) {
     return res.status(500).json({ success: false, message: "Failed to save code draft" });
   }
 }
-
 

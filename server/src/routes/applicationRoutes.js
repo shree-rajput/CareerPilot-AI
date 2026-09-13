@@ -44,6 +44,7 @@ applicationRouter.get("/:id/readiness", getApplicationReadiness);
 applicationRouter.get("/:id", getApplication);
 applicationRouter.patch("/:id", updateApplication);
 applicationRouter.post("/:id/status", updateApplicationStatus);
+applicationRouter.patch("/:id/status", updateApplicationStatus);
 applicationRouter.delete("/:id", deleteApplication);
 
 // AI generation endpoints

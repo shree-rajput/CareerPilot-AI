@@ -22,7 +22,7 @@ export const STATUS_VALUES = [
 const statusHistorySchema = new mongoose.Schema(
   {
     fromStatus: { type: String, default: "" },
-    toStatus: { type: String, required: true },
+    toStatus: { type: String, enum: STATUS_VALUES, required: true },
     changedBy: {
       type: String,
       enum: [
@@ -43,6 +43,8 @@ const statusHistorySchema = new mongoose.Schema(
     confidence: { type: String, enum: ["high", "medium", "low"], default: "high" },
     evidence: { type: String, default: "" },
     note: { type: String, trim: true, default: "" },
+    // `changedAt` is canonical; `timestamp` remains for legacy client reads.
+    changedAt: { type: Date, required: true, default: Date.now },
     timestamp: { type: Date, default: Date.now },
   },
   { _id: true }
@@ -142,6 +144,10 @@ const applicationSchema = new mongoose.Schema(
       type: [statusHistorySchema],
       default: [],
     },
+    statusHistoryManualReview: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
     pendingStatusSuggestions: {
       type: [pendingSuggestionSchema],
       default: [],
@@ -211,5 +217,17 @@ const applicationSchema = new mongoose.Schema(
 
 applicationSchema.index({ userId: 1, createdAt: -1 });
 applicationSchema.index({ userId: 1, status: 1 });
+
+applicationSchema.pre("save", function(next) {
+  if (this.statusHistory && this.statusHistory.length > 0) {
+    this.statusHistory.forEach(item => {
+      // Repair legacy entries missing toStatus
+      if (!item.toStatus && item.status) {
+        item.toStatus = item.status;
+      }
+    });
+  }
+  next();
+});
 
 export const Application = mongoose.model("Application", applicationSchema);

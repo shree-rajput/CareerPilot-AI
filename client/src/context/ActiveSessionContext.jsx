@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "./useAuth";
 import { getLiveKitToken } from "../api/peerInterview";
+import { getTechDiscussionLiveKitToken } from "../api/techDiscussion";
 import { io } from "socket.io-client";
 import { LiveKitRoom } from "@livekit/components-react";
 
@@ -17,6 +18,7 @@ export function ActiveSessionProvider({ children }) {
 
   // Realtime Global State
   const [liveKitToken, setLiveKitToken] = useState(null);
+  const [liveKitServerUrl, setLiveKitServerUrl] = useState(null);
   const [socket, setSocket] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [peerPresence, setPeerPresence] = useState([]);
@@ -24,6 +26,7 @@ export function ActiveSessionProvider({ children }) {
 
   const clearRealtimeConnections = useCallback(() => {
     setLiveKitToken(null);
+    setLiveKitServerUrl(null);
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
@@ -53,8 +56,11 @@ export function ActiveSessionProvider({ children }) {
           // 1. LiveKit Token
           if (!liveKitToken) {
             try {
-               const lkData = await getLiveKitToken(data.session.roomId);
+               const lkData = data.session.type === "tech_discussion"
+                 ? await getTechDiscussionLiveKitToken(data.session.roomId)
+                 : await getLiveKitToken(data.session.roomId);
                setLiveKitToken(lkData.token);
+               setLiveKitServerUrl(lkData.livekitUrl);
             } catch (err) {
                console.warn("LiveKit global token fetch failed:", err);
             }
@@ -128,6 +134,7 @@ export function ActiveSessionProvider({ children }) {
     connectionStatus,
     peerPresence,
     liveKitToken,
+    liveKitServerUrl,
     clearRealtimeConnections
   };
 
@@ -137,10 +144,10 @@ export function ActiveSessionProvider({ children }) {
     </ActiveSessionContext.Provider>
   );
 
-  return liveKitToken ? (
+  return liveKitToken && liveKitServerUrl ? (
     <LiveKitRoom
       token={liveKitToken}
-      serverUrl={import.meta.env.VITE_LIVEKIT_URL}
+      serverUrl={liveKitServerUrl}
       connect={true}
       className="flex flex-col h-full w-full"
     >

@@ -22,6 +22,8 @@ import {
   resetPasswordSchema
 } from "../validators/authValidators.js";
 
+import { authLimiter } from "../middleware/rateLimiter.js";
+
 export const authRouter = Router();
 
 authRouter.post("/signup", validate(signupSchema), signup);
@@ -31,9 +33,9 @@ authRouter.get("/me", requireAuth, getMe);
 
 // Verification & Password Recovery Endpoints
 authRouter.post("/verify-email", validate(verifyEmailSchema), verifyEmail);
-authRouter.post("/resend-verification", validate(resendVerificationSchema), resendVerification);
-authRouter.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
-authRouter.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+authRouter.post("/resend-verification", authLimiter, validate(resendVerificationSchema), resendVerification);
+authRouter.post("/forgot-password", authLimiter, validate(forgotPasswordSchema), forgotPassword);
+authRouter.post("/reset-password", authLimiter, validate(resetPasswordSchema), resetPassword);
 
 // Extension Authorization Flow (No manual JWT copying required)
 authRouter.post("/extension-code", requireAuth, generateExtensionCode);

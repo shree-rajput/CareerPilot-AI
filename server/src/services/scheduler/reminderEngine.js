@@ -55,8 +55,10 @@ export async function evaluateAndScheduleReminders(userId) {
 
   let createdCount = 0;
   let deliveredCount = 0;
+  let failedCount = 0;
 
   for (const app of applications) {
+    try {
     const lastActivity = app.lastActivityAt ? new Date(app.lastActivityAt) : new Date(app.updatedAt);
     const company = app.company || "Company";
     const role = app.role || "Role";
@@ -208,27 +210,55 @@ export async function evaluateAndScheduleReminders(userId) {
             label: cand.actionLabel,
           },
           dedupeKey: `REMINDER:${reminderId}`,
-        }).catch(() => null);
+        }).catch((error) => {
+          console.error("[ReminderEngine] Notification creation failed", {
+            applicationId: app._id.toString(),
+            userId: appUserId.toString(),
+            reminderType: cand.type,
+            error: error.message,
+          });
+          return null;
+        });
 
         record.status = "delivered";
         record.deliveredAt = new Date();
         if (notif?._id) record.notificationId = notif._id;
         await record.save();
 
-        app.nextActionAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-        app.reminderState = cand.type.toLowerCase().includes("follow")
+        const reminderState = cand.type.toLowerCase().includes("follow")
           ? "follow_up_pending"
           : cand.type.toLowerCase().includes("oa")
           ? "oa_reminded"
           : "interview_reminded";
-        await app.save();
+        // Reminder delivery does not change lifecycle state. Avoid `app.save()`
+        // so a legacy malformed history record cannot block other reminders.
+        await Application.updateOne(
+          { _id: app._id },
+          {
+            $set: {
+              nextActionAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+              reminderState,
+            },
+          },
+        );
 
         deliveredCount++;
       }
     }
+    } catch (error) {
+      failedCount++;
+      console.error("[ReminderEngine] Application reminder processing failed", {
+        applicationId: app._id.toString(),
+        userId: app.userId?.toString(),
+        operation: "evaluateAndScheduleReminders",
+        errorName: error.name,
+        error: error.message,
+        ...(process.env.NODE_ENV === "development" ? { stack: error.stack } : {}),
+      });
+    }
   }
 
-  return { checked: applications.length, createdCount, deliveredCount };
+  return { checked: applications.length, createdCount, deliveredCount, failedCount };
 }
 
 export const runSmartApplicationReminders = evaluateAndScheduleReminders;

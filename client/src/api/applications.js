@@ -33,6 +33,11 @@ export const applicationsApi = {
     return data;
   },
 
+  updateStatus: async (id, status) => {
+    const { data } = await http.patch(`/applications/${id}/status`, { targetStatus: status });
+    return data;
+  },
+
   delete: async (id) => {
     const { data } = await http.delete(`/applications/${id}`);
     return data;

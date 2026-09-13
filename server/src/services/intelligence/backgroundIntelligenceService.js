@@ -17,101 +17,33 @@ import { Project } from "../../models/Project.js";
  */
 export async function queueApplicationIntelligence(applicationId, resumeId = null) {
   try {
-    // 1. Mark as processing
-    await Application.findByIdAndUpdate(applicationId, {
-      extractionStatus: "PROCESSING",
-      extractionError: null
-    });
-
-    const application = await Application.findById(applicationId).lean();
+    const application = await Application.findById(applicationId);
     if (!application) return;
 
-    let extractedJd = application.extractedJd;
+    // The intelligence extraction is now handled by the Canonical Job ingestion pipeline.
+    // We just mark the Application as completed.
+    application.extractionStatus = "COMPLETED";
+    application.extractionError = null;
+    await application.save();
 
-    // 2. Extract JD if not already extracted
-    if (!extractedJd && application.jobDescription) {
+    // Run Match Pipeline if Resume is provided
+    if (resumeId && application.jobId) {
       try {
-        extractedJd = await extractJobDescription(application.jobDescription);
-        if (!extractedJd || !extractedJd.requiredSkills) {
-           throw new Error("AI extraction returned malformed data.");
+        const { matchJobToProfile } = await import("../career/jobService.js");
+        await matchJobToProfile(application.jobId, application.userId);
+        
+        const matchResult = await MatchResult.findOne({ 
+          jobId: application.jobId, 
+          userId: application.userId 
+        }).sort({ createdAt: -1 });
+        
+        if (matchResult) {
+          application.matchResultId = matchResult._id;
+          application.resumeVersionId = resumeId;
+          await application.save();
         }
-      } catch (err) {
-        console.error(`[IntelligencePipeline] Extraction failed for App ${applicationId}:`, err);
-        await Application.findByIdAndUpdate(applicationId, {
-          extractionStatus: "FAILED",
-          extractionError: "Job analysis couldn't be completed. " + (err.message || "")
-        });
-        return;
-      }
-    }
-
-    // 3. Mark extraction as completed
-    await Application.findByIdAndUpdate(applicationId, {
-      extractedJd,
-      extractionStatus: "COMPLETED",
-      extractionError: null
-    });
-
-    // 4. Run Match Pipeline if Resume is provided
-    if (resumeId && extractedJd) {
-      try {
-        const resume = await Resume.findById(resumeId).lean();
-        if (!resume || !resume.structuredData) return;
-
-        const [user, userSkills, projects] = await Promise.all([
-          User.findById(application.userId).lean(),
-          UserSkill.find({ userId: application.userId }).lean(),
-          Project.find({ userId: application.userId }).lean(),
-        ]);
-
-        const candidateContext = {
-          user,
-          userSkills,
-          projects,
-          careerProfile: {
-            targetRoles: user?.targetRoles || [],
-            experienceLevel: user?.experienceLevel || "student"
-          }
-        };
-
-        const pipelineResult = await runMatchPipeline(
-          resume.structuredData,
-          extractedJd,
-          candidateContext
-        );
-
-        const resumeHash = hashText(JSON.stringify(resume.structuredData));
-        const jdHash = hashText(JSON.stringify(extractedJd));
-
-        const matchResult = await MatchResult.create({
-          userId: application.userId,
-          applicationId,
-          resumeId,
-          resumeHash,
-          jdHash,
-          matchingEngineVersion: MATCHING_ENGINE_VERSION,
-          overallScore: pipelineResult.overallScore,
-          categoryScores: pipelineResult.categoryScores,
-          fitBreakdown: pipelineResult.fitBreakdown,
-          matchedSkills: pipelineResult.matchedSkills,
-          partialSkills: pipelineResult.partialSkills,
-          missingSkills: pipelineResult.missingSkills,
-          criticalGaps: pipelineResult.criticalGaps || [],
-          importantGaps: pipelineResult.importantGaps || [],
-          niceToHaveGaps: pipelineResult.niceToHaveGaps || [],
-          actionPlan: pipelineResult.actionPlan || [],
-          evidence: pipelineResult.evidence,
-          explanation: "Analysis complete.", // Defer heavy explanation generation to UI load if needed
-        });
-
-        await Application.findByIdAndUpdate(applicationId, {
-          matchResultId: matchResult._id,
-          resumeVersionId: resumeId,
-        });
-
       } catch (matchErr) {
         console.error(`[IntelligencePipeline] Matching failed for App ${applicationId}:`, matchErr);
-        // Do not fail the JD extraction status if only matching failed.
       }
     }
 

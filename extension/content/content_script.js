@@ -418,7 +418,7 @@
               }
             },
             onAddUntracked: (data) => {
-              console.debug("[CareerPilot] Application created from untracked email:", data);
+              console.log("[CareerPilot] Application created from untracked email:", data?.application?.company || data?.application?.role || data);
             }
           });
         }

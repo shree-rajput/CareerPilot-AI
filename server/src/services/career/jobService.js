@@ -190,6 +190,8 @@ export async function deactivateJob(jobId, userId) {
  * Returns { saved: boolean, savedCount: number }
  */
 export async function toggleSaveJob(jobId, userId) {
+  const { Application } = await import("../../models/Application.js");
+  const { createInitialStatusHistory } = await import("./statusTransitionEngine.js");
   const job = await Job.findById(jobId);
   if (!job) throw new Error("Job not found.");
 
@@ -198,8 +200,34 @@ export async function toggleSaveJob(jobId, userId) {
 
   if (alreadySaved) {
     job.savedBy = job.savedBy.filter(id => String(id) !== userIdStr);
+    // If the application is merely "saved", remove it from the board.
+    await Application.findOneAndDelete({ 
+      userId, 
+      jobId, 
+      status: { $in: ["saved", "discovered", "draft"] } 
+    });
   } else {
     job.savedBy.push(userId);
+    // Ensure an Application exists for the Job Board
+    const existingApp = await Application.findOne({ userId, jobId });
+    if (!existingApp) {
+      await Application.create({
+        userId,
+        jobId,
+        company: job.company,
+        role: job.title,
+        jobDescription: job.description,
+        jobUrl: job.url || job.canonicalUrl || "",
+        location: job.location || "",
+        status: "saved",
+        source: "job_board_save",
+        statusHistory: [createInitialStatusHistory("saved", {
+          changedBy: "manual",
+          source: "job_board_save",
+          note: "User saved job from inbox/search",
+        })]
+      });
+    }
   }
 
   await job.save();

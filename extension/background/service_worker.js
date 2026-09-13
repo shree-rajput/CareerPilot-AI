@@ -535,6 +535,22 @@ async function triggerRecruitmentNotification({ id, title, message, deepLink, pr
   }
 }
 
+// Handle notification clicks to open deep-link navigation in tab
+chrome.notifications?.onClicked?.addListener(async (notificationId) => {
+  try {
+    const linkKey = `notif-link-${notificationId}`;
+    const stored = await chrome.storage.local.get(linkKey);
+    const targetUrl = stored[linkKey];
+    const { appUrl } = await getApiConfig();
+    const finalUrl = targetUrl || appUrl || DEFAULT_APP_URL;
+
+    chrome.tabs.create({ url: finalUrl });
+    chrome.notifications.clear(notificationId);
+  } catch (err) {
+    console.warn("[CareerPilot] Notification click handler error:", err);
+  }
+});
+
 // -----------------------------------------------------------------------------
 // Job Analysis & API Request Deduplication
 // -----------------------------------------------------------------------------
@@ -696,4 +712,20 @@ chrome.alarms?.onAlarm?.addListener((alarm) => {
     checkDueReminders();
   }
 });
+
+chrome.notifications?.onClicked?.addListener(async (notificationId) => {
+  try {
+    const linkKey = `notif-link-${notificationId}`;
+    const stored = await chrome.storage.local.get(linkKey);
+    const deepLink = stored[linkKey];
+    if (deepLink) {
+      chrome.tabs.create({ url: deepLink });
+      chrome.notifications.clear(notificationId);
+      await chrome.storage.local.remove(linkKey);
+    }
+  } catch (err) {
+    console.warn("[CareerPilot Service Worker] Notification click handler error:", err);
+  }
+});
+
 

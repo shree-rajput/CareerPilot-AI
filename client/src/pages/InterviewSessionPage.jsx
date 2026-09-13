@@ -163,19 +163,27 @@ export function InterviewSessionPage() {
           setInterviewPhase("error");
         }
       } finally {
-        if (mounted && setInterviewPhase !== "loading_first") {
-          isFetchingRef.current = false;
-        }
+        isFetchingRef.current = false;
       }
     }
-    loadFirst();
-    return () => { mounted = false; };
+    
+    // Auto-init camera and state CONCURRENTLY (Do not block loadFirst on camera permissions)
+    initCamera();
+    if (mounted) {
+      loadFirst();
+    }
+    
+    
+    return () => { 
+      mounted = false; 
+      isFetchingRef.current = false;
+    };
   }, []);
 
   // ────────────────────────────────────────────────────────
   // Camera
   // ────────────────────────────────────────────────────────
-  const initCamera = async () => {
+  const initCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       streamRef.current = stream;
@@ -184,7 +192,7 @@ export function InterviewSessionPage() {
       console.warn("Camera unavailable:", err);
       setIsVideoEnabled(false);
     }
-  };
+  }, []);
 
   // ────────────────────────────────────────────────────────
   // Fetch next question (with idempotency guard)
@@ -207,16 +215,27 @@ export function InterviewSessionPage() {
 
     try {
       let response;
-      try {
-        response = await interviewApi.getNextQuestion(sessionId);
-      } catch (firstErr) {
-        if (firstErr?.response?.status === 202) {
-          await new Promise(r => setTimeout(r, 2500));
-          if (mountedRef && !mountedRef.current) return;
-          if (fetchIdRef.current !== thisFetchId) return;
+      let attempts = 0;
+      const maxAttempts = 18; // Poll for up to ~45 seconds
+
+      while (attempts < maxAttempts) {
+        try {
           response = await interviewApi.getNextQuestion(sessionId);
-        } else {
-          throw firstErr;
+          break; // Success
+        } catch (err) {
+          if (err?.status === 202 || err?.response?.status === 202) {
+            attempts++;
+            if (attempts >= maxAttempts) {
+              const timeoutErr = new Error("AI generation is taking too long. Please try again.");
+              timeoutErr.code = "AI_TIMEOUT";
+              throw timeoutErr;
+            }
+            await new Promise(r => setTimeout(r, 2500));
+            if (mountedRef && !mountedRef.current) return;
+            if (fetchIdRef.current !== thisFetchId) return;
+          } else {
+            throw err;
+          }
         }
       }
 
@@ -272,15 +291,15 @@ export function InterviewSessionPage() {
       if (mountedRef && !mountedRef.current) return;
       if (fetchIdRef.current !== thisFetchId) return;
       console.error("[Interview] fetchNextQuestion error:", err);
-      setQuestionError(parseQuestionError(err));
+      setQuestionError(err?.code === "AI_TIMEOUT" ? err.message : parseQuestionError(err));
       setFetchStatus("error");
       setInterviewPhase("error");
     } finally {
-      if (!mountedRef || mountedRef.current) {
+      if (fetchIdRef.current === thisFetchId) {
         isFetchingRef.current = false;
       }
     }
-  }, [sessionId, navigate, currentEntity]);
+  }, [sessionId, navigate, currentEntity, currentLanguage]);
 
   // ────────────────────────────────────────────────────────
   // Recording toggle
@@ -540,11 +559,16 @@ export function InterviewSessionPage() {
       <div className="flex flex-col items-center justify-center h-screen bg-slate-950 px-4">
         <div className="max-w-md w-full bg-slate-900 border border-red-500/30 rounded-2xl p-8 text-center">
           <AlertTriangle className="text-red-400 mx-auto mb-4" size={48} />
-          <h3 className="text-xl font-bold text-white mb-3">Could not start interview</h3>
+          <h3 className="text-xl font-bold text-white mb-3">Unable to prepare your interview</h3>
           <p className="text-slate-400 mb-6">{questionError}</p>
-          <Button onClick={() => fetchNextQuestion({ forceFetch: true })} className="w-full">
-            Try Again
-          </Button>
+          <div className="flex gap-4 w-full">
+            <Button onClick={() => navigate(-1)} variant="secondary" className="flex-1">
+              Back
+            </Button>
+            <Button onClick={() => fetchNextQuestion({ forceFetch: true })} className="flex-1">
+              Retry
+            </Button>
+          </div>
         </div>
       </div>
     );

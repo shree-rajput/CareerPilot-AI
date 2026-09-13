@@ -11,6 +11,11 @@ export const interviewApi = {
   },
   getNextQuestion: async (sessionId) => {
     const res = await http.post(`/interview/${sessionId}/question`);
+    if (res.status === 202) {
+      const error = new Error("Question is being generated");
+      error.status = 202;
+      throw error;
+    }
     return res.data.data;
   },
   getCurrentState: async (sessionId) => {

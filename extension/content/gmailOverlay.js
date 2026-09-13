@@ -95,11 +95,30 @@
           <button id="cp-undo-btn" style="flex: 1; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Undo Update</button>
         </div>
       `;
-    } else if (response.status === "UNTRACKED_APPLICATION" || response.status === "NO_MATCHING_APPLICATION") {
+    } else if (
+      response.status === "UNTRACKED_APPLICATION" ||
+      response.status === "NO_MATCHING_APPLICATION" ||
+      response.status === "APPLICATION_RECOVERY"
+    ) {
+      if (response.isRecoverable === false) {
+        return;
+      }
+      const companyDisplay = classified?.detectedCompany || "Job Application";
+      const rawRole = classified?.detectedRole || "";
+      const isRoleUnknown = !rawRole || rawRole.toLowerCase() === "unknown";
+
+
       contentHtml = `
         ${headerMarkup}
-        <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 700; color: #f8fafc;">${classified?.detectedCompany || "Job Application"}</h4>
-        <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">${classified?.detectedRole || "Position"}</p>
+        <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 700; color: #f8fafc;">${companyDisplay}</h4>
+        ${
+          isRoleUnknown
+            ? `<div style="margin-bottom: 8px;">
+                 <label style="display: block; font-size: 11px; color: #fbbf24; margin-bottom: 4px;">Role title required:</label>
+                 <input id="cp-role-input" type="text" placeholder="e.g. Software Engineer" style="width: 100%; box-sizing: border-box; background: #1e293b; color: #f8fafc; border: 1px solid #3b82f6; border-radius: 6px; padding: 6px 8px; font-size: 12px; outline: none;" />
+               </div>`
+            : `<p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">${rawRole}</p>`
+        }
         
         <div style="background: ${style.bg}; color: ${style.text}; border: 1px solid ${style.border}; padding: 6px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 10px;">
           Discovered Stage: ${status.toUpperCase()}
@@ -110,6 +129,36 @@
         <div style="display: flex; gap: 8px;">
           <button id="cp-add-untracked-btn" style="flex: 1; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 11px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">Add to Workspace</button>
           <button id="cp-ignore-untracked-btn" style="flex: 1; background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Ignore</button>
+        </div>
+      `;
+    } else if (response.status === "AMBIGUOUS_MATCH") {
+      const candidates = response.matchingCandidates || response.matchResult?.matchingCandidates || [];
+      const companyDisplay = classified?.detectedCompany || "Company";
+
+      contentHtml = `
+        ${headerMarkup}
+        <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 700; color: #f8fafc;">Select Application</h4>
+        <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">Multiple matches found for ${companyDisplay}:</p>
+        
+        <div id="cp-ambiguous-list" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 140px; overflow-y: auto;">
+          ${candidates
+            .map(
+              (cand, idx) => `
+            <label style="display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 8px 10px; border-radius: 8px; cursor: pointer;">
+              <input type="radio" name="cp-ambiguous-choice" value="${cand._id}" ${idx === 0 ? "checked" : ""} />
+              <div style="font-size: 12px;">
+                <span style="font-weight: 600; color: #f8fafc;">${cand.role || "Role"}</span>
+                <span style="color: #38bdf8; font-size: 10px; margin-left: 6px; background: rgba(2,132,199,0.2); padding: 1px 5px; border-radius: 4px;">${(cand.status || "applied").toUpperCase()}</span>
+              </div>
+            </label>
+          `
+            )
+            .join("")}
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button id="cp-confirm-ambiguous-btn" style="flex: 1; background: linear-gradient(135deg, #0284c7, #2563eb); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 11px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">Update Selected</button>
+          <button id="cp-ignore-ambiguous-btn" style="flex: 1; background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 11px;">Dismiss</button>
         </div>
       `;
     } else if (response.status === "SUGGESTION_CREATED") {
@@ -157,10 +206,22 @@
       removeExistingOverlay();
     });
     document.getElementById("cp-add-untracked-btn")?.addEventListener("click", () => {
+      const roleInput = document.getElementById("cp-role-input");
+      const userEnteredRole = roleInput ? roleInput.value.trim() : "";
+      const finalRole = userEnteredRole || classified?.detectedRole || "Position";
+
+      if (!finalRole || finalRole.toLowerCase() === "unknown") {
+        if (roleInput) {
+          roleInput.style.borderColor = "#ef4444";
+          roleInput.focus();
+        }
+        return;
+      }
+
       const payload = {
         messageId: response.record?.messageId || response.classified?.messageId || "",
         company: classified?.detectedCompany || "Job Application",
-        role: classified?.detectedRole || "Position",
+        role: finalRole,
         detectedStatus: classified?.detectedStatus || "applied",
         eventType: classified?.eventType || "APPLICATION_RECEIVED",
         evidence: classified?.evidenceSnippet || "",
@@ -174,6 +235,26 @@
       removeExistingOverlay();
     });
     document.getElementById("cp-ignore-untracked-btn")?.addEventListener("click", removeExistingOverlay);
+
+    // Ambiguous match handlers
+    document.getElementById("cp-confirm-ambiguous-btn")?.addEventListener("click", () => {
+      const selectedRadio = document.querySelector('input[name="cp-ambiguous-choice"]:checked');
+      const selectedAppId = selectedRadio ? selectedRadio.value : null;
+
+      if (selectedAppId) {
+        chrome.runtime.sendMessage({
+          type: "UPDATE_APPLICATION_STATUS",
+          payload: {
+            applicationId: selectedAppId,
+            targetStatus: classified?.detectedStatus || "applied",
+            source: "gmail_ambiguous_user_selection",
+            evidence: classified?.evidenceSnippet || "User resolved ambiguous match in Gmail overlay",
+          },
+        });
+      }
+      removeExistingOverlay();
+    });
+    document.getElementById("cp-ignore-ambiguous-btn")?.addEventListener("click", removeExistingOverlay);
 
     // Auto dismiss after 20 seconds
     setTimeout(() => {

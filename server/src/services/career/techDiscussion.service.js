@@ -277,6 +277,13 @@ const userName = user?.name || "Participant 1";
     aiReason = rec.rationale;
   }
 
+  if (!problemData?.title) {
+    const error = new Error("No eligible technical discussion question is available for this configuration.");
+    error.statusCode = 422;
+    error.code = "NO_ELIGIBLE_QUESTION";
+    throw error;
+  }
+
   // Initial code state
   let initialCode = "";
   if (typeof problemData.starterCode === "object" && problemData.starterCode[resolvedLanguage]) {
@@ -912,5 +919,4 @@ export async function getUserTechDiscussionHistory({ userId, limit = 20, page = 
     totalPages: Math.ceil(total / limit)
   };
 }
-
 

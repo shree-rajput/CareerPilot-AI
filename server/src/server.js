@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 
 import { registerPeerInterviewSocket } from "./sockets/peerInterview.socket.js";
 import { registerMentorSessionSocketHandlers } from "./sockets/mentorSession.socket.js";
+import { registerNotificationSocket } from "./sockets/notification.socket.js";
 import { seedDefaultMentors } from "./scripts/seedMentors.js";
 import { initCronScheduler } from "./services/scheduler/cronScheduler.js";
 import { registerEventSubscribers } from "./services/events/eventSubscribers.js";
@@ -27,6 +28,8 @@ async function bootstrap() {
     },
   });
 
+  // Notification socket must be registered first — its auth middleware applies globally
+  registerNotificationSocket(io);
   registerPeerInterviewSocket(io);
   registerMentorSessionSocketHandlers(io);
 

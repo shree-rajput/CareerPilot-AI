@@ -67,15 +67,19 @@ export async function runAutoStaleCheck() {
       );
 
       if (!hasPendingStale) {
-        if (!app.pendingStatusSuggestions) app.pendingStatusSuggestions = [];
-        app.pendingStatusSuggestions.push({
+        const suggestion = {
           suggestedStatus: "stale",
           reason: "No activity or status update recorded for 21+ days",
           source: "auto_stale",
           status: "pending",
           createdAt: new Date()
-        });
-        await app.save();
+        };
+        // This is not a lifecycle transition; bypassing document save prevents a
+        // corrupt legacy history entry from breaking the complete daily scan.
+        await Application.updateOne(
+          { _id: app._id, "pendingStatusSuggestions": { $not: { $elemMatch: { source: "auto_stale", status: "pending" } } } },
+          { $push: { pendingStatusSuggestions: suggestion } },
+        );
         queuedCount++;
       }
     }

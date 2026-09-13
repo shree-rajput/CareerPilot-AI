@@ -18,6 +18,8 @@ import { useAuth } from "../context/useAuth";
 import { Button } from "./ui/Button";
 import { CopilotChat } from "./CopilotChat";
 import { GlobalSessionIndicator } from "./GlobalSessionIndicator";
+import { NotificationToast } from "./NotificationToast";
+import { useNotifications } from "../context/NotificationContext";
 
 import { NAVIGATION_CATEGORIES, FEATURES, FEATURE_STATUS } from "../config/features";
 import api from "../api/axios";
@@ -34,16 +36,9 @@ export function AppLayout() {
   const [paletteIndex, setPaletteIndex] = useState(0);
   const paletteInputRef = useRef(null);
 
-  // Notification Center State
+  // Notification Center State from Context
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 10000); // Poll notifications every 10s
-    return () => clearInterval(interval);
-  }, []);
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   // Keyboard shortcut listener for Ctrl+K
   useEffect(() => {
@@ -63,42 +58,16 @@ export function AppLayout() {
     }
   }, [commandPaletteOpen]);
 
-  const fetchNotifications = async () => {
-    try {
-      const res = await api.get("/notifications");
-      const data = res.data.data || res.data;
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
-    } catch (err) {
-      // Gracefully handle unauthenticated/unreachable notifications
-    }
-  };
-
   const handleNotificationClick = async (n) => {
-    try {
-      if (!n.read) {
-        await api.patch(`/notifications/${n._id || n.id}/read`);
-        setNotifications((prev) =>
-          prev.map((item) => ((item._id === n._id || item.id === n.id) ? { ...item, read: true } : item))
-        );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      }
-      if (n.actionUrl) {
-        navigate(n.actionUrl);
-        setNotificationsOpen(false);
-      }
-    } catch (err) {
-      console.error("Error marking notification read:", err);
+    if (!n.read && n._id) {
+      await markAsRead(n._id);
     }
-  };
-
-  const markAllNotificationsRead = async () => {
-    try {
-      await api.patch("/notifications/read-all");
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch (err) {
-      console.error("Failed to mark all notifications read:", err);
+    if (n.actionUrl) {
+      navigate(n.actionUrl);
+      setNotificationsOpen(false);
+    } else if (n.action?.route) {
+      navigate(n.action.route);
+      setNotificationsOpen(false);
     }
   };
 
@@ -271,7 +240,7 @@ export function AppLayout() {
                         <Bell size={14} className="text-primary" /> Notifications ({unreadCount})
                       </span>
                       <button
-                        onClick={markAllNotificationsRead}
+                        onClick={() => markAllAsRead()}
                         className="text-[10px] font-semibold text-primary hover:underline"
                       >
                         Mark all read
@@ -394,6 +363,9 @@ export function AppLayout() {
           </div>
         </div>
       )}
+      
+      {/* Toast Popup */}
+      <NotificationToast />
     </div>
   );
 }

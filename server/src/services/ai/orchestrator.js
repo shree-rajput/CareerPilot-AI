@@ -45,15 +45,22 @@ export async function executeAiTask(taskName, params) {
     };
 
     // 4. LLM Call with Retry
+    console.log(`[AI_INTERVIEW][task=${taskName}] GROQ REQUEST START`);
     parsedJson = await callWithRetry({
       systemPrompt: taskConfig.systemPrompt,
       userPrompt,
       modelRole: taskConfig.modelRole,
       jsonMode: taskConfig.jsonMode,
       maxTokens: taskConfig.maxTokens || 1024,
-      validateFn,
+      validateFn: (rawOutput) => {
+        console.log(`[AI_INTERVIEW][task=${taskName}] JSON PARSE START`);
+        const result = validateFn(rawOutput);
+        console.log(`[AI_INTERVIEW][task=${taskName}] JSON PARSE END`);
+        return result;
+      },
       featureName: taskConfig.featureName
     });
+    console.log(`[AI_INTERVIEW][task=${taskName}] GROQ REQUEST END`);
 
     const latencyMs = Date.now() - startTime;
     

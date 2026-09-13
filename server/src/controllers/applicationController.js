@@ -1,18 +1,15 @@
 import { z } from "zod";
-import { env } from "../config/env.js";
 import { Application, STATUS_VALUES } from "../models/Application.js";
 import { Resume } from "../models/Resume.js";
-import { extractJobDescription } from "../services/ai/aiService.js";
 import { getApplicationIntelligence } from "../services/career/careerIntelligenceService.js";
 import { executeAiTask } from "../services/ai/orchestrator.js";
 import { EmailEventRecord } from "../models/EmailEventRecord.js";
-import { Notification } from "../models/Notification.js";
+import { createNotification } from "../services/notification/notificationService.js";
 import { classifyEmailEvent } from "../services/career/emailClassificationService.js";
 import { matchEmailToApplication } from "../services/career/applicationMatchingService.js";
-import { validateAndApplyTransition, canTransitionStatus } from "../services/career/statusTransitionEngine.js";
+import { createInitialStatusHistory, transitionApplicationStatus, canTransitionStatus } from "../services/career/statusTransitionEngine.js";
 import { domainEvents, DOMAIN_EVENTS } from "../services/events/domainEvents.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { checkAiLimit, incrementAiUsage } from "../utils/aiUsage.js";
 import { AppError } from "../utils/errors.js";
 import { queueApplicationIntelligence } from "../services/intelligence/backgroundIntelligenceService.js";
 import { ingestJobOpportunity } from "../services/jobIngestionService.js";
@@ -54,62 +51,65 @@ export const createApplication = asyncHandler(async (req, res) => {
 
   const { company, role, jobDescription, jobUrl, location, notes } = parsed.data;
 
-  // Check AI limit for JD extraction
-  const { allowed, used, limit } = await checkAiLimit(
-    req.user._id,
-    "jd_analysis",
-    env.aiLimitJdAnalysis
-  );
-
-  if (!allowed) {
-    throw new AppError(
-      `Daily job description analysis limit reached (${used}/${limit}). Try again tomorrow.`,
-      429,
-      "AI_DAILY_LIMIT"
-    );
-  }
-
-  // Extract JD with AI (must succeed)
-  let extractedJd = null;
+  // 1. Ingest Canonical Job (Handles Deduplication & AI Extraction)
+  let jobResult;
   try {
-    extractedJd = await extractJobDescription(jobDescription);
-    await incrementAiUsage(req.user._id, "jd_analysis");
+    jobResult = await ingestJobOpportunity({
+      title: role,
+      company,
+      description: jobDescription,
+      url: jobUrl || "",
+      location: location || "",
+      source: "manual"
+    }, req.user._id);
   } catch (err) {
-    console.error("JD extraction AI error:", err.message);
-    throw new AppError(
-      `Job description extraction failed: ${err.message || "Unknown AI error"}. Please try again.`,
-      502,
-      "JD_EXTRACTION_FAILED"
-    );
+    throw new AppError(`Job ingestion failed: ${err.message}`, 500, "INGESTION_FAILED");
   }
 
-  const app = await Application.create({
+  const canonicalJob = jobResult.job;
+
+  // 2. Ensure NO duplicate application exists for this Job
+  let app = await Application.findOne({ userId: req.user._id, jobId: canonicalJob._id });
+  
+  if (app) {
+    return res.status(200).json({
+      message: "Application for this job already exists.",
+      application: app,
+      aiExtracted: true,
+      aiLimitWarning: null
+    });
+  }
+
+  // 3. Create Application strictly linked to Canonical Job
+  app = await Application.create({
     userId: req.user._id,
-    company,
-    role,
-    jobDescription,
-    extractedJd,
-    jobUrl: jobUrl || "",
-    location: location || "",
+    jobId: canonicalJob._id,
+    company: canonicalJob.company,
+    role: canonicalJob.title,
+    jobDescription: canonicalJob.description,
+    extractedJd: null, // AI intelligence lives on Canonical Job
+    jobUrl: canonicalJob.url || canonicalJob.canonicalUrl || "",
+    location: canonicalJob.location || "",
     notes: notes || "",
-    statusHistory: [{ 
-      fromStatus: "",
-      toStatus: "saved",
+    status: "saved",
+    statusHistory: [createInitialStatusHistory("saved", {
       changedBy: "manual",
       source: "user_manual_update",
-      confidence: "high",
       evidence: "User created application manually",
-      note: "Initial manual creation"
-    }]
+      note: "Initial manual creation",
+    })]
   });
+
+  // 4. Detached intelligence matching
+  Promise.resolve().then(() => {
+    queueApplicationIntelligence(app._id.toString());
+  }).catch(console.error);
 
   return res.status(201).json({
     message: "Application saved.",
     application: app,
-    aiExtracted: Boolean(extractedJd),
-    aiLimitWarning: !allowed
-      ? `JD analysis limit reached (${used}/${limit}). Requirements extraction skipped.`
-      : null
+    aiExtracted: true,
+    aiLimitWarning: null
   });
 });
 
@@ -139,12 +139,10 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     throw new AppError(parsed.error.errors[0]?.message || "Invalid capture request.", 400, "VALIDATION_ERROR");
   }
 
-  const { company, role, jobDescription, jobUrl, location, notes, status: targetStatus, confidence, contextType, detectionScore, evidence, source } = parsed.data;
+  const { company, role, jobDescription, jobUrl, location, notes, status: targetStatus, confidence, evidence, source } = parsed.data;
   const userId = req.user._id || req.user.id;
 
   // Generic Detection Backend Validation
-  const isManualAction = source === "extension_manual_action" || source === "manual_override";
-  
   // NOTE: We no longer reject captures based on LOW confidence or missing semantic keywords here.
   // The "CAPTURE FIRST, VALIDATE LATER" principle dictates that if the user explicitly clicked Save/Mark Applied,
   // we persist the application and perform intelligence analysis (matching, etc.) asynchronously.
@@ -197,7 +195,7 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     }
 
     // Apply validated status transition
-    const transitionResult = validateAndApplyTransition(existingApp, {
+    const transitionResult = transitionApplicationStatus(existingApp, {
       targetStatus,
       source: source || "extension_automation",
       confidence: confidence || "high",
@@ -244,17 +242,19 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
       metadata: { targetStatus, url: jobUrl }
     }).catch(() => {});
 
-    // Trigger notification if major milestone
+    // Trigger notification if major milestone — uses createNotification for idempotency + socket emit
     if (["applied", "interview", "screening", "oa", "offer"].includes(targetStatus)) {
-      await Notification.create({
+      await createNotification({
         userId,
         type: "APPLICATION_STATUS",
         title: `${existingApp.company} Application Updated`,
         message: `Extension synchronized application for ${existingApp.role} at ${existingApp.company} as ${targetStatus.toUpperCase()}.`,
+        source: { entityType: "application", entityId: existingApp._id.toString(), eventType: "STATUS_UPDATED" },
+        action: { route: `/applications/${existingApp._id}`, label: "View Application" },
         entityType: "application",
         entityId: existingApp._id.toString(),
         actionUrl: `/applications/${existingApp._id}`,
-        idempotencyKey: `ext-status-${existingApp._id}-${targetStatus}-${Date.now()}`
+        dedupeKey: `ext-status-${existingApp._id}-${existingApp.status}-${targetStatus}`
       }).catch(() => {});
     }
 
@@ -269,28 +269,54 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
   }
 
   // 3. Create new application record if no match exists
+  // First, ingest Canonical Job to guarantee ONE canonical representation
+  let canonicalJobId = null;
+  let finalCompany = company;
+  let finalRole = role;
+  let finalUrl = jobUrl;
+  let finalLocation = location;
+  let finalDescription = jobDescription;
+
+  try {
+    const jobResult = await ingestJobOpportunity({
+      title: role,
+      company,
+      description: jobDescription || "",
+      url: jobUrl || "",
+      location: location || "",
+      source: source || "extension"
+    }, userId);
+    
+    if (jobResult && jobResult.job) {
+      canonicalJobId = jobResult.job._id;
+      finalCompany = jobResult.job.company;
+      finalRole = jobResult.job.title;
+      finalUrl = jobResult.job.url || jobResult.job.canonicalUrl;
+      finalLocation = jobResult.job.location || "";
+      finalDescription = jobResult.job.description || "";
+    }
+  } catch (err) {
+    console.error("Failed to ingest job opportunity during capture, falling back to unlinked application:", err);
+  }
+
   const app = await Application.create({
     userId,
-    company,
-    role,
-    jobDescription: jobDescription || "",
+    jobId: canonicalJobId,
+    company: finalCompany,
+    role: finalRole,
+    jobDescription: finalDescription || "",
     extractedJd: null,
-    jobUrl: jobUrl || "",
-    location: location || "",
+    jobUrl: finalUrl || "",
+    location: finalLocation || "",
     notes: notes || "",
     status: targetStatus,
     source: source || "extension_capture",
-    statusHistory: [
-      {
-        fromStatus: "",
-        toStatus: targetStatus,
-        timestamp: new Date(),
-        source: source || "extension_capture",
-        confidence: confidence || "high",
-        evidence: evidence || "Captured via Chrome Extension",
-        note: `Initial capture at status '${targetStatus}'`
-      }
-    ]
+    statusHistory: [createInitialStatusHistory(targetStatus, {
+      source: source || "extension_capture",
+      confidence: confidence || "high",
+      evidence: evidence || "Captured via Chrome Extension",
+      note: `Initial capture at status '${targetStatus}'`,
+    })]
   });
 
   const eventTypeMap = {
@@ -312,34 +338,28 @@ export const captureExternalApplication = asyncHandler(async (req, res) => {
     source: source || "extension_auto_overlay",
     confidence: confidence === "high" ? 1.0 : confidence === "medium" ? 0.7 : 0.4,
     evidence: evidence || "Captured via Chrome Extension",
-    metadata: { targetStatus, url: jobUrl }
+    metadata: { targetStatus, url: finalUrl }
   }).catch(() => {});
 
   if (["applied", "interview", "screening", "oa", "offer"].includes(targetStatus)) {
-    await Notification.create({
+    await createNotification({
       userId,
       type: "APPLICATION_STATUS",
-      title: `New Application Tracked: ${company}`,
-      message: `Automatically captured application for ${role} at ${company} (${targetStatus.toUpperCase()}).`,
+      title: `New Application Tracked: ${finalCompany}`,
+      message: `Automatically captured application for ${finalRole} at ${finalCompany} (${targetStatus.toUpperCase()}).`,
+      source: { entityType: "application", entityId: app._id.toString(), eventType: "APPLICATION_CAPTURED" },
+      action: { route: `/applications/${app._id}`, label: "View Application" },
       entityType: "application",
       entityId: app._id.toString(),
       actionUrl: `/applications/${app._id}`,
-      idempotencyKey: `ext-create-${app._id}-${targetStatus}`
+      dedupeKey: `ext-create-${app._id}-${targetStatus}`
     }).catch(() => {});
   }
 
-  // Trigger AI Pipeline and Job Ingestion in background (Fire and Forget)
-  Promise.resolve().then(async () => {
+  // Trigger AI Pipeline in background (Fire and Forget)
+  Promise.resolve().then(() => {
     queueApplicationIntelligence(app._id.toString());
-    await ingestJobOpportunity({
-      title: role,
-      company,
-      description: jobDescription || "",
-      url: jobUrl || "",
-      location: location || "",
-      source: source || "extension"
-    }, userId).catch(err => console.error("Failed to ingest job opportunity during capture:", err));
-  }).catch(err => console.error("Failed to start background intelligence/ingestion pipeline:", err));
+  }).catch(err => console.error("Failed to start background intelligence pipeline:", err));
 
   return res.status(201).json({
     success: true,
@@ -457,7 +477,7 @@ export const updateApplication = asyncHandler(async (req, res) => {
 
   // If status changed, validate transition and append to history
   if (updates.status && updates.status !== app.status) {
-    const transitionResult = validateAndApplyTransition(app, {
+    const transitionResult = transitionApplicationStatus(app, {
       targetStatus: updates.status,
       source: updates.changedBy || updates.source || "user_manual_update",
       confidence: "high",
@@ -487,7 +507,7 @@ export const updateApplication = asyncHandler(async (req, res) => {
  */
 export const updateApplicationStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { targetStatus, source = "manual", evidence = "", note = "", idempotencyKey } = req.body || {};
+  const { targetStatus, source = "manual", evidence = "", note = "" } = req.body || {};
 
   if (!targetStatus || !STATUS_VALUES.includes(targetStatus)) {
     throw new AppError(`Invalid targetStatus '${targetStatus}'.`, 400, "VALIDATION_ERROR");
@@ -505,7 +525,7 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
     });
   }
 
-  const transitionResult = validateAndApplyTransition(app, {
+  const transitionResult = transitionApplicationStatus(app, {
     targetStatus,
     source: source || "user_manual_update",
     confidence: "high",
@@ -529,17 +549,33 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
     });
   }
 
-  // Create notification for major status updates
-  await Notification.create({
-    userId: req.user._id,
-    type: "APPLICATION_STATUS",
-    title: `${app.company} Application Updated`,
-    message: `Application for ${app.role} at ${app.company} marked as ${targetStatus.toUpperCase()}.`,
-    entityType: "application",
-    entityId: app._id.toString(),
-    actionUrl: `/applications/${app._id}`,
-    idempotencyKey: idempotencyKey || `status-update-${app._id}-${targetStatus}-${Date.now()}`,
-  }).catch(() => {});
+  // Create notification for status updates — deterministic dedupeKey prevents duplicates
+  // even if this request is retried or the event subscriber also fires.
+  // Key: uses previousStatus so the SAME transition (applied→interview) never creates 2 notifications.
+  const previousStatus = transitionResult.fromStatus;
+  if (previousStatus !== targetStatus) {
+    await createNotification({
+      userId: req.user._id,
+      type: "APPLICATION_STATUS",
+      priority: ["interview", "offer"].includes(targetStatus) ? "HIGH" : "MEDIUM",
+      title: `${app.company} — Application Updated`,
+      message: `Your ${app.role} application at ${app.company} moved from ${previousStatus.toUpperCase()} to ${targetStatus.toUpperCase()}.`,
+      source: {
+        entityType: "application",
+        entityId: app._id.toString(),
+        eventType: "STATUS_CHANGED"
+      },
+      action: {
+        route: `/applications/${app._id}`,
+        label: "View Application"
+      },
+      entityType: "application",
+      entityId: app._id.toString(),
+      actionUrl: `/applications/${app._id}`,
+      // Deterministic key: same transition = same key = idempotent
+      dedupeKey: `status-change:${app._id}:${previousStatus}:${targetStatus}`
+    }).catch((err) => console.error("[appController] Failed to create status notification:", err.message));
+  }
 
   return res.status(200).json({
     message: `Application status updated to ${targetStatus}.`,
@@ -571,11 +607,37 @@ export const createApplicationFromEmail = asyncHandler(async (req, res) => {
 
   const targetStatus = STATUS_VALUES.includes(detectedStatus) ? detectedStatus : "applied";
 
+  // Ingest Canonical Job
+  let canonicalJobId = null;
+  let finalCompany = company.trim().substring(0, 150);
+  let finalRole = role.trim().substring(0, 150);
+
+  try {
+    const jobResult = await ingestJobOpportunity({
+      title: finalRole,
+      company: finalCompany,
+      source: "email"
+    }, req.user._id);
+    
+    if (jobResult && jobResult.job) {
+      canonicalJobId = jobResult.job._id;
+      finalCompany = jobResult.job.company;
+      finalRole = jobResult.job.title;
+    }
+  } catch (err) {
+    console.error("Failed to ingest job opportunity from email, falling back to unlinked application:", err);
+  }
+
   // Check for duplicate application
   let existingApp = await Application.findOne({
     userId: req.user._id,
-    company: new RegExp(`^${company.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
-    role: new RegExp(`^${role.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
+    $or: [
+      { jobId: canonicalJobId },
+      {
+        company: new RegExp(`^${company.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i"),
+        role: new RegExp(`^${role.replace(/[-[\]{}()*+?~\\^$|#\s]/g, "\\$&")}$`, "i")
+      }
+    ]
   });
 
   if (existingApp) {
@@ -588,23 +650,18 @@ export const createApplicationFromEmail = asyncHandler(async (req, res) => {
 
   const app = new Application({
     userId: req.user._id,
-    company: company.trim().substring(0, 150),
-    role: role.trim().substring(0, 150),
-    position: role.trim().substring(0, 150),
+    jobId: canonicalJobId,
+    company: finalCompany,
+    role: finalRole,
+    position: finalRole,
     status: targetStatus,
     source,
-    statusHistory: [
-      {
-        fromStatus: "",
-        toStatus: targetStatus,
-        changedBy: "email",
-        source,
-        confidence: "high",
-        evidence: evidence || `Discovered from email event: ${eventType}`,
-        note: `Discovered from email: ${eventType} (${company} - ${role})`,
-        timestamp: new Date(),
-      },
-    ],
+    statusHistory: [createInitialStatusHistory(targetStatus, {
+      changedBy: "email",
+      source,
+      evidence: evidence || `Discovered from email event: ${eventType}`,
+      note: `Discovered from email: ${eventType} (${company} - ${role})`,
+    })],
   });
 
   if (targetStatus === "applied") app.dateApplied = new Date();
@@ -612,16 +669,31 @@ export const createApplicationFromEmail = asyncHandler(async (req, res) => {
 
   await app.save();
 
-  // Create Notification
-  await Notification.create({
+  // Create Notification via service (idempotency + socket emit)
+  await createNotification({
     userId: req.user._id,
-    type: "APPLICATION_STATUS",
+    type: "APPLICATION_RECOVERY",
     title: `Untracked Application Added`,
     message: `Added ${app.role} at ${app.company} (${targetStatus.toUpperCase()}) discovered from email.`,
+    source: {
+      entityType: "application",
+      entityId: app._id.toString(),
+      eventType: "APPLICATION_RECOVERY",
+    },
+    action: {
+      route: `/applications/${app._id}`,
+      label: "View Application",
+    },
+    metadata: {
+      company: app.company,
+      role: app.role,
+      targetStatus,
+      messageId,
+    },
     entityType: "application",
     entityId: app._id.toString(),
     actionUrl: `/applications/${app._id}`,
-    idempotencyKey: `create-email-${messageId || Date.now()}`,
+    dedupeKey: `create-email-${messageId || app._id.toString()}`,
   }).catch(() => {});
 
   if (messageId) {
@@ -630,6 +702,11 @@ export const createApplicationFromEmail = asyncHandler(async (req, res) => {
       { matchedApplicationId: app._id, actionTaken: "APPLICATION_CREATED_FROM_EMAIL" }
     ).catch(() => {});
   }
+
+  // Trigger reminder engine immediately
+  evaluateAndScheduleReminders(req.user._id).catch((err) =>
+    console.error("[createApplicationFromEmail] Reminder engine error:", err.message)
+  );
 
   return res.status(201).json({
     message: "Application successfully created from email discovery.",
@@ -828,16 +905,14 @@ export const confirmStatusSuggestion = asyncHandler(async (req, res) => {
   if (!suggestion) throw new AppError("Status suggestion not found.", 404, "SUGGESTION_NOT_FOUND");
 
   if (action === "confirm") {
-    const fromStatus = app.status;
-    app.status = suggestion.suggestedStatus;
-    app.statusHistory.push({
-      fromStatus,
-      toStatus: suggestion.suggestedStatus,
-      changedBy: suggestion.source || "auto_stale",
+    const transitionResult = transitionApplicationStatus(app, {
+      targetStatus: suggestion.suggestedStatus,
+      source: suggestion.source || "auto_stale",
       note: suggestion.reason,
-      timestamp: new Date(),
     });
-    app.lastActivityAt = new Date();
+    if (!transitionResult.success) {
+      throw new AppError(transitionResult.reason, 400, "FORBIDDEN_TRANSITION");
+    }
     suggestion.status = "confirmed";
   } else {
     suggestion.status = "dismissed";
@@ -867,16 +942,14 @@ export const bulkUpdateStatus = asyncHandler(async (req, res) => {
   }
 
   for (const app of apps) {
-    const fromStatus = app.status;
-    app.status = newStatus;
-    app.statusHistory.push({
-      fromStatus,
-      toStatus: newStatus,
-      changedBy: "manual",
+    const transitionResult = transitionApplicationStatus(app, {
+      targetStatus: newStatus,
+      source: "user_manual_update",
       note: note || "Bulk status update",
-      timestamp: new Date(),
     });
-    app.lastActivityAt = new Date();
+    if (!transitionResult.success) {
+      throw new AppError(transitionResult.reason, 400, "FORBIDDEN_TRANSITION");
+    }
     await app.save();
   }
 
@@ -1134,13 +1207,16 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
   const isHighEvent = classified.eventConfidence?.toUpperCase() === "HIGH";
 
   if (isHighMatch && isHighEvent) {
-    validateAndApplyTransition(app, {
+    const transitionResult = transitionApplicationStatus(app, {
       targetStatus: classified.detectedStatus,
       source: "email",
       confidence: "high",
       evidence: classified.evidenceSnippet,
       note: `Email event: ${classified.eventType} (${classified.evidenceSnippet})`,
     });
+    if (!transitionResult.success) {
+      throw new AppError(transitionResult.reason, 400, "FORBIDDEN_TRANSITION");
+    }
 
     await app.save();
 
@@ -1264,6 +1340,3 @@ export const processEmailEvent = asyncHandler(async (req, res) => {
     });
   }
 });
-
-
-

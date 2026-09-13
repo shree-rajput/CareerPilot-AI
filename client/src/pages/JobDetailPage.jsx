@@ -434,7 +434,7 @@ export function JobDetailPage() {
               <div>
                 <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Required Skills</h4>
                 <div className="flex flex-wrap gap-1.5">
-                  {job.requiredSkills?.length > 0 ? job.requiredSkills.map(s => {
+                  {job.requiredSkills?.length > 0 ? Array.from(new Map(job.requiredSkills.map(s => [s.skillName?.trim().toLowerCase(), s])).values()).map((s, idx) => {
                     const skillLower = (s.skillName || "").toLowerCase().trim();
                     const isMatched = matchData?.matchedSkills?.some(m => (m || "").toLowerCase().trim() === skillLower);
                     const isPartial = !isMatched && matchData?.partialSkills?.some(m => (m || "").toLowerCase().trim() === skillLower);
@@ -442,7 +442,7 @@ export function JobDetailPage() {
 
                     return (
                       <span
-                        key={s.skillName}
+                        key={s.skillName || idx}
                         className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-md border ${
                           isMatched ? "bg-success-bg text-success border-success-border"
                           : isPartial ? "bg-warning-bg text-warning border-warning-border"

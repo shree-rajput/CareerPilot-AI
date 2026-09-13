@@ -1,6 +1,7 @@
 import { Notification } from "../../models/Notification.js";
 import { User } from "../../models/User.js";
 import { sendEmailNotification } from "../email/emailService.js";
+import { emitNotificationToUser } from "../../sockets/notification.socket.js";
 
 /**
  * Creates an in-app notification and queues email delivery with idempotency protection.
@@ -64,7 +65,11 @@ export async function createNotification({
     const notification = new Notification(notifData);
     await notification.save();
 
-    // Multi-Channel Dispatcher (Browser, Email, Future WhatsApp)
+    // Real-time delivery: emit to user's socket room immediately after DB persistence.
+    // This is the single canonical socket emit path — no other code should emit notification:new.
+    emitNotificationToUser(userId, notification);
+
+    // Multi-Channel Dispatcher (Email, Future WhatsApp)
     dispatchMultiChannelNotification(notification, notifData).catch((err) =>
       console.error("[NotificationService] Multi-channel dispatch error:", err.message)
     );
@@ -112,7 +117,7 @@ export async function getUserNotifications(userId, { limit = 20, unreadOnly = fa
 export async function markAsRead(notificationId, userId) {
   const notification = await Notification.findOneAndUpdate(
     { _id: notificationId, userId },
-    { read: true },
+    { read: true, readAt: new Date() },
     { new: true }
   );
   return notification;
