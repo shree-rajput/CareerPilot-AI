@@ -63,7 +63,7 @@ function parseQuestionError(err) {
 export function InterviewSessionPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const { refreshActiveSession } = useActiveSession();
+  const { refreshActiveSession, isCheckingSession } = useActiveSession();
   const [isEndingSession, setIsEndingSession] = useState(false);
 
   // ── Core state ──────────────────────────────────────────
@@ -103,6 +103,7 @@ export function InterviewSessionPage() {
   const isFetchingRef = useRef(false);
   const fetchIdRef = useRef(0);
   const videoMetricsRef = useRef({ presenceScore: 100, checks: 0 });
+  const hasInitializedRef = useRef(false);
 
   // ────────────────────────────────────────────────────────
   // Mount / Unmount
@@ -122,7 +123,12 @@ export function InterviewSessionPage() {
   }, []);
 
   useEffect(() => {
+    if (isCheckingSession) return;
+    if (hasInitializedRef.current) return;
+    
     let mounted = true;
+    hasInitializedRef.current = true;
+    
     async function loadFirst() {
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
@@ -161,7 +167,7 @@ export function InterviewSessionPage() {
           console.log(`[INTERVIEW_FLOW] MODE=NEW`);
           // No current state exists, fetch next question
           isFetchingRef.current = false;
-          await fetchNextQuestion({ forceFetch: true, mountedRef: { current: mounted } });
+          await fetchNextQuestion({ forceFetch: true, mountedRef: { get current() { return mounted; } } });
         }
       } catch (err) {
         if (mounted) {
@@ -186,7 +192,7 @@ export function InterviewSessionPage() {
       mounted = false; 
       isFetchingRef.current = false;
     };
-  }, []);
+  }, [isCheckingSession, sessionId, initCamera]);
 
   // ────────────────────────────────────────────────────────
   // Camera
