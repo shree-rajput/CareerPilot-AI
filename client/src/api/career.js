@@ -45,7 +45,12 @@ export const preparationApi = {
   updateActionItemStatus: (id, itemId, status) => http.patch(`/preparation/${id}/items/${itemId}/status`, { status }).then((res) => res.data),
   updateSchedule: (data) => http.post("/preparation/schedule", data).then((res) => res.data),
   getTimer: () => http.get("/preparation/timer").then((res) => res.data),
-  syncTimer: (data) => http.post("/preparation/timer/sync", data).then((res) => res.data),
+  startTimer: (data) => http.post("/preparation/timer/start", data).then((res) => res.data),
+  pauseTimer: () => http.post("/preparation/timer/pause").then((res) => res.data),
+  resumeTimer: () => http.post("/preparation/timer/resume").then((res) => res.data),
+  completeTimer: () => http.post("/preparation/timer/complete").then((res) => res.data),
+  resetTimer: () => http.post("/preparation/timer/reset").then((res) => res.data),
+  addTimerMinutes: (data) => http.post("/preparation/timer/add-time", data).then((res) => res.data),
 };
 
 

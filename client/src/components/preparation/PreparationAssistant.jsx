@@ -6,11 +6,24 @@ import { Input } from "../ui/Input";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../../context/ToastContext";
 
-export function PreparationAssistant({ activePlan }) {
+export function PreparationAssistant({ activePlan, dashboard }) {
   const [loadingSchedule, setLoadingSchedule] = useState(false);
   const [scheduled, setScheduled] = useState(false);
   const [studyHours, setStudyHours] = useState(2);
   const [emailTime, setEmailTime] = useState("09:00");
+
+  React.useEffect(() => {
+    if (dashboard) {
+      const mins = dashboard.availablePrepMinutesPerDay;
+      if (mins) {
+        setStudyHours(Math.max(1, Math.round(mins / 60)));
+      }
+      if (dashboard.prepReminderTime) {
+        setEmailTime(dashboard.prepReminderTime);
+      }
+      setScheduled(true);
+    }
+  }, [dashboard]);
 
   const handleSchedule = async () => {
     setLoadingSchedule(true);

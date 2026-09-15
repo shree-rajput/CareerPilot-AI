@@ -22,6 +22,11 @@ router.patch("/:id/items/:itemId/status", preparationController.updateActionItem
 // Schedule & Timer Persistence Endpoints
 router.post("/schedule", preparationController.updateSchedulePreferences);
 router.get("/timer", preparationController.getTimerState);
-router.post("/timer/sync", preparationController.syncTimerState);
+router.post("/timer/start", preparationController.startTimerSession);
+router.post("/timer/pause", preparationController.pauseTimerSession);
+router.post("/timer/resume", preparationController.resumeTimerSession);
+router.post("/timer/complete", preparationController.completeTimerSession);
+router.post("/timer/reset", preparationController.resetTimerSession);
+router.post("/timer/add-time", preparationController.addTimerMinutes);
 
 export default router;

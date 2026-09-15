@@ -68,7 +68,7 @@ Based on the actual working client application, CareerPilot AI is structured int
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/yourusername/careerpilot-ai.git
+git clone https://github.com/shree-rajput/careerpilot-ai.git
 cd careerpilot-ai
 pnpm install
 ```
@@ -99,8 +99,3 @@ pnpm run dev
 - Auth tokens managed securely via `jsonwebtoken`.
 - Payload sizes capped to prevent DoS via massive text dumps.
 - All AI responses validated dynamically to prevent NoSQL injection via LLM hallucinations.
-
-- IMP Drive links (must check them out)
-- 1-https://docs.google.com/document/u/1/...
-- 2-https://docs.google.com/document/d/e/...
-- 3-https://docs.google.com/document/d/e/...

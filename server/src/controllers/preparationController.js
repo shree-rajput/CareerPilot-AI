@@ -122,10 +122,60 @@ export const getTimerState = async (req, res, next) => {
   }
 };
 
-export const syncTimerState = async (req, res, next) => {
+export const startTimerSession = async (req, res, next) => {
   try {
     const userId = req.user.id || req.user._id;
-    const timer = await preparationService.syncTimerState(userId, req.body);
+    const timer = await preparationService.startTimerSession(userId, req.body);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const pauseTimerSession = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.pauseTimerSession(userId);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resumeTimerSession = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.resumeTimerSession(userId);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const completeTimerSession = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.completeTimerSession(userId);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetTimerSession = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.resetTimerSession(userId);
+    res.status(200).json({ status: "success", data: timer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addTimerMinutes = async (req, res, next) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const timer = await preparationService.addTimerMinutes(userId, req.body);
     res.status(200).json({ status: "success", data: timer });
   } catch (error) {
     next(error);

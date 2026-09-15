@@ -207,7 +207,10 @@ export async function getPreparationDashboard(userId) {
     verifiedCount,
     estimatedEffortRemainingHours,
     todaysFocus,
-    skillGaps: skillGapItems
+    skillGaps: skillGapItems,
+    availablePrepMinutesPerDay: user?.availablePrepMinutesPerDay || 120,
+    prepReminderTime: user?.prepReminderTime || "09:00",
+    timezone: user?.timezone || "UTC"
   };
 }
 
@@ -588,38 +591,115 @@ export async function updateSchedulePreferences(userId, { studyHours, emailTime 
 
 /**
  * Retrieves persistent active timer session for a user.
+ * Evaluates dynamic timer expiration.
  */
 export async function getTimerState(userId) {
-  const timer = await PreparationTimer.findOne({ userId }).lean();
-  return timer || {
-    userId,
-    skillName: "",
-    taskTitle: "",
-    targetMinutes: 25,
-    elapsedSeconds: 0,
-    isPaused: true,
-    isRunning: false
-  };
+  let timer = await PreparationTimer.findOne({ userId }).lean();
+  if (!timer) {
+    return {
+      userId,
+      skillName: "",
+      taskTitle: "",
+      status: "paused",
+      durationSeconds: 1500,
+      startedAt: null,
+      pausedAt: null,
+      accumulatedPausedSeconds: 0,
+      completedAt: null
+    };
+  }
+
+  // Auto-complete if expired
+  if (timer.status === "active" && timer.startedAt) {
+    const now = Date.now();
+    const elapsed = Math.floor((now - new Date(timer.startedAt).getTime()) / 1000) - timer.accumulatedPausedSeconds;
+    if (elapsed >= timer.durationSeconds) {
+      timer = await PreparationTimer.findOneAndUpdate(
+        { userId },
+        { status: "completed", completedAt: new Date() },
+        { new: true }
+      ).lean();
+    }
+  }
+
+  return timer;
 }
 
-/**
- * Persists/updates study timer session state.
- */
-export async function syncTimerState(userId, { skillName, taskTitle, targetMinutes, elapsedSeconds, isPaused, isRunning }) {
-  const timer = await PreparationTimer.findOneAndUpdate(
+export async function startTimerSession(userId, { skillName, taskTitle, durationSeconds }) {
+  const now = new Date();
+  return await PreparationTimer.findOneAndUpdate(
     { userId },
     {
-      userId,
-      skillName: skillName || "General Practice",
-      taskTitle: taskTitle || "Preparation Study Session",
-      targetMinutes: Number(targetMinutes) || 25,
-      elapsedSeconds: Number(elapsedSeconds) || 0,
-      isPaused: Boolean(isPaused),
-      isRunning: Boolean(isRunning),
-      lastSyncAt: new Date()
+      $set: {
+        skillName: skillName || "General Practice",
+        taskTitle: taskTitle || "Preparation Study Session",
+        durationSeconds: Number(durationSeconds) || 1500,
+        status: "active",
+        startedAt: now,
+        pausedAt: null,
+        accumulatedPausedSeconds: 0,
+        completedAt: null
+      }
     },
     { upsert: true, new: true }
   ).lean();
+}
 
+export async function pauseTimerSession(userId) {
+  const timer = await PreparationTimer.findOne({ userId });
+  if (!timer || timer.status !== "active") return timer;
+
+  timer.status = "paused";
+  timer.pausedAt = new Date();
+  await timer.save();
+  return timer;
+}
+
+export async function resumeTimerSession(userId) {
+  const timer = await PreparationTimer.findOne({ userId });
+  if (!timer || timer.status !== "paused" || !timer.pausedAt) return timer;
+
+  const now = new Date();
+  const pauseDurationMs = now.getTime() - timer.pausedAt.getTime();
+  
+  timer.status = "active";
+  timer.accumulatedPausedSeconds += Math.floor(pauseDurationMs / 1000);
+  timer.pausedAt = null;
+  
+  await timer.save();
+  return timer;
+}
+
+export async function completeTimerSession(userId) {
+  const timer = await PreparationTimer.findOneAndUpdate(
+    { userId },
+    { $set: { status: "completed", completedAt: new Date() } },
+    { new: true }
+  ).lean();
+  return timer;
+}
+
+export async function resetTimerSession(userId) {
+  const timer = await PreparationTimer.findOneAndUpdate(
+    { userId },
+    {
+      $set: {
+        status: "paused",
+        startedAt: null,
+        pausedAt: null,
+        accumulatedPausedSeconds: 0,
+        completedAt: null
+      }
+    },
+    { new: true }
+  ).lean();
+  return timer;
+}
+
+export async function addTimerMinutes(userId, { minutes }) {
+  const timer = await PreparationTimer.findOne({ userId });
+  if (!timer) return null;
+  timer.durationSeconds += Number(minutes) * 60;
+  await timer.save();
   return timer;
 }

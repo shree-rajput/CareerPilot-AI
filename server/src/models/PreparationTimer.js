@@ -5,12 +5,12 @@ const preparationTimerSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true, index: true },
     skillName: { type: String, required: true },
     taskTitle: { type: String, required: true },
-    targetMinutes: { type: Number, default: 25 },
-    elapsedSeconds: { type: Number, default: 0 },
-    isPaused: { type: Boolean, default: false },
-    isRunning: { type: Boolean, default: false },
-    startedAt: { type: Date, default: Date.now },
-    lastSyncAt: { type: Date, default: Date.now }
+    status: { type: String, enum: ["active", "paused", "completed", "cancelled"], default: "paused" },
+    durationSeconds: { type: Number, default: 1500 },
+    startedAt: { type: Date, default: null },
+    pausedAt: { type: Date, default: null },
+    accumulatedPausedSeconds: { type: Number, default: 0 },
+    completedAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

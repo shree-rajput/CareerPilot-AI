@@ -362,7 +362,7 @@ export function PreparationPage() {
           onTaskCompleted={loadDashboard} 
         />
         <div className="flex-1 min-h-[350px]">
-          <PreparationAssistant activePlan={dashboard?.todaysFocus?.[0]} />
+          <PreparationAssistant activePlan={dashboard?.todaysFocus?.[0]} dashboard={dashboard} />
         </div>
       </div>
 
