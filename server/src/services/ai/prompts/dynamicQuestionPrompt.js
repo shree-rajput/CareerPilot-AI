@@ -9,12 +9,15 @@ STRICT INSTRUCTIONS:
 3. EXCLUDED QUESTIONS & CONCEPTS: Strictly avoid repeating or paraphrasing any question in the "avoidQuestions" list or covering concepts in "avoidConcepts".
 4. EXECUTABLE CONTRACT & STARTER CODE:
    - Function name MUST be "solution".
-   - execution object: { "mode": "FUNCTION", "functionName": "solution", "parameters": [{"name": "input", "type": "AUTO"}], "returnType": "AUTO" }
-   - Starter code in javascript: "function solution(input) {\\n  // Write solution here\\n}"
-   - Starter code in python: "def solution(input):\\n    pass"
+   - execution object parameters MUST use concrete types from this list ONLY: "integer", "string", "boolean", "float", "integer[]", "string[]", "boolean[]", "integer[][]", "string[][]", "object"
+   - DO NOT use "AUTO", "any", "unknown", "T", or generic placeholder types.
+   - Example execution: { "mode": "FUNCTION", "functionName": "solution", "parameters": [{"name": "nums", "type": "integer[]"}, {"name": "target", "type": "integer"}], "returnType": "integer" }
+   - Starter code in javascript: "function solution(nums, target) {\\n  // Write solution here\\n}"
+   - Starter code in python: "def solution(nums, target):\\n    pass"
    - testCases MUST be valid JSON objects with "input" and "expectedOutput".
-   - referenceSolution MUST include a working javascript and python implementation of function solution(input) that returns expectedOutput for each test case!
-5. OUTPUT FORMAT: Return valid JSON matching the schema strictly. Do not include markdown code fences or conversational text outside JSON.`;
+   - referenceSolution MUST include a working javascript and python implementation of function solution(...params) that returns expectedOutput for each test case!
+5. title field is REQUIRED — always include a clear, descriptive title for the question.
+6. OUTPUT FORMAT: Return valid JSON matching the schema strictly. Do not include markdown code fences or conversational text outside JSON.`;
 
 export function buildDynamicQuestionPrompt(context = {}) {
   const {
@@ -54,5 +57,5 @@ ${avoidQStr}
 
 Avoid previously covered concepts: [${avoidCStr}]
 
-Generate complete JSON object matching dynamicQuestionSchema. Ensure constraints, guidedFollowUps, evaluationCriteria, concepts, and expectedSkills are arrays of strings. Ensure referenceSolution contains valid code for function solution(input).`;
+Generate complete JSON object matching dynamicQuestionSchema. Ensure constraints, guidedFollowUps, evaluationCriteria, concepts, and expectedSkills are arrays of strings. Ensure referenceSolution contains valid working javascript and python code for the function. ALWAYS include a non-empty "title" field.`;
 }

@@ -106,6 +106,20 @@ export function InterviewSessionPage() {
   const hasInitializedRef = useRef(false);
 
   // ────────────────────────────────────────────────────────
+  // Camera — defined BEFORE any useEffect that calls it
+  // ────────────────────────────────────────────────────────
+  const initCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch (err) {
+      console.warn("Camera unavailable:", err);
+      setIsVideoEnabled(false);
+    }
+  }, []);
+
+  // ────────────────────────────────────────────────────────
   // Mount / Unmount
   // ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -192,21 +206,7 @@ export function InterviewSessionPage() {
       mounted = false; 
       isFetchingRef.current = false;
     };
-  }, [isCheckingSession, sessionId, initCamera]);
-
-  // ────────────────────────────────────────────────────────
-  // Camera
-  // ────────────────────────────────────────────────────────
-  const initCamera = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (err) {
-      console.warn("Camera unavailable:", err);
-      setIsVideoEnabled(false);
-    }
-  }, []);
+  }, [isCheckingSession, sessionId]);
 
   // ────────────────────────────────────────────────────────
   // Fetch next question (with idempotency guard)

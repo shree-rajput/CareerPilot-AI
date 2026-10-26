@@ -4,12 +4,12 @@
   "private": true,
   "description": "AI-powered career intelligence platform for job matching, resume optimization, application tracking, and interview preparation.",
   "scripts": {
-    "dev": "pnpm -r --parallel dev",
+    "dev": "npm-run-all --parallel dev:client dev:server",
     "build": "pnpm -r build",
-    "dev:server": "pnpm --dir server dev",
-    "dev:client": "pnpm --dir client dev",
-    "start": "pnpm --dir server start",
-    "lint": "pnpm --dir server lint && pnpm --dir client lint"
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "start": "npm --prefix server run start",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint"
   },
   "workspaces": [
     "server",

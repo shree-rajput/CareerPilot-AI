@@ -184,11 +184,11 @@ export async function groqChat(messages, { temperature = 0.3, maxTokens = 4096, 
 
         if (retryError.status === 429) {
           const fallbackModels = [
-            "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
-            "qwen/qwen3.8-27b",
-            "qwen/qwen3.6-27b",
-            "groq/compound"
+            "llama-3.3-70b-versatile",
+            "llama-3.1-70b-versatile",
+            "llama-3.1-8b-instant",
+            "gemma2-9b-it",
+            "mixtral-8x7b-32768"
           ].filter(m => m !== model);
 
           for (const fallbackModel of fallbackModels) {

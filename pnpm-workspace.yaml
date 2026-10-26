@@ -4,6 +4,3 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
-allowBuilds:
-  bcrypt: set this to true or false
-  esbuild: true
