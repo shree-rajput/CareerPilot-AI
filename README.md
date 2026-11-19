@@ -1,6 +1,6 @@
 # CareerPilot AI 🚀
 
-**An AI-powered career intelligence platform for job matching, resume optimization, application tracking, interview preparation, and community mentorship.**
+**An AI-powered career intelligence platform for job matching, resume optimization, application tracking, interview preparation, and community mentorship.Collaborative Problem solving**
 
 CareerPilot AI is built as a complete end-to-end SaaS application designed to help job seekers land roles. It has evolved from a basic resume parser into a comprehensive "Career Operating System" with a unified intelligence graph, real-time collaboration, and an embedded AI Copilot using Groq.
 
